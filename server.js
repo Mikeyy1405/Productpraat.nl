@@ -24,7 +24,7 @@ const PLACEHOLDER_IMG = 'https://placehold.co/400x400/f1f5f9/94a3b8?text=Geen+Af
 // AI API Configuration (Server-side only)
 const AIML_API_KEY = process.env.VITE_API_KEY || '';
 const AIML_BASE_URL = 'https://api.aimlapi.com/v1';
-const AI_MODEL = 'claude-3-5-sonnet-20240620';
+const AI_MODEL = 'google/gemini-3-pro-preview';
 
 // Initialize OpenAI-compatible client for AIML API
 let openai = null;
