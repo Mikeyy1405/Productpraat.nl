@@ -74,4 +74,34 @@ Review:`;
       return `Een ${product.category} product voor €${product.price}. Meer informatie volgt binnenkort.`;
     }
   }
+
+  async generateContent(prompt: string, maxTokens: number = 1000): Promise<string> {
+    this.logger.log(`🤖 Genereren content met AI`);
+
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Je bent een professionele content schrijver voor ProductPraat.nl die SEO-vriendelijke artikelen schrijft in het Nederlands.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      });
+
+      const content = completion.choices[0]?.message?.content || '';
+      this.logger.log(`✅ Content gegenereerd (${content.length} karakters)`);
+      return content;
+    } catch (error) {
+      this.logger.error('❌ Fout bij genereren content:', error.message);
+      return 'Content generatie tijdelijk niet beschikbaar.';
+    }
+  }
 }

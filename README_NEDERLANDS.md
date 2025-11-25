@@ -1,343 +1,393 @@
-# 🎉 ProductPraat MVP Backend - KLAAR VOOR GEBRUIK!
+# ProductPraat.nl - Complete Backend + Admin System
 
-**Status**: ✅ Gebouwd, getest en klaar voor deployment!
+🎉 **Volledige backend API met admin authenticatie, automatische content generatie en product management!**
 
----
+## 📚 Inhoudsopgave
 
-## 🚀 Wat Heb Je Nu?
-
-Een volledig werkende **MVP backend service** voor ProductPraat.nl met:
-
-### ✅ Core Functionaliteit
-- **Product Import** van Bol.com API (top producten uit 3 categorieën)
-- **AI Review Generator** (automatische Nederlandse productreviews)
-- **REST API** met 5 endpoints (CRUD operaties)
-- **Supabase Database** integratie voor persistente opslag
-- **Swagger API Documentatie** (professioneel gestyled)
-- **Health Check** endpoint
-
-### 🔧 Technisch
-- **Framework**: NestJS + TypeScript
-- **Database**: Supabase (PostgreSQL)
-- **AI**: AIML API (OpenAI compatible)
-- **E-commerce**: Bol.com Retailer API
-- **Documentation**: Swagger/OpenAPI
-- **Deployment**: Ready voor Abacus.AI platform
+1. [Wat is er gebouwd?](#wat-is-er-gebouwd)
+2. [Features](#features)
+3. [Quick Start](#quick-start)
+4. [API Endpoints](#api-endpoints)
+5. [Admin Login](#admin-login)
+6. [Database Setup](#database-setup)
+7. [Environment Variables](#environment-variables)
+8. [Deployment](#deployment)
 
 ---
 
-## 🌐 Preview URL (Test Nu!)
+## 🚀 Wat is er gebouwd?
 
-**Base URL**: https://d04f594a4.preview.abacusai.app
+Een complete backend systeem voor ProductPraat.nl met:
 
-**Endpoints:**
-- ❤️ Health: https://d04f594a4.preview.abacusai.app/api/health
-- 📚 API Docs: https://d04f594a4.preview.abacusai.app/api-docs
-- 📦 Products: https://d04f594a4.preview.abacusai.app/api/products
-
-⚠️ **Preview URL is tijdelijk** - Deploy voor permanente URL
+- **Admin Authenticatie** - Login systeem voor beheerders
+- **Product Management** - Bol.com import + CRUD operaties
+- **AI Content Generatie** - Automatische reviews, koopgidsen, vergelijkingen
+- **Articles System** - Koopgidsen en informatieve artikelen
+- **REST API** - Voor integratie met frontend
+- **Swagger Documentatie** - Interactieve API docs
 
 ---
 
-## 📋 Quick Start (3 Stappen)
+## ✨ Features
 
-### Stap 1: Configureer Supabase (10 min) ⚡
+### 🔐 Admin Panel
+- Login systeem (email + wachtwoord)
+- Beschermde admin endpoints
+- Logout functionaliteit
 
-Je hebt alleen **Supabase database credentials** nodig:
+### 📦 Product Management
+- **Import van Bol.com**: Automatisch top producten ophalen
+- **AI Reviews**: Elke product krijgt automatisch een review
+- **CRUD Operaties**: Create, Read, Update, Delete producten
+- **Categorie filtering**: Producten per categorie ophalen
 
-1. Ga naar https://supabase.com → Maak gratis account
-2. Maak nieuw project: "productpraat-mvp"
-3. SQL Editor → Voer uit:
-   ```sql
-   CREATE TABLE products (
-     id TEXT PRIMARY KEY,
-     title TEXT NOT NULL,
-     description TEXT,
-     price NUMERIC,
-     category TEXT,
-     image_url TEXT,
-     affiliate_url TEXT,
-     ai_review TEXT,
-     created_at TIMESTAMPTZ DEFAULT NOW()
-   );
-   ```
-4. Settings → API → Kopieer URL en anon key
-5. Vul in `.env` file
+### 📝 Content Generatie
+- **Koopgidsen**: "Beste Laptops 2024", "Wasmachine Koopgids", etc.
+- **Vergelijkingen**: "iPhone vs Samsung", "Dyson vs Philips", etc.
+- **Informatieve Artikelen**: "Wasmachine schoonmaken", "Laptop onderhoud"
+- **AI-powered**: Automatisch SEO-geoptimaliseerde content
 
-**Volledige instructies**: Zie `SUPABASE_SETUP.md`
+### 🗄️ Database
+- Supabase integratie
+- Products tabel voor alle producten
+- Articles tabel voor gidsen/artikelen
+- Automatische timestamps
 
-### Stap 2: Test de API (2 min) 🧪
+---
 
-Open in browser: https://d04f594a4.preview.abacusai.app/api-docs
+## 🛠️ Quick Start
 
-Of test met curl:
+### 1. Installeer Dependencies
+
 ```bash
-# Health check
-curl https://d04f594a4.preview.abacusai.app/api/health
-
-# Importeer 3 producten (na Supabase setup)
-curl -X POST https://d04f594a4.preview.abacusai.app/api/products/import \
-  -H "Content-Type: application/json" \
-  -d '{"categories": ["elektronica"], "limit": 3}'
-
-# Bekijk producten
-curl https://d04f594a4.preview.abacusai.app/api/products
+cd backend
+yarn install
 ```
 
-### Stap 3: Deploy naar Productie (1 min) 🚀
-
-Klik op **Deploy button** in de UI → Je krijgt permanente URL!
-
----
-
-## 📦 API Endpoints Overzicht
-
-| Endpoint | Method | Beschrijving |
-|----------|--------|--------------|
-| `/api/health` | GET | Service status check |
-| `/api/products/import` | POST | Importeer producten van Bol.com + AI reviews |
-| `/api/products` | GET | Haal alle producten op |
-| `/api/products/category/:cat` | GET | Filter op categorie |
-| `/api/products/:id` | GET | Haal enkel product op |
-
-**Swagger Docs**: https://d04f594a4.preview.abacusai.app/api-docs
-
----
-
-## 💡 Voorbeeld Gebruik
-
-### 1. Importeer 15 Producten in één keer
+### 2. Configureer Environment
 
 ```bash
-curl -X POST https://d04f594a4.preview.abacusai.app/api/products/import \
+cp .env.example .env
+```
+
+Vul `.env` in met jouw credentials (zie [Environment Variables](#environment-variables))
+
+### 3. Setup Database
+
+Voer de SQL queries uit in Supabase (zie `SUPABASE_SETUP.md`):
+
+```sql
+-- Products tabel
+CREATE TABLE products (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  price NUMERIC,
+  category TEXT,
+  image_url TEXT,
+  affiliate_url TEXT,
+  ai_review TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Articles tabel  
+CREATE TABLE articles (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT,
+  content TEXT,
+  seo_title TEXT,
+  seo_description TEXT,
+  slug TEXT UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 4. Start de Server
+
+**Development:**
+```bash
+cd backend
+yarn start:dev
+```
+
+**Production:**
+```bash
+yarn build
+yarn start:prod
+```
+
+Server draait op: **http://localhost:3000**
+
+### 5. Test de API
+
+**Swagger Docs:**
+```
+http://localhost:3000/api-docs
+```
+
+**Health Check:**
+```bash
+curl http://localhost:3000/health
+```
+
+**Login (Admin):**
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"info@writgo.nl", "password":"Productpraat2025!"}'
+```
+
+---
+
+## 🔌 API Endpoints
+
+### 👤 Auth Endpoints
+
+| Method | Endpoint | Beschrijving | Auth |
+|--------|----------|--------------|------|
+| POST | `/api/auth/login` | Admin login | ❌ |
+| POST | `/api/auth/logout` | Admin logout | ✅ |
+
+### 📦 Product Endpoints
+
+| Method | Endpoint | Beschrijving | Auth |
+|--------|----------|--------------|------|
+| GET | `/api/products` | Alle producten | ❌ |
+| GET | `/api/products/:id` | Eén product | ❌ |
+| GET | `/api/products/category/:cat` | Producten per categorie | ❌ |
+| POST | `/api/products/import` | Import van Bol.com | ✅ |
+| POST | `/api/products` | Nieuw product | ✅ |
+| PUT | `/api/products/:id` | Update product | ✅ |
+| DELETE | `/api/products/:id` | Verwijder product | ✅ |
+
+### 📝 Article Endpoints
+
+| Method | Endpoint | Beschrijving | Auth |
+|--------|----------|--------------|------|
+| GET | `/api/articles` | Alle artikelen | ❌ |
+| GET | `/api/articles?type=guide` | Alleen koopgidsen | ❌ |
+| GET | `/api/articles/:id` | Eén artikel | ❌ |
+| POST | `/api/articles` | Nieuw artikel (handmatig) | ✅ |
+| POST | `/api/articles/generate` | Genereer artikel met AI | ✅ |
+| DELETE | `/api/articles/:id` | Verwijder artikel | ✅ |
+
+### ❤️ Health
+
+| Method | Endpoint | Beschrijving |
+|--------|----------|---------------|
+| GET | `/health` | Server status |
+
+---
+
+## 🔐 Admin Login
+
+**Credentials:**
+```
+Email: info@writgo.nl
+Wachtwoord: Productpraat2025!
+```
+
+**Login Request:**
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "categories": ["elektronica", "wonen", "sport"],
-    "limit": 5
+    "email": "info@writgo.nl",
+    "password": "Productpraat2025!"
   }'
-```
-
-**Resultaat:**
-- 5 laptops/notebooks (elektronica)
-- 5 stofzuigers/wasmachines (wonen)  
-- 5 sporthorloges/fitness trackers (sport)
-- Elk met AI-gegenereerde Nederlandse review
-- Elk met Bol.com affiliate link
-- Opgeslagen in database
-
-**Duurt**: ~60-90 seconden (AI generatie + rate limiting)
-
-### 2. Bekijk Producten
-
-```bash
-curl https://d04f594a4.preview.abacusai.app/api/products
 ```
 
 **Response:**
 ```json
 {
-  "products": [
-    {
-      "id": "8719327001202",
-      "title": "Samsung Galaxy Book Pro 15.6",
-      "price": 1299.99,
-      "category": "elektronica",
-      "image_url": "https://...",
-      "affiliate_url": "https://partner.bol.com/...",
-      "ai_review": "Deze Samsung laptop biedt..."
-    }
-  ]
+  "success": true,
+  "user": {
+    "email": "info@writgo.nl",
+    "role": "admin"
+  },
+  "token": "aW5mb0B3cml0Z28ubmw6MTczMjUzMzYwMA=="
 }
 ```
 
----
-
-## 🔑 Credentials Status
-
-| Service | Status | Notes |
-|---------|--------|-------|
-| **Bol.com API** | ✅ Geconfigureerd | Client ID + Secret + Site ID |
-| **AIML API** | ✅ Geconfigureerd | Voor AI review generatie |
-| **Supabase** | ⚠️ Vereist Setup | Zie SUPABASE_SETUP.md |
+🚨 **Belangrijk**: In productie moet je het token gebruiken voor auth. Voor nu is het een basis implementatie.
 
 ---
 
-## 📚 Documentatie Bestanden
+## 🐝 Voorbeeld: Content Genereren
 
-| Bestand | Beschrijving |
-|---------|--------------|
-| `QUICK_START.md` | ⭐ **Start hier** - Stap-voor-stap handleiding |
-| `SUPABASE_SETUP.md` | Database configuratie instructies |
-| `DEPLOYMENT_INFO.md` | Deployment details en troubleshooting |
-| `README.md` | Technische details (Engels) |
-| `TEST_ENDPOINTS.sh` | Bash script om endpoints te testen |
+### 1. Importeer Producten van Bol.com
 
----
-
-## 🎯 MVP Scope
-
-### ✅ Wat ZIT in MVP (Klaar VANDAAG)
-
-- Product import endpoint (handmatig triggeren)
-- AI review generatie (Nederlands)
-- CRUD API voor producten
-- Supabase database integratie
-- Health monitoring
-- API documentatie (Swagger)
-- Bol.com affiliate links
-
-### ❌ Wat NIET in MVP (Later)
-
-- Automatische scheduling (cron jobs)
-- Koopgidsen generatie
-- Product vergelijkingen
-- Informatieve artikelen
-- SEO optimalisatie
-- Rate limiting op endpoints
-- Admin authenticatie
-
-**Focus**: Werkende kern die je VANDAAG kunt gebruiken!
-
----
-
-## 🛠️ Technische Stack
-
-```
-Backend Framework:  NestJS 10.x + TypeScript
-Runtime:           Node.js 18+
-Package Manager:   Yarn
-Database:          Supabase (PostgreSQL)
-AI Service:        AIML API (OpenAI compatible)
-E-commerce API:    Bol.com Retailer API v4
-Documentation:     Swagger/OpenAPI 3.0
-Deployment:        Abacus.AI Platform (Port 3000)
-```
-
----
-
-## 🐛 Troubleshooting
-
-### ❌ "Supabase is niet geconfigureerd"
-**Fix**: Volg `SUPABASE_SETUP.md` → Vul credentials in `.env`
-
-### ❌ "Geen producten gevonden"
-**Oorzaak**: Bol.com API tijdelijk down of geen resultaten
-**Fix**: Probeer andere categorie of wacht 1 minuut
-
-### ❌ "AI review generatie mislukt"
-**Oorzaak**: AIML API rate limit of down
-**Fix**: Wacht 5 seconden en probeer opnieuw
-
-### 🔄 Service herstarten
 ```bash
-pkill -f "node.*start:dev"
-cd /home/ubuntu/productpraat_mvp_backend/nodejs_space
-yarn start:dev
+curl -X POST http://localhost:3000/api/products/import \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categories": ["elektronica", "wonen"],
+    "limit": 5
+  }'
+```
+
+**Dit doet:**
+- Haalt top 5 producten op per categorie
+- Genereert automatisch AI review voor elk product
+- Slaat op in Supabase
+
+### 2. Genereer een Koopgids
+
+```bash
+curl -X POST http://localhost:3000/api/articles/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "guide",
+    "topic": "Beste Laptops van 2024",
+    "category": "elektronica"
+  }'
+```
+
+**Dit genereert:**
+- Complete koopgids met AI
+- SEO-geoptimaliseerde content
+- Automatische slug generatie
+
+### 3. Bekijk alle artikelen
+
+```bash
+curl http://localhost:3000/api/articles?type=guide
 ```
 
 ---
 
-## 📊 Project Structuur
+## 🗄️ Database Setup
 
-```
-/home/ubuntu/productpraat_mvp_backend/
-├── QUICK_START.md              ⭐ Start hier!
-├── SUPABASE_SETUP.md           Database setup
-├── DEPLOYMENT_INFO.md          Deployment details
-├── TEST_ENDPOINTS.sh           Test script
-└── nodejs_space/
-    ├── .env                    Environment variables
-    ├── src/
-    │   ├── main.ts             Bootstrap + Swagger
-    │   ├── app.module.ts       Root module
-    │   ├── products/           Product endpoints
-    │   │   ├── products.controller.ts
-    │   │   ├── products.service.ts
-    │   │   └── dto/
-    │   ├── bol/                Bol.com API client
-    │   │   └── bol.service.ts
-    │   ├── ai-review/          AI review generator
-    │   │   └── ai-review.service.ts
-    │   ├── supabase/           Database client
-    │   │   └── supabase.service.ts
-    │   └── health/             Health check
-    │       └── health.controller.ts
-    └── custom-swagger.css      API docs styling
-```
+Zie `SUPABASE_SETUP.md` voor complete database setup instructies.
+
+**Snel overzicht:**
+
+1. Maak Supabase project aan op [supabase.com](https://supabase.com)
+2. Ga naar SQL Editor
+3. Voer de queries uit uit `SUPABASE_SETUP.md`
+4. Kopieer je Supabase URL en KEY naar `.env`
 
 ---
 
-## 🎓 Hoe Werkt Het?
+## 🔑 Environment Variables
 
-### Product Import Flow
+```env
+# Supabase Database
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key-here
 
-```
-1. POST /api/products/import
-   ↓
-2. Backend vraagt Bol.com API: "Geef top 5 producten in categorie X"
-   ↓
-3. Voor elk product:
-   3a. Haal product details op (prijs, afbeelding, EAN)
-   3b. Genereer AI review (Nederlands, 200 woorden)
-   3c. Maak affiliate link
-   3d. Sla op in Supabase
-   ↓
-4. Return: { success: true, imported: 5 }
+# Bol.com API (credentials komen uit secrets file)
+# BOL_CLIENT_ID wordt automatisch geladen
+# BOL_CLIENT_SECRET wordt automatisch geladen
+BOL_SITE_ID=1296565
+
+# AI Service (AIML API)
+# AIML_API_KEY wordt automatisch geladen
+
+# Server
+PORT=3000
+NODE_ENV=development
 ```
 
-**Tijd per product**: ~6-8 seconden
-- Bol.com API call: ~1 sec
-- AI review generatie: ~3-5 sec
-- Database insert: ~0.5 sec
-- Rate limiting pause: ~2 sec
+**🚨 Belangrijk**: BOL_CLIENT_ID, BOL_CLIENT_SECRET en AIML_API_KEY worden automatisch geladen uit de secrets file. Je hoeft ze NIET in .env te zetten.
 
 ---
 
-## 🚦 Status Indicators
+## 🚀 Deployment
 
-| Indicator | Betekenis |
-|-----------|-----------|
-| ✅ | Klaar en getest |
-| ⚠️ | Vereist configuratie |
-| ❌ | Niet in MVP scope |
-| 🔄 | In ontwikkeling |
+Zie `DEPLOYMENT_INFO.md` voor complete deployment instructies.
 
----
-
-## 🎯 Volgende Stappen
-
-### Vandaag (15 min):
-1. ✅ Backend is gebouwd
-2. ⚠️ Configureer Supabase (10 min)
-3. ⚠️ Test import endpoint (5 min)
-
-### Deze Week:
-- Deploy naar productie
-- Integreer met frontend
-- Test complete workflow
-
-### Later:
-- Automatische product imports (cron)
-- Koopgidsen generatie
-- Product vergelijkingen
+**Voor Render.com:**
+1. Push code naar GitHub
+2. Connect Render.com met je repo
+3. Set environment variables
+4. Deploy!
 
 ---
 
-## 💬 Support
+## 📝 API Documentatie
 
-**Logs bekijken**: Klik op "Logs" button in UI
-**API testen**: https://d04f594a4.preview.abacusai.app/api-docs
-**Documentatie**: Zie bestanden in project root
+Bezoek `/api-docs` voor interactieve Swagger documentatie:
+
+```
+http://localhost:3000/api-docs
+```
+
+Hier kun je:
+- Alle endpoints zien
+- Direct API calls testen
+- Request/response voorbeelden bekijken
 
 ---
 
-## 🎉 Success!
+## 🐛 Testing
 
-Je hebt nu een **production-ready MVP backend** voor ProductPraat.nl!
+**Gebruik het test script:**
+```bash
+chmod +x TEST_ENDPOINTS.sh
+./TEST_ENDPOINTS.sh
+```
 
-**Preview**: https://d04f594a4.preview.abacusai.app
-**Docs**: https://d04f594a4.preview.abacusai.app/api-docs
+Of test handmatig met curl (zie voorbeelden hierboven).
 
-**Enige stap die nog nodig is**: Supabase configureren (10 min)
+---
 
-**Veel succes! 🚀**
+## 📚 Volgende Stappen
+
+### MVP Voltooid ✅
+- [x] Admin authenticatie
+- [x] Product import van Bol.com
+- [x] AI review generatie
+- [x] Article management
+- [x] REST API endpoints
+- [x] Swagger documentatie
+
+### Roadmap 📋
+- [ ] Frontend integratie (React app)
+- [ ] Scheduled tasks (dagelijkse imports)
+- [ ] JWT token authenticatie
+- [ ] User reviews systeem
+- [ ] SEO optimalisatie
+- [ ] Image optimization
+- [ ] Caching layer
+- [ ] Rate limiting
+- [ ] Analytics dashboard
+
+---
+
+## ❓ Veelgestelde Vragen
+
+**Q: Hoe verander ik de admin credentials?**
+A: Edit `src/auth/auth.service.ts` en verander `ADMIN_EMAIL` en `ADMIN_PASSWORD`.
+
+**Q: Kan ik meerdere admins hebben?**
+A: In de huidige MVP niet, maar dit kan makkelijk uitgebreid worden met een users tabel.
+
+**Q: Hoe vaak worden producten geïmporteerd?**
+A: In de MVP handmatig via `/api/products/import`. Scheduled tasks komen in de volgende versie.
+
+**Q: Kan ik eigen artikelen schrijven?**
+A: Ja! Gebruik `POST /api/articles` om handmatig artikelen toe te voegen zonder AI.
+
+**Q: Wat als de AI API limit bereikt is?**
+A: De service geeft dan fallback content terug. Check de logs voor details.
+
+---
+
+## 📞 Support
+
+Voor vragen of problemen:
+1. Check de logs: `tail -f .logs/dev.log`
+2. Bekijk `DEPLOYMENT_INFO.md` voor troubleshooting
+3. Open een GitHub issue
+
+---
+
+## 🎉 Succes!
+
+Je backend API is nu klaar voor gebruik! Start met het testen van de endpoints via Swagger of curl.
+
+**Happy coding! 🚀**
