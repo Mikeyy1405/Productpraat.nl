@@ -17,13 +17,17 @@ const port = process.env.PORT || 3000;
 
 // --- CONFIG ---
 // Bol.com Marketing API credentials - MUST be set via environment variables in production
-const BOL_CLIENT_ID = process.env.BOL_CLIENT_ID || '';
-const BOL_CLIENT_SECRET = process.env.BOL_CLIENT_SECRET || '';
-const SITE_ID = process.env.BOL_SITE_ID || ''; 
+const BOL_CLIENT_ID = process.env.BOL_CLIENT_ID;
+const BOL_CLIENT_SECRET = process.env.BOL_CLIENT_SECRET;
+const SITE_ID = process.env.BOL_SITE_ID;
 const PLACEHOLDER_IMG = 'https://placehold.co/400x400/f1f5f9/94a3b8?text=Geen+Afbeelding';
 
+// Rate limiting for AI API calls (in milliseconds)
+const AI_RATE_LIMIT_DELAY_MS = 2000;
+
 // Check and log Bol.com API configuration status
-if (!BOL_CLIENT_ID || !BOL_CLIENT_SECRET || !SITE_ID) {
+const isBolConfigured = !!(BOL_CLIENT_ID && BOL_CLIENT_SECRET && SITE_ID);
+if (!isBolConfigured) {
     console.warn('[BOL] Warning: Bol.com API credentials not fully configured.');
     console.warn('[BOL] Required environment variables: BOL_CLIENT_ID, BOL_CLIENT_SECRET, BOL_SITE_ID');
     console.warn('[BOL] Product import features will not work until credentials are provided.');
@@ -32,7 +36,7 @@ if (!BOL_CLIENT_ID || !BOL_CLIENT_SECRET || !SITE_ID) {
 }
 
 // AI API Configuration (Server-side only)
-const AIML_API_KEY = process.env.VITE_API_KEY || '';
+const AIML_API_KEY = process.env.VITE_API_KEY;
 const AIML_BASE_URL = 'https://api.aimlapi.com/v1';
 const AI_MODEL = 'google/gemini-3-pro-preview';
 
@@ -257,7 +261,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         version: '2.1.0',
         services: {
-            bolApi: !!(BOL_CLIENT_ID && BOL_CLIENT_SECRET && SITE_ID),
+            bolApi: isBolConfigured,
             aiApi: !!AIML_API_KEY,
             supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY)
         },
@@ -521,7 +525,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 candidates.push({ bolData, aiData });
 
                 // Rate limiting - wait 2 seconds between AI calls
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
             } catch (productError) {
                 console.error(`[${timestamp}] [ADMIN] Error processing product ${product.ean}:`, productError.message);
             }
@@ -700,7 +704,7 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 candidates.push({ bolData, aiData });
 
                 // Rate limiting - wait 2 seconds between AI calls
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
             } catch (productError) {
                 console.error(`[${timestamp}] [ADMIN] Error processing product ${product.ean}:`, productError.message);
             }
