@@ -16,13 +16,27 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // --- CONFIG ---
-const BOL_CLIENT_ID = process.env.BOL_CLIENT_ID || '4ee5165d-f9de-49c1-847b-98d269eb8e72';
-const BOL_CLIENT_SECRET = process.env.BOL_CLIENT_SECRET || 'Jy?mGryYVZr@Vqwv!56NV7!n+pdCq@B8OsvKwqoO5crKpQq6kcrR?Hgwj015tTIR';
-const SITE_ID = process.env.BOL_SITE_ID || '1296565'; 
+// Bol.com Marketing API credentials - MUST be set via environment variables in production
+const BOL_CLIENT_ID = process.env.BOL_CLIENT_ID;
+const BOL_CLIENT_SECRET = process.env.BOL_CLIENT_SECRET;
+const SITE_ID = process.env.BOL_SITE_ID;
 const PLACEHOLDER_IMG = 'https://placehold.co/400x400/f1f5f9/94a3b8?text=Geen+Afbeelding';
 
+// Rate limiting for AI API calls (in milliseconds)
+const AI_RATE_LIMIT_DELAY_MS = 2000;
+
+// Check and log Bol.com API configuration status
+const isBolConfigured = !!(BOL_CLIENT_ID && BOL_CLIENT_SECRET && SITE_ID);
+if (!isBolConfigured) {
+    console.warn('[BOL] Warning: Bol.com API credentials not fully configured.');
+    console.warn('[BOL] Required environment variables: BOL_CLIENT_ID, BOL_CLIENT_SECRET, BOL_SITE_ID');
+    console.warn('[BOL] Product import features will not work until credentials are provided.');
+} else {
+    console.log('[BOL] Bol.com Marketing API configured successfully');
+}
+
 // AI API Configuration (Server-side only)
-const AIML_API_KEY = process.env.VITE_API_KEY || '';
+const AIML_API_KEY = process.env.VITE_API_KEY;
 const AIML_BASE_URL = 'https://api.aimlapi.com/v1';
 const AI_MODEL = 'google/gemini-3-pro-preview';
 
@@ -42,6 +56,23 @@ if (AIML_API_KEY) {
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Category mappings - Maps our app categories to Bol.com search terms
+// These are optimized search terms for the best product results
+const CATEGORY_SEARCH_TERMS = {
+    'televisies': 'smart tv 4k',
+    'audio': 'bluetooth speaker',
+    'laptops': 'laptop',
+    'smartphones': 'smartphone',
+    'wasmachines': 'wasmachine',
+    'stofzuigers': 'stofzuiger',
+    'smarthome': 'smart home',
+    'matrassen': 'matras',
+    'airfryers': 'airfryer',
+    'koffie': 'koffiemachine',
+    'keuken': 'keukenmachine',
+    'verzorging': 'scheerapparaat'
+};
+
 app.use(express.json());
 // We serve static files manually to intercept index.html
 app.use(express.static('dist', { index: false }));
@@ -51,59 +82,91 @@ let tokenExpiry = 0;
 
 // --- AUTH ---
 async function getBolToken() {
+    // Check if credentials are configured
+    if (!BOL_CLIENT_ID || !BOL_CLIENT_SECRET) {
+        console.error("[BOL] Error: Bol.com API credentials not configured");
+        throw new Error("Bol.com API credentials niet geconfigureerd. Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in.");
+    }
+    
     const now = Date.now();
     if (cachedToken && now < tokenExpiry) return cachedToken;
 
     try {
-        console.log("Fetching new Bol.com Access Token...");
+        console.log("[BOL] Fetching new Bol.com Access Token...");
         const credentials = Buffer.from(`${BOL_CLIENT_ID}:${BOL_CLIENT_SECRET}`).toString('base64');
         const response = await axios.post('https://login.bol.com/token?grant_type=client_credentials', null, {
             headers: { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' }
         });
         cachedToken = response.data.access_token;
         tokenExpiry = now + (response.data.expires_in * 1000) - 60000;
+        console.log("[BOL] Access token obtained successfully");
         return cachedToken;
     } catch (error) {
-        console.error("Bol Auth Error:", error.response?.data || error.message);
-        throw new Error("Kon niet inloggen bij Bol.com");
+        console.error("[BOL] Auth Error:", error.response?.data || error.message);
+        const errorMsg = error.response?.data?.error_description || error.message || "Authenticatie fout";
+        throw new Error(`Kon niet inloggen bij Bol.com: ${errorMsg}`);
     }
 }
+
+// --- HELPER: Standard headers for Bol.com Marketing API ---
+const getBolHeaders = (token) => ({
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/json',
+    'Accept-Language': 'nl'
+});
 
 // --- ROUTES ---
 
 app.post('/api/bol/search-list', async (req, res) => {
-    const { term, limit } = req.body;
+    const { term, limit, categoryId } = req.body;
     try {
         const token = await getBolToken();
-        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
-            params: { 
-                'search-term': term,
-                'country-code': 'NL',
-                'page': 1,
-                'include-image': true,
-                'sort': 'POPULARITY' 
-            },
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        
+        // Build search params - using 'q' for query
+        const searchParams = { 
+            'q': term,
+            'country-code': 'NL',
+            'page': 1,
+            'include': 'IMAGE,OFFER'
+        };
+        
+        // Add category filter if provided
+        if (categoryId) {
+            searchParams['category-id'] = categoryId;
+        }
+        
+        console.log(`[BOL] Searching for: "${term}"${categoryId ? ` in category ${categoryId}` : ''}`);
+        
+        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+            params: searchParams,
+            headers: getBolHeaders(token)
         });
 
-        const results = response.data.results || [];
-        console.log(`Search '${term}' found ${results.length} items`);
+        const results = response.data.products || [];
+        console.log(`[BOL] Search '${term}' found ${results.length} items`);
 
         const products = results.slice(0, limit || 5).map(p => {
             let img = p.image?.url || PLACEHOLDER_IMG;
             if (img.startsWith('http:')) img = img.replace('http:', 'https:');
+            
+            // Generate affiliate URL for each product
+            const productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${p.ean}/`;
+            const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
+            
             return {
                 id: p.ean,
                 ean: p.ean,
                 title: p.title,
                 image: img,
-                url: p.urls?.[0]?.value || `https://www.bol.com/nl/p/${p.ean}/`
+                url: affiliateUrl,
+                rawUrl: productUrl,
+                price: p.offer?.price || 0
             };
         });
         res.json({ products });
     } catch (error) {
-        console.error("Search List Error:", error.message);
-        res.status(200).json({ products: [] });
+        console.error("[BOL] Search List Error:", error.response?.data || error.message);
+        res.status(200).json({ products: [], error: error.message });
     }
 });
 
@@ -112,48 +175,59 @@ app.post('/api/bol/import', async (req, res) => {
     try {
         const token = await getBolToken();
         
+        // Extract EAN from URL if present
         let searchTerm = input;
         const matches = input.match(/(\d{13})|(\d{10,})/);
         if (matches) searchTerm = matches[0];
 
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+        console.log(`[BOL] Importing product with search: "${searchTerm}"`);
+        
+        // Use the correct search endpoint
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
             params: { 
-                'search-term': searchTerm,
+                'q': searchTerm,
                 'country-code': 'NL',
-                'limit': 1,
-                'include-image': true,
-                'include-offer': true,
-                'include-specifications': true
+                'include': 'IMAGE,OFFER,SPECIFICATIONS'
             },
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+            headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.results;
-        if (!results || results.length === 0) return res.status(404).json({ error: "Geen product gevonden" });
+        const results = searchResponse.data.products;
+        if (!results || results.length === 0) {
+            console.log(`[BOL] No product found for: "${searchTerm}"`);
+            return res.status(404).json({ error: "Geen product gevonden" });
+        }
 
         const product = results[0];
         const ean = product.ean;
+        console.log(`[BOL] Found product: ${product.title} (EAN: ${ean})`);
 
         let imageUrl = product.image?.url || PLACEHOLDER_IMG;
+        
+        // Try to get better quality image from media endpoint
         try {
             const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+                headers: getBolHeaders(token)
             });
             const images = mediaResponse.data.images;
             if (images && images.length > 0) {
                 const best = images.find(i => i.key === 'XXL') || images.find(i => i.key === 'XL') || images[0];
                 if (best && best.url) imageUrl = best.url;
             }
-        } catch (e) { /* ignore media error */ }
+        } catch (e) { 
+            console.log(`[BOL] Media fetch failed, using default image`);
+        }
         
         if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
         let price = 0;
         if (product.offer?.price) price = product.offer.price;
 
-        const productUrl = product.urls?.[0]?.value || `https://www.bol.com/nl/p/${ean}/`;
+        // Get product URL and generate affiliate link
+        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
+        // Extract specifications
         const specs = {};
         if (product.specificationGroups) {
             product.specificationGroups.forEach(g => {
@@ -161,6 +235,8 @@ app.post('/api/bol/import', async (req, res) => {
             });
         }
 
+        console.log(`[BOL] Import successful: ${product.title} - €${price} - Affiliate: ${affiliateUrl.substring(0, 50)}...`);
+        
         res.json({
             title: product.title,
             price,
@@ -172,12 +248,28 @@ app.post('/api/bol/import', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Import Error:", error.message);
-        res.status(500).json({ error: "Fout bij Bol.com API" });
+        console.error("[BOL] Import Error:", error.response?.data || error.message);
+        res.status(500).json({ error: `Fout bij Bol.com API: ${error.message}` });
     }
 });
 
-// --- CONFIG ENDPOINT (Fallback) ---
+// --- HEALTH & CONFIG ENDPOINTS ---
+
+// Health check with API status
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        version: '2.1.0',
+        services: {
+            bolApi: isBolConfigured,
+            aiApi: !!AIML_API_KEY,
+            supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY)
+        },
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Config endpoint for frontend
 app.get('/api/config', (req, res) => {
     res.json({
         VITE_SUPABASE_URL: VITE_SUPABASE_URL,
@@ -361,34 +453,40 @@ app.post('/api/admin/article/generate', async (req, res) => {
     }
 });
 
-// 3. Bulk Search and Add Products
+// 3. Bulk Search and Add Products (by Category)
 app.post('/api/admin/bulk/search-and-add', async (req, res) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [ADMIN] POST /api/admin/bulk/search-and-add`);
     
     try {
-        const { category, limit = 5 } = req.body;
+        const { category, limit = 5, categoryId } = req.body;
         
         if (!category) {
             return res.status(400).json({ error: 'Category is verplicht' });
         }
 
-        // Step 1: Search Bol.com for products
+        // Step 1: Search Bol.com for products using the correct endpoint
         const token = await getBolToken();
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
-            params: { 
-                'search-term': category,
-                'country-code': 'NL',
-                'page': 1,
-                'include-image': true,
-                'include-offer': true,
-                'include-specifications': true,
-                'sort': 'POPULARITY'
-            },
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        
+        const searchParams = { 
+            'q': category,
+            'country-code': 'NL',
+            'include': 'IMAGE,OFFER,SPECIFICATIONS'
+        };
+        
+        // Add category ID filter if provided
+        if (categoryId) {
+            searchParams['category-id'] = categoryId;
+        }
+        
+        console.log(`[${timestamp}] [ADMIN] Searching Bol.com for: "${category}"${categoryId ? ` (category: ${categoryId})` : ''}`);
+        
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+            params: searchParams,
+            headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.results || [];
+        const results = searchResponse.data.products || [];
         console.log(`[${timestamp}] [ADMIN] Bulk search found ${results.length} products for: ${category}`);
 
         const candidates = [];
@@ -399,7 +497,8 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 let imageUrl = product.image?.url || PLACEHOLDER_IMG;
                 if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
-                const productUrl = product.urls?.[0]?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                // Generate proper affiliate URL
+                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
                 const specs = {};
@@ -426,7 +525,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 candidates.push({ bolData, aiData });
 
                 // Rate limiting - wait 2 seconds between AI calls
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
             } catch (productError) {
                 console.error(`[${timestamp}] [ADMIN] Error processing product ${product.ean}:`, productError.message);
             }
@@ -455,46 +554,51 @@ app.post('/api/admin/import/url', async (req, res) => {
         // Step 1: Fetch product data from Bol.com
         const token = await getBolToken();
         
+        // Extract EAN from URL if present
         let searchTerm = url;
         const matches = url.match(/(\d{13})|(\d{10,})/);
         if (matches) searchTerm = matches[0];
+        
+        console.log(`[${timestamp}] [ADMIN] Searching for product: "${searchTerm}"`);
 
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
             params: { 
-                'search-term': searchTerm,
+                'q': searchTerm,
                 'country-code': 'NL',
-                'limit': 1,
-                'include-image': true,
-                'include-offer': true,
-                'include-specifications': true
+                'include': 'IMAGE,OFFER,SPECIFICATIONS'
             },
-            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+            headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.results;
+        const results = searchResponse.data.products;
         if (!results || results.length === 0) {
+            console.log(`[${timestamp}] [ADMIN] No product found for: "${searchTerm}"`);
             return res.status(404).json({ error: "Geen product gevonden" });
         }
 
         const product = results[0];
         const ean = product.ean;
+        console.log(`[${timestamp}] [ADMIN] Found product: ${product.title} (EAN: ${ean})`);
 
-        // Get best image
+        // Get best image from media endpoint
         let imageUrl = product.image?.url || PLACEHOLDER_IMG;
         try {
             const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
-                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+                headers: getBolHeaders(token)
             });
             const images = mediaResponse.data.images;
             if (images && images.length > 0) {
                 const best = images.find(i => i.key === 'XXL') || images.find(i => i.key === 'XL') || images[0];
                 if (best && best.url) imageUrl = best.url;
             }
-        } catch (e) { /* ignore media error */ }
+        } catch (e) {
+            console.log(`[${timestamp}] [ADMIN] Media fetch failed, using default image`);
+        }
         
         if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
-        const productUrl = product.urls?.[0]?.value || `https://www.bol.com/nl/p/${ean}/`;
+        // Generate proper affiliate URL
+        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
         const specs = {};
@@ -518,12 +622,111 @@ app.post('/api/admin/import/url', async (req, res) => {
         console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
         const aiData = await generateAIProductReview(bolData);
 
-        console.log(`[${timestamp}] [ADMIN] Import completed: ${aiData.brand} ${aiData.model}`);
+        console.log(`[${timestamp}] [ADMIN] Import completed: ${aiData.brand} ${aiData.model} - Affiliate URL generated`);
         res.json({ bolData, aiData });
     } catch (error) {
-        console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.message);
+        console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.response?.data || error.message);
         res.status(500).json({ error: error.message || 'Product import mislukt' });
     }
+});
+
+// 5. Import Products by App Category
+app.post('/api/admin/import/by-category', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ADMIN] POST /api/admin/import/by-category`);
+    
+    try {
+        const { category, limit = 5 } = req.body;
+        
+        if (!category) {
+            return res.status(400).json({ error: 'Category is verplicht' });
+        }
+        
+        // Get the optimized search term for this category
+        const searchTerm = CATEGORY_SEARCH_TERMS[category] || category;
+        console.log(`[${timestamp}] [ADMIN] Importing from category: "${category}" using search: "${searchTerm}"`);
+
+        // Search Bol.com for products
+        const token = await getBolToken();
+        
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+            params: { 
+                'q': searchTerm,
+                'country-code': 'NL',
+                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+            },
+            headers: getBolHeaders(token)
+        });
+
+        const results = searchResponse.data.products || [];
+        console.log(`[${timestamp}] [ADMIN] Found ${results.length} products for category: ${category}`);
+        
+        if (results.length === 0) {
+            return res.json({ products: [], message: 'Geen producten gevonden' });
+        }
+
+        const candidates = [];
+        const productsToProcess = results.slice(0, Math.min(limit, results.length));
+
+        for (const product of productsToProcess) {
+            try {
+                let imageUrl = product.image?.url || PLACEHOLDER_IMG;
+                if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
+
+                // Generate proper affiliate URL
+                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+
+                const specs = {};
+                if (product.specificationGroups) {
+                    product.specificationGroups.forEach(g => {
+                        g.specifications?.forEach(s => { specs[s.name] = s.value; });
+                    });
+                }
+
+                const bolData = {
+                    title: product.title,
+                    price: product.offer?.price || 0,
+                    image: imageUrl,
+                    ean: product.ean,
+                    url: affiliateUrl,
+                    rawDescription: product.shortDescription || product.description || "",
+                    specs
+                };
+
+                // Generate AI content for each product
+                console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
+                const aiData = await generateAIProductReview(bolData);
+                
+                // Override category to match our app category
+                aiData.category = category;
+
+                candidates.push({ bolData, aiData });
+
+                // Rate limiting - wait 2 seconds between AI calls
+                await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
+            } catch (productError) {
+                console.error(`[${timestamp}] [ADMIN] Error processing product ${product.ean}:`, productError.message);
+            }
+        }
+
+        console.log(`[${timestamp}] [ADMIN] Category import completed: ${candidates.length} products processed`);
+        res.json({ products: candidates, category, count: candidates.length });
+    } catch (error) {
+        console.error(`[${timestamp}] [ADMIN] Category import error:`, error.response?.data || error.message);
+        res.status(500).json({ error: error.message || 'Category import mislukt' });
+    }
+});
+
+// 6. Get available categories for import
+app.get('/api/admin/categories', (req, res) => {
+    res.json({
+        categories: Object.keys(CATEGORY_SEARCH_TERMS).map(key => ({
+            id: key,
+            name: key.charAt(0).toUpperCase() + key.slice(1),
+            searchTerm: CATEGORY_SEARCH_TERMS[key]
+        }))
+    });
 });
 
 // --- SERVER SIDE INJECTION OF ENV VARS ---
