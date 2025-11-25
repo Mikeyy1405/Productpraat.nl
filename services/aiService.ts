@@ -15,6 +15,18 @@ interface ProductCandidate {
     aiData: Partial<Product>;
 }
 
+interface CategoryImportResult {
+    products: ProductCandidate[];
+    category: string;
+    count: number;
+}
+
+interface CategoryInfo {
+    id: string;
+    name: string;
+    searchTerm: string;
+}
+
 /**
  * AI Service - Server-side wrapper
  * All AI API calls are routed through the server to protect API keys
@@ -108,6 +120,46 @@ export const aiService = {
             return await response.json();
         } catch (error) {
             console.error('Import URL Error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Import products by app category (uses optimized Bol.com search)
+     */
+    importByCategory: async (category: string, limit: number = 5): Promise<CategoryImportResult> => {
+        try {
+            const response = await fetch('/api/admin/import/by-category', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category, limit })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Category import mislukt');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Category Import Error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get available categories for import
+     */
+    getAvailableCategories: async (): Promise<CategoryInfo[]> => {
+        try {
+            const response = await fetch('/api/admin/categories');
+            if (!response.ok) {
+                throw new Error('Kon categorieën niet ophalen');
+            }
+            const data = await response.json();
+            return data.categories || [];
+        } catch (error) {
+            console.error('Get Categories Error:', error);
             throw error;
         }
     }
