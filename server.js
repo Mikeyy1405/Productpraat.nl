@@ -122,9 +122,9 @@ app.post('/api/bol/search-list', async (req, res) => {
     try {
         const token = await getBolToken();
         
-        // Build search params - using 'q' for query
+        // Build search params - using 'search-term' for query
         const searchParams = { 
-            'q': term,
+            'search-term': term,
             'country-code': 'NL',
             'page': 1,
             'include': 'IMAGE,OFFER'
@@ -137,7 +137,7 @@ app.post('/api/bol/search-list', async (req, res) => {
         
         console.log(`[BOL] Searching for: "${term}"${categoryId ? ` in category ${categoryId}` : ''}`);
         
-        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
             params: searchParams,
             headers: getBolHeaders(token)
         });
@@ -183,9 +183,9 @@ app.post('/api/bol/import', async (req, res) => {
         console.log(`[BOL] Importing product with search: "${searchTerm}"`);
         
         // Use the correct search endpoint
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
             params: { 
-                'q': searchTerm,
+                'search-term': searchTerm,
                 'country-code': 'NL',
                 'include': 'IMAGE,OFFER,SPECIFICATIONS'
             },
@@ -469,7 +469,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
         const token = await getBolToken();
         
         const searchParams = { 
-            'q': category,
+            'search-term': category,
             'country-code': 'NL',
             'include': 'IMAGE,OFFER,SPECIFICATIONS'
         };
@@ -481,7 +481,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
         
         console.log(`[${timestamp}] [ADMIN] Searching Bol.com for: "${category}"${categoryId ? ` (category: ${categoryId})` : ''}`);
         
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
             params: searchParams,
             headers: getBolHeaders(token)
         });
@@ -561,9 +561,9 @@ app.post('/api/admin/import/url', async (req, res) => {
         
         console.log(`[${timestamp}] [ADMIN] Searching for product: "${searchTerm}"`);
 
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
             params: { 
-                'q': searchTerm,
+                'search-term': searchTerm,
                 'country-code': 'NL',
                 'include': 'IMAGE,OFFER,SPECIFICATIONS'
             },
@@ -649,9 +649,9 @@ app.post('/api/admin/import/by-category', async (req, res) => {
         // Search Bol.com for products
         const token = await getBolToken();
         
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/lists/search`, {
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
             params: { 
-                'q': searchTerm,
+                'search-term': searchTerm,
                 'country-code': 'NL',
                 'include': 'IMAGE,OFFER,SPECIFICATIONS'
             },
