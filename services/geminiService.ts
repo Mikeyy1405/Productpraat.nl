@@ -1,3 +1,4 @@
+
 import OpenAI from "openai";
 import { Product, ContentSuggestion, Article, ArticleType } from '../types';
 
@@ -12,9 +13,19 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true // Client-side execution toegestaan
 });
 
-// SPECIFIEK MODEL VERZOCHT DOOR GEBRUIKER (Claude 4.5 Sonnet)
-const MODEL_REVIEW = "claude-sonnet-4-5-20250929"; 
-const MODEL_STRATEGY = "claude-sonnet-4-5-20250929";
+// GEBRUIK STABIEL MODEL (Claude 3.5 Sonnet is momenteel de beste voor NL content)
+const MODEL_REVIEW = "claude-3-5-sonnet-20240620"; 
+const MODEL_STRATEGY = "claude-3-5-sonnet-20240620";
+
+// --- HELPER: Extract JSON from text ---
+const extractJson = (text: string): string => {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+        return text.substring(start, end + 1);
+    }
+    return text; // Fallback, hope it's clean
+};
 
 // --- PROMPT STRUCTURES ---
 const PRODUCT_JSON_TEMPLATE = `
@@ -40,6 +51,7 @@ const PRODUCT_JSON_TEMPLATE = `
 
 export const generateProductFromInput = async (rawText: string): Promise<Partial<Product>> => {
   try {
+    console.log("AI Request starten voor:", rawText.substring(0, 50));
     const completion = await openai.chat.completions.create({
       model: MODEL_REVIEW,
       messages: [
@@ -49,7 +61,8 @@ export const generateProductFromInput = async (rawText: string): Promise<Partial
           Schrijf een eerlijke, diepgaande review in het Nederlands.
           Context: Het is 2026.
           
-          BELANGRIJK: Je output MOET valide JSON zijn die exact deze structuur volgt:
+          BELANGRIJK: Je output MOET valide JSON zijn. Geen markdown, geen introductie. Alleen JSON.
+          Structuur:
           ${PRODUCT_JSON_TEMPLATE}`
         },
         {
@@ -64,17 +77,17 @@ export const generateProductFromInput = async (rawText: string): Promise<Partial
     const content = completion.choices[0].message.content;
     if (!content) throw new Error("Geen data ontvangen van AI");
     
-    // Probeer JSON te parsen (soms zit er markdown omheen)
-    const cleanJson = content.replace(/```json\n?|\n?```/g, "").trim();
+    const cleanJson = extractJson(content);
     return JSON.parse(cleanJson);
 
   } catch (error) {
     console.error("AIML Product Error:", error);
-    // Fallback voor als JSON faalt, zodat de app niet crasht
+    // Fallback om crash te voorkomen
     return {
-        brand: "Onbekend",
-        model: "Import Fout",
-        description: "Er ging iets mis bij het genereren van de review."
+        brand: "Review Generatie",
+        model: "Mislukt",
+        description: "Er ging iets mis bij de AI. Probeer het opnieuw.",
+        score: 0
     };
   }
 };
@@ -100,7 +113,7 @@ export const generateContentStrategy = async (categoryName: string, existingProd
         });
 
         const content = completion.choices[0].message.content || "{}";
-        const cleanJson = content.replace(/```json\n?|\n?```/g, "").trim();
+        const cleanJson = extractJson(content);
         return JSON.parse(cleanJson).suggestions || [];
 
     } catch (e) {
@@ -114,28 +127,7 @@ export const generateArticle = async (type: ArticleType, topic: string, category
         const typeInstruction = {
             'comparison': `Gebruik een HTML <table class="w-full text-left border-collapse border border-slate-700 mb-6"> voor specs. Headers met bg-slate-800.`,
             'list': `Maak een Top 5. Gebruik <h2> voor productnamen en <ul> voor pluspunten.`,
-            'guide': `Schrijf een 'Ultieme Koopgids' (Long-form, 1500+ woorden).
-            Gebruik deze HTML structuur:
-            <h2>Introductie</h2>
-            <p>Pakkende inleiding over trends in 2026.</p>
-            
-            <h2>Waar moet je op letten bij een ${category}?</h2>
-            <p>Uitleg.</p>
-            
-            <h3>1. Belangrijkste Specificatie (bijv. Capaciteit/Formaat)</h3>
-            <p>Detail uitleg.</p>
-            
-            <h3>2. Duurzaamheid & Energie</h3>
-            <p>Uitleg.</p>
-            
-            <h3>3. Slimme Functies</h3>
-            <p>Uitleg.</p>
-
-            <h2>Veelgestelde Vragen</h2>
-            <p>Beantwoord 3 relevante vragen.</p>
-
-            <h2>Conclusie</h2>
-            <p>Samenvatting.</p>`
+            'guide': `Schrijf een 'Ultieme Koopgids' (Long-form, 1500+ woorden). Gebruik <h2>, <h3>, <p>, <ul>.`
         }[type];
 
         const completion = await openai.chat.completions.create({
@@ -146,7 +138,7 @@ export const generateArticle = async (type: ArticleType, topic: string, category
                     content: `Je bent de hoofdredacteur van ProductPraat.nl.
                     Schrijf een uitgebreid artikel in perfect Nederlands.
                     Gebruik HTML tags (h2, h3, p, ul, li, strong, table).
-                    GEEN markdown blokken, alleen de raw HTML string in de JSON.
+                    GEEN markdown blokken (zoals \`\`\`html), alleen de raw HTML string in de JSON.
                     
                     Output JSON:
                     {
@@ -165,7 +157,7 @@ export const generateArticle = async (type: ArticleType, topic: string, category
         });
 
         const content = completion.choices[0].message.content || "{}";
-        const cleanJson = content.replace(/```json\n?|\n?```/g, "").trim();
+        const cleanJson = extractJson(content);
         const data = JSON.parse(cleanJson);
         
         if (!data.imageUrl) {

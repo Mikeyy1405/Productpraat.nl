@@ -37,6 +37,7 @@ async function getBolToken() {
     if (cachedToken && now < tokenExpiry) return cachedToken;
 
     try {
+        console.log("Fetching new Bol.com Access Token...");
         const credentials = Buffer.from(`${BOL_CLIENT_ID}:${BOL_CLIENT_SECRET}`).toString('base64');
         const response = await axios.post('https://login.bol.com/token?grant_type=client_credentials', null, {
             headers: { 'Authorization': `Basic ${credentials}`, 'Accept': 'application/json' }
@@ -68,6 +69,8 @@ app.post('/api/bol/search-list', async (req, res) => {
         });
 
         const results = response.data.results || [];
+        console.log(`Search '${term}' found ${results.length} items`);
+
         const products = results.slice(0, limit || 5).map(p => {
             let img = p.image?.url || PLACEHOLDER_IMG;
             if (img.startsWith('http:')) img = img.replace('http:', 'https:');
@@ -192,5 +195,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`ProductPraat Server running on port ${port} (v1.9.5)`);
+  console.log(`ProductPraat Server running on port ${port} (v1.9.6)`);
 });
