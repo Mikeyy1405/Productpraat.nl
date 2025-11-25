@@ -5,7 +5,7 @@
  * API keys should not be exposed in client-side code.
  */
 
-import { Product, ContentSuggestion, Article, ArticleType } from '../types';
+import { Product, ContentSuggestion, Article } from '../types';
 
 // DEPRECATED: All AI calls should now go through server.js endpoints
 // This file is kept for backwards compatibility but should not be used.
@@ -15,7 +15,7 @@ console.warn('[DEPRECATED] geminiService.ts is deprecated. Use aiService.ts for 
 /**
  * @deprecated Use aiService.generateProduct() instead
  */
-export const generateProductFromInput = async (_rawText: string): Promise<Partial<Product>> => {
+export const generateProductFromInput = async (): Promise<Partial<Product>> => {
     console.error('[DEPRECATED] generateProductFromInput is deprecated. Use aiService.generateProduct()');
     throw new Error('This function is deprecated. Use aiService from services/aiService.ts');
 };
@@ -23,7 +23,7 @@ export const generateProductFromInput = async (_rawText: string): Promise<Partia
 /**
  * @deprecated Use aiService.generateArticle() instead
  */
-export const generateArticle = async (_type: ArticleType, _topic: string, _category: string): Promise<Partial<Article>> => {
+export const generateArticle = async (): Promise<Partial<Article>> => {
     console.error('[DEPRECATED] generateArticle is deprecated. Use aiService.generateArticle()');
     throw new Error('This function is deprecated. Use aiService from services/aiService.ts');
 };
@@ -31,7 +31,7 @@ export const generateArticle = async (_type: ArticleType, _topic: string, _categ
 /**
  * @deprecated This function is no longer supported
  */
-export const generateContentStrategy = async (_categoryName: string, _existingProducts: Product[]): Promise<ContentSuggestion[]> => {
+export const generateContentStrategy = async (): Promise<ContentSuggestion[]> => {
     console.error('[DEPRECATED] generateContentStrategy is deprecated');
     throw new Error('This function is deprecated');
 };

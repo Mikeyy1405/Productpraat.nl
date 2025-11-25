@@ -28,7 +28,7 @@ export const aiService = {
             const response = await fetch('/api/admin/product/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bolData, rawDescription: bolData.rawDescription })
+                body: JSON.stringify({ bolData })
             });
 
             if (!response.ok) {

@@ -327,16 +327,13 @@ app.post('/api/admin/product/generate', async (req, res) => {
     console.log(`[${timestamp}] [ADMIN] POST /api/admin/product/generate`);
     
     try {
-        const { bolData, rawDescription } = req.body;
+        const { bolData } = req.body;
         
         if (!bolData || !bolData.title) {
             return res.status(400).json({ error: 'Bol data is verplicht' });
         }
-
-        // Merge rawDescription if provided separately
-        const enrichedBolData = { ...bolData, rawDescription: rawDescription || bolData.rawDescription || '' };
         
-        const aiResult = await generateAIProductReview(enrichedBolData);
+        const aiResult = await generateAIProductReview(bolData);
         res.json(aiResult);
     } catch (error) {
         console.error(`[${timestamp}] [ADMIN] Product generate error:`, error.message);
@@ -557,5 +554,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`ProductPraat Server running on port ${port} (v1.9.6)`);
+  console.log(`ProductPraat Server running on port ${port} (v2.0.0)`);
 });
