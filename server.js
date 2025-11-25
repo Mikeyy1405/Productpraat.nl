@@ -156,6 +156,14 @@ app.post('/api/bol/import', async (req, res) => {
     }
 });
 
+// --- CONFIG ENDPOINT (Fallback) ---
+app.get('/api/config', (req, res) => {
+    res.json({
+        VITE_SUPABASE_URL: VITE_SUPABASE_URL,
+        VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY
+    });
+});
+
 // --- SERVER SIDE INJECTION OF ENV VARS ---
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
@@ -184,5 +192,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`ProductPraat Server running on port ${port}`);
+  console.log(`ProductPraat Server running on port ${port} (v1.9.5)`);
 });

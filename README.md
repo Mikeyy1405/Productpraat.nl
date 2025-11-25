@@ -3,7 +3,7 @@
 
 Dit is de source code voor ProductPraat.nl, een modern vergelijkingsplatform dat gebruik maakt van AIML (Claude) en de Bol.com API om volledig autonoom productreviews en content te genereren.
 
-**Laatste Update: Versie 1.6.1 - Force Update**
+**Laatste Update: Versie 1.9.5 - Force Deployment**
 
 ## Features
 
