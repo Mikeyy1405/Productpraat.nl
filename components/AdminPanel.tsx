@@ -39,6 +39,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const [pilotCategory, setPilotCategory] = useState<string>('wasmachines');
     const [bulkInput, setBulkInput] = useState('');
     const [bulkProgress, setBulkProgress] = useState<{current: number; total: number; statuses: ('pending' | 'processing' | 'success' | 'error')[]}>({current: 0, total: 0, statuses: []});
+    
+    // --- STATE: BULK CATEGORY IMPORT ---
+    const [bulkCategorySelected, setBulkCategorySelected] = useState<string>('wasmachines');
+    const [bulkCategoryLimit, setBulkCategoryLimit] = useState<number>(5);
+    const [bulkImportMode, setBulkImportMode] = useState<'urls' | 'category'>('urls');
 
     // --- STATE: SINGLE IMPORT (EDITOR) ---
     const [importUrl, setImportUrl] = useState('');
@@ -194,6 +199,111 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         setIsPaused(false);
         addLog(`🎉 Bulk Import Voltooid.`);
         showToast('Bulk import voltooid!', 'success');
+    };
+
+    // ========================================================================
+    // 1B. BULK IMPORT BY CATEGORY HANDLER (Server-side with AI)
+    // ========================================================================
+    const handleBulkCategoryImport = async () => {
+        if (isProcessing) return;
+        
+        setIsProcessing(true);
+        stopProcessRef.current = false;
+        setProgress(0);
+        setLoadingMessage(`Producten zoeken in categorie ${CATEGORIES[bulkCategorySelected].name}...`);
+        addLog(`📦 Start Bulk Category Import: ${CATEGORIES[bulkCategorySelected].name} (max ${bulkCategoryLimit} producten)`);
+        showToast(`Bulk category import gestart: ${CATEGORIES[bulkCategorySelected].name}`, 'info');
+
+        try {
+            // Call the server-side bulk search and add endpoint
+            const candidates = await aiService.bulkSearchAndAdd(CATEGORIES[bulkCategorySelected].name, bulkCategoryLimit);
+            
+            addLog(`✅ ${candidates.length} producten gevonden en verwerkt door server`);
+            
+            setBulkProgress({ current: 0, total: candidates.length, statuses: candidates.map(() => 'pending') });
+
+            // Process each candidate and save to database
+            for (const [index, candidate] of candidates.entries()) {
+                if (stopProcessRef.current) {
+                    addLog(`⏹️ Import gestopt door gebruiker`);
+                    showToast('Import gestopt', 'warning');
+                    break;
+                }
+
+                setBulkProgress(prev => ({
+                    ...prev,
+                    current: index,
+                    statuses: prev.statuses.map((s, i) => i === index ? 'processing' : s)
+                }));
+
+                try {
+                    setLoadingMessage(`Opslaan: ${candidate.bolData.title.substring(0, 40)}...`);
+                    addLog(`> Opslaan (${index + 1}/${candidates.length}): ${candidate.bolData.title.substring(0, 30)}...`);
+                    
+                    const exists = customProducts.find(p => p.ean === candidate.bolData.ean || p.model === candidate.aiData.model);
+                    if (exists) {
+                        addLog(`- Bestaat al, overgeslagen.`);
+                        setBulkProgress(prev => ({
+                            ...prev,
+                            statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
+                        }));
+                        setProgress(((index + 1) / candidates.length) * 100);
+                        continue;
+                    }
+
+                    const newProduct: Product = {
+                        id: `bulk-cat-${Date.now()}-${Math.random()}`,
+                        brand: candidate.aiData.brand || 'Merk',
+                        model: candidate.aiData.model || 'Model',
+                        price: candidate.bolData.price || 0,
+                        score: candidate.aiData.score || 7.5,
+                        category: bulkCategorySelected,
+                        image: candidate.bolData.image,
+                        specs: candidate.aiData.specs || {},
+                        pros: candidate.aiData.pros || [],
+                        cons: candidate.aiData.cons || [],
+                        description: candidate.aiData.description,
+                        longDescription: candidate.aiData.longDescription,
+                        expertOpinion: candidate.aiData.expertOpinion,
+                        userReviewsSummary: candidate.aiData.userReviewsSummary,
+                        affiliateUrl: candidate.bolData.url, // This contains the affiliate link from server
+                        ean: candidate.bolData.ean,
+                        scoreBreakdown: candidate.aiData.scoreBreakdown,
+                        suitability: candidate.aiData.suitability,
+                        faq: candidate.aiData.faq,
+                        predicate: candidate.aiData.predicate
+                    };
+
+                    await onAddProduct(newProduct);
+                    addLog(`✅ Toegevoegd: ${newProduct.brand} ${newProduct.model}`);
+                    
+                    setBulkProgress(prev => ({
+                        ...prev,
+                        statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
+                    }));
+
+                } catch (e) {
+                    const errorMsg = e instanceof Error ? e.message : String(e);
+                    addLog(`❌ Fout bij product ${index + 1}: ${errorMsg}`);
+                    setBulkProgress(prev => ({
+                        ...prev,
+                        statuses: prev.statuses.map((s, i) => i === index ? 'error' : s)
+                    }));
+                }
+
+                setProgress(((index + 1) / candidates.length) * 100);
+            }
+
+            addLog(`🎉 Bulk Category Import Voltooid: ${candidates.length} producten verwerkt`);
+            showToast('Bulk category import voltooid!', 'success');
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            addLog(`❌ Fout: ${errorMsg}`);
+            showToast(`Fout: ${errorMsg}`, 'error');
+        } finally {
+            setIsProcessing(false);
+            setLoadingMessage('');
+        }
     };
 
     const togglePause = () => {
@@ -1037,58 +1147,164 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                         </div>
                                         
                                         <div className="p-6 space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-400 mb-2">
-                                                    Bol.com URLs (één per regel)
-                                                </label>
-                                                <textarea 
-                                                    value={bulkInput} 
-                                                    onChange={(e) => setBulkInput(e.target.value)}
+                                            {/* Import Mode Toggle */}
+                                            <div className="flex gap-2 mb-4">
+                                                <button
+                                                    onClick={() => setBulkImportMode('urls')}
                                                     disabled={isProcessing}
-                                                    className="w-full h-40 bg-slate-950 border border-slate-700 rounded-xl p-4 text-sm text-white font-mono outline-none focus:border-purple-500 transition disabled:opacity-50"
-                                                    placeholder="https://www.bol.com/nl/p/product-1/...&#10;https://www.bol.com/nl/p/product-2/...&#10;https://www.bol.com/nl/p/product-3/..."
-                                                />
-                                                <div className="mt-2 text-xs text-slate-500">
-                                                    {bulkInput.split('\n').filter(l => l.trim()).length} URLs gevonden
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex flex-wrap gap-3">
-                                                <button 
-                                                    onClick={handleBulkImport} 
-                                                    disabled={isProcessing || !bulkInput.trim()}
-                                                    className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-purple-600/20 flex items-center gap-2 transition-all"
+                                                    className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                                                        bulkImportMode === 'urls'
+                                                            ? 'bg-purple-600 text-white shadow-lg'
+                                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                                    }`}
                                                 >
-                                                    {isProcessing && !isPaused ? (
-                                                        <><i className="fas fa-spinner fa-spin"></i> Bezig...</>
-                                                    ) : (
-                                                        <><i className="fas fa-play"></i> Start Bulk Import</>
-                                                    )}
+                                                    <i className="fas fa-link"></i>
+                                                    <span>Import via URLs</span>
                                                 </button>
-                                                
-                                                {isProcessing && (
-                                                    <>
-                                                        <button 
-                                                            onClick={togglePause}
-                                                            className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition ${
-                                                                isPaused 
-                                                                    ? 'bg-green-600 hover:bg-green-500 text-white' 
-                                                                    : 'bg-yellow-600/20 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-600/30'
-                                                            }`}
-                                                        >
-                                                            <i className={`fas ${isPaused ? 'fa-play' : 'fa-pause'}`}></i>
-                                                            {isPaused ? 'Hervat' : 'Pauzeer'}
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => stopProcessRef.current = true}
-                                                            className="bg-red-900/30 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl font-bold hover:bg-red-900/50 transition flex items-center gap-2"
-                                                        >
-                                                            <i className="fas fa-stop"></i> Stop
-                                                        </button>
-                                                    </>
-                                                )}
+                                                <button
+                                                    onClick={() => setBulkImportMode('category')}
+                                                    disabled={isProcessing}
+                                                    className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                                                        bulkImportMode === 'category'
+                                                            ? 'bg-purple-600 text-white shadow-lg'
+                                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-tags"></i>
+                                                    <span>Import via Categorie</span>
+                                                </button>
                                             </div>
-                                            
+
+                                            {/* URL-based Import */}
+                                            {bulkImportMode === 'urls' && (
+                                                <>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                            Bol.com URLs (één per regel)
+                                                        </label>
+                                                        <textarea 
+                                                            value={bulkInput} 
+                                                            onChange={(e) => setBulkInput(e.target.value)}
+                                                            disabled={isProcessing}
+                                                            className="w-full h-40 bg-slate-950 border border-slate-700 rounded-xl p-4 text-sm text-white font-mono outline-none focus:border-purple-500 transition disabled:opacity-50"
+                                                            placeholder="https://www.bol.com/nl/p/product-1/...&#10;https://www.bol.com/nl/p/product-2/...&#10;https://www.bol.com/nl/p/product-3/..."
+                                                        />
+                                                        <div className="mt-2 text-xs text-slate-500">
+                                                            {bulkInput.split('\n').filter(l => l.trim()).length} URLs gevonden
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex flex-wrap gap-3">
+                                                        <button 
+                                                            onClick={handleBulkImport} 
+                                                            disabled={isProcessing || !bulkInput.trim()}
+                                                            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-purple-600/20 flex items-center gap-2 transition-all"
+                                                        >
+                                                            {isProcessing && !isPaused ? (
+                                                                <><i className="fas fa-spinner fa-spin"></i> Bezig...</>
+                                                            ) : (
+                                                                <><i className="fas fa-play"></i> Start Bulk Import</>
+                                                            )}
+                                                        </button>
+                                                        
+                                                        {isProcessing && (
+                                                            <>
+                                                                <button 
+                                                                    onClick={togglePause}
+                                                                    className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition ${
+                                                                        isPaused 
+                                                                            ? 'bg-green-600 hover:bg-green-500 text-white' 
+                                                                            : 'bg-yellow-600/20 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-600/30'
+                                                                    }`}
+                                                                >
+                                                                    <i className={`fas ${isPaused ? 'fa-play' : 'fa-pause'}`}></i>
+                                                                    {isPaused ? 'Hervat' : 'Pauzeer'}
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => stopProcessRef.current = true}
+                                                                    className="bg-red-900/30 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl font-bold hover:bg-red-900/50 transition flex items-center gap-2"
+                                                                >
+                                                                    <i className="fas fa-stop"></i> Stop
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* Category-based Import */}
+                                            {bulkImportMode === 'category' && (
+                                                <>
+                                                    <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 mb-4">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <i className="fas fa-info-circle text-purple-400"></i>
+                                                            <span className="text-sm font-medium text-purple-300">Automatisch importeren</span>
+                                                        </div>
+                                                        <p className="text-xs text-purple-200/70">
+                                                            Zoek automatisch populaire producten in een categorie via de Bol.com API en importeer ze met affiliate links en AI-gegenereerde content.
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+                                                                <i className="fas fa-tags mr-1"></i>Categorie
+                                                            </label>
+                                                            <select 
+                                                                value={bulkCategorySelected} 
+                                                                onChange={(e) => setBulkCategorySelected(e.target.value)}
+                                                                disabled={isProcessing}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-500 transition cursor-pointer disabled:opacity-50"
+                                                            >
+                                                                {Object.entries(CATEGORIES).map(([k, v]) => (
+                                                                    <option key={k} value={k}>{v.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+                                                                <i className="fas fa-list-ol mr-1"></i>Aantal producten
+                                                            </label>
+                                                            <select 
+                                                                value={bulkCategoryLimit} 
+                                                                onChange={(e) => setBulkCategoryLimit(Number(e.target.value))}
+                                                                disabled={isProcessing}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-500 transition cursor-pointer disabled:opacity-50"
+                                                            >
+                                                                <option value={3}>3 producten</option>
+                                                                <option value={5}>5 producten</option>
+                                                                <option value={10}>10 producten</option>
+                                                                <option value={15}>15 producten</option>
+                                                                <option value={20}>20 producten</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap gap-3 mt-4">
+                                                        <button 
+                                                            onClick={handleBulkCategoryImport} 
+                                                            disabled={isProcessing}
+                                                            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-purple-600/20 flex items-center gap-2 transition-all"
+                                                        >
+                                                            {isProcessing ? (
+                                                                <><i className="fas fa-spinner fa-spin"></i> Bezig met {CATEGORIES[bulkCategorySelected].name}...</>
+                                                            ) : (
+                                                                <><i className="fas fa-search"></i> Zoek & Importeer {CATEGORIES[bulkCategorySelected].name}</>
+                                                            )}
+                                                        </button>
+                                                        
+                                                        {isProcessing && (
+                                                            <button 
+                                                                onClick={() => stopProcessRef.current = true}
+                                                                className="bg-red-900/30 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl font-bold hover:bg-red-900/50 transition flex items-center gap-2"
+                                                            >
+                                                                <i className="fas fa-stop"></i> Stop
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+
                                             {/* Progress Section */}
                                             {(isProcessing || progress > 0) && (
                                                 <div className="space-y-4 pt-4">
