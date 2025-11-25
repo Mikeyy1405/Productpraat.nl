@@ -142,7 +142,7 @@ app.post('/api/bol/search-list', async (req, res) => {
             headers: getBolHeaders(token)
         });
 
-        const results = response.data.products || [];
+        const results = response.data.results || [];
         console.log(`[BOL] Search '${term}' found ${results.length} items`);
 
         const products = results.slice(0, limit || 5).map(p => {
@@ -192,7 +192,7 @@ app.post('/api/bol/import', async (req, res) => {
             headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.products;
+        const results = searchResponse.data.results;
         if (!results || results.length === 0) {
             console.log(`[BOL] No product found for: "${searchTerm}"`);
             return res.status(404).json({ error: "Geen product gevonden" });
@@ -486,7 +486,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
             headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.products || [];
+        const results = searchResponse.data.results || [];
         console.log(`[${timestamp}] [ADMIN] Bulk search found ${results.length} products for: ${category}`);
 
         const candidates = [];
@@ -570,7 +570,7 @@ app.post('/api/admin/import/url', async (req, res) => {
             headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.products;
+        const results = searchResponse.data.results;
         if (!results || results.length === 0) {
             console.log(`[${timestamp}] [ADMIN] No product found for: "${searchTerm}"`);
             return res.status(404).json({ error: "Geen product gevonden" });
@@ -658,7 +658,7 @@ app.post('/api/admin/import/by-category', async (req, res) => {
             headers: getBolHeaders(token)
         });
 
-        const results = searchResponse.data.products || [];
+        const results = searchResponse.data.results || [];
         console.log(`[${timestamp}] [ADMIN] Found ${results.length} products for category: ${category}`);
         
         if (results.length === 0) {
