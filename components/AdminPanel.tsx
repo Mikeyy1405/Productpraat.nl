@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { generateProductFromInput, generateArticle } from '../services/geminiService';
+import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
@@ -22,6 +22,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const [isProcessing, setIsProcessing] = useState(false);
     const [progress, setProgress] = useState(0);
     const stopProcessRef = useRef(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // --- STATE: AUTO PILOT & BULK ---
     const [pilotCategory, setPilotCategory] = useState<string>('wasmachines');
@@ -46,6 +47,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         setPilotLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]); 
     };
 
+    const showError = (msg: string) => {
+        setErrorMessage(msg);
+        setTimeout(() => setErrorMessage(null), 5000);
+    };
+
     const handleResetDatabase = async () => { 
         if (confirm("LET OP: Dit wist ALLE data uit Supabase (Producten & Artikelen). Weet je het zeker?")) { 
             await db.clear(); 
@@ -54,7 +60,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     };
 
     // ========================================================================
-    // 1. BULK IMPORT HANDLER
+    // 1. BULK IMPORT HANDLER (URL-based)
     // ========================================================================
     const handleBulkImport = async () => {
         if (!bulkInput.trim()) return;
@@ -66,59 +72,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         addLog(`📦 Start Bulk Import: ${lines.length} items`);
 
         for (const [index, line] of lines.entries()) {
-            if (stopProcessRef.current) break;
+            if (stopProcessRef.current) {
+                addLog(`⏹️ Import gestopt door gebruiker`);
+                break;
+            }
             
             try {
                 addLog(`> Verwerken (${index + 1}/${lines.length}): ${line.substring(0, 30)}...`);
                 
-                // 1. Bol Data Fetch
-                const bolData = await fetchBolProduct(line);
+                // Use server-side import with AI enrichment
+                const { bolData, aiData } = await aiService.importFromUrl(line.trim());
                 
-                // 2. Check existence
-                const exists = customProducts.find(p => p.ean === bolData.ean || p.model === bolData.title);
+                // Check existence
+                const exists = customProducts.find(p => p.ean === bolData.ean || p.model === aiData.model);
                 if (exists) {
                     addLog(`- Bestaat al, overgeslagen.`);
                     setProgress(((index + 1) / lines.length) * 100);
                     continue;
                 }
 
-                // 3. AI Review Generation
-                addLog(`  AI schrijft review...`);
-                const aiResult = await generateProductFromInput(`Titel: ${bolData.title}\nPrijs: ${bolData.price}\nSpecs: ${JSON.stringify(bolData.specs)}`);
-
-                // 4. Save to DB
+                // Save to DB
                 const newProduct: Product = {
                     id: `bulk-${Date.now()}-${Math.random()}`,
-                    brand: aiResult.brand || 'Merk',
-                    model: aiResult.model || 'Model',
+                    brand: aiData.brand || 'Merk',
+                    model: aiData.model || 'Model',
                     price: bolData.price || 0,
-                    score: aiResult.score || 7.5,
-                    category: Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
+                    score: aiData.score || 7.5,
+                    category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
                     image: bolData.image,
-                    specs: aiResult.specs || {},
-                    pros: aiResult.pros || [],
-                    cons: aiResult.cons || [],
-                    description: aiResult.description,
-                    longDescription: aiResult.longDescription,
-                    expertOpinion: aiResult.expertOpinion,
-                    userReviewsSummary: aiResult.userReviewsSummary,
+                    specs: aiData.specs || {},
+                    pros: aiData.pros || [],
+                    cons: aiData.cons || [],
+                    description: aiData.description,
+                    longDescription: aiData.longDescription,
+                    expertOpinion: aiData.expertOpinion,
+                    userReviewsSummary: aiData.userReviewsSummary,
                     affiliateUrl: bolData.url,
                     ean: bolData.ean,
-                    scoreBreakdown: aiResult.scoreBreakdown,
-                    suitability: aiResult.suitability,
-                    faq: aiResult.faq,
-                    predicate: aiResult.predicate
+                    scoreBreakdown: aiData.scoreBreakdown,
+                    suitability: aiData.suitability,
+                    faq: aiData.faq,
+                    predicate: aiData.predicate
                 };
 
                 await onAddProduct(newProduct);
                 addLog(`✅ Toegevoegd: ${newProduct.brand} ${newProduct.model}`);
 
             } catch (e) {
-                addLog(`❌ Fout bij regel ${index + 1}: ${e}`);
+                const errorMsg = e instanceof Error ? e.message : String(e);
+                addLog(`❌ Fout bij regel ${index + 1}: ${errorMsg}`);
             }
 
             setProgress(((index + 1) / lines.length) * 100);
-            await new Promise(r => setTimeout(r, 2000)); // Respect rate limits
         }
 
         setIsProcessing(false);
@@ -126,43 +131,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     };
 
     // ========================================================================
-    // 2. SINGLE IMPORT HANDLER
+    // 2. SINGLE IMPORT HANDLER (Server-side with AI)
     // ========================================================================
     const handleSingleImport = async () => {
         if (!importUrl) return;
         setIsProcessing(true);
         setEditingProduct(null);
+        setErrorMessage(null);
         
         try {
-            const bolData = await fetchBolProduct(importUrl);
-            const aiResult = await generateProductFromInput(`Titel: ${bolData.title}\nPrijs: ${bolData.price}\nSpecs: ${JSON.stringify(bolData.specs)}`);
+            // Use server-side import with AI enrichment
+            const { bolData, aiData } = await aiService.importFromUrl(importUrl);
 
             const draft: Partial<Product> = {
                 id: `man-${Date.now()}`,
-                brand: aiResult.brand || 'Merk',
-                model: aiResult.model || 'Model',
+                brand: aiData.brand || 'Merk',
+                model: aiData.model || 'Model',
                 price: bolData.price || 0,
-                score: aiResult.score || 8.0,
-                category: Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
+                score: aiData.score || 8.0,
+                category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
                 image: bolData.image,
-                specs: aiResult.specs || {},
-                pros: aiResult.pros || [],
-                cons: aiResult.cons || [],
-                description: aiResult.description,
-                longDescription: aiResult.longDescription,
-                expertOpinion: aiResult.expertOpinion,
-                userReviewsSummary: aiResult.userReviewsSummary,
+                specs: aiData.specs || {},
+                pros: aiData.pros || [],
+                cons: aiData.cons || [],
+                description: aiData.description,
+                longDescription: aiData.longDescription,
+                expertOpinion: aiData.expertOpinion,
+                userReviewsSummary: aiData.userReviewsSummary,
                 affiliateUrl: bolData.url,
                 ean: bolData.ean,
-                scoreBreakdown: aiResult.scoreBreakdown,
-                suitability: aiResult.suitability,
-                faq: aiResult.faq,
-                predicate: aiResult.predicate
+                scoreBreakdown: aiData.scoreBreakdown,
+                suitability: aiData.suitability,
+                faq: aiData.faq,
+                predicate: aiData.predicate
             };
 
             setEditingProduct(draft);
         } catch (e) {
-            alert(`Fout bij importeren: ${e}`);
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            showError(`Fout bij importeren: ${errorMsg}`);
         } finally {
             setIsProcessing(false);
         }
@@ -170,14 +177,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
     const saveEditedProduct = async () => {
         if (!editingProduct || !editingProduct.brand) return;
-        await onAddProduct(editingProduct as Product);
-        setEditingProduct(null);
-        setImportUrl('');
-        alert("Product succesvol toegevoegd!");
+        try {
+            await onAddProduct(editingProduct as Product);
+            setEditingProduct(null);
+            setImportUrl('');
+            alert("Product succesvol toegevoegd!");
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            showError(`Fout bij opslaan: ${errorMsg}`);
+        }
     };
 
     // ========================================================================
-    // 3. AUTO PILOT (Category Launch)
+    // 3. AUTO PILOT (Category Launch) - Server-side
     // ========================================================================
     const runCategoryLaunch = async () => {
         if (isProcessing) return;
@@ -187,92 +199,136 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         addLog(`🚀 START CATEGORY LAUNCH: ${catName}`);
 
         try {
-            addLog(`📦 Fase 1: Producten zoeken...`);
+            addLog(`📦 Fase 1: Producten zoeken via server...`);
             const candidates = await searchBolProducts(catName, 5);
             
-            for (const candidate of candidates) {
-                if (stopProcessRef.current) break;
+            addLog(`  Gevonden: ${candidates.length} producten`);
+
+            for (const [index, candidate] of candidates.entries()) {
+                if (stopProcessRef.current) {
+                    addLog(`⏹️ Launch gestopt door gebruiker`);
+                    break;
+                }
+                
                 const exists = customProducts.find(p => p.model.toLowerCase().includes(candidate.title.toLowerCase()));
                 
                 if (!exists) {
-                    addLog(`> Importeren: ${candidate.title.substring(0,30)}...`);
+                    addLog(`> Importeren (${index + 1}/${candidates.length}): ${candidate.title.substring(0,30)}...`);
                     try {
-                        const bolData = await fetchBolProduct(candidate.url);
-                        const aiResult = await generateProductFromInput(`Titel: ${bolData.title}\nPrijs: ${bolData.price}\nSpecs: ${JSON.stringify(bolData.specs)}`);
+                        // Use server-side import with AI enrichment
+                        const { bolData, aiData } = await aiService.importFromUrl(candidate.url || candidate.ean);
                         
                         const newProduct: Product = {
                             id: `auto-${Date.now()}-${Math.random()}`,
-                            brand: aiResult.brand || 'Merk',
-                            model: aiResult.model || 'Model',
+                            brand: aiData.brand || 'Merk',
+                            model: aiData.model || 'Model',
                             price: bolData.price || 0,
-                            score: aiResult.score || 7.5,
+                            score: aiData.score || 7.5,
                             category: pilotCategory,
                             image: bolData.image,
-                            specs: aiResult.specs || {},
-                            pros: aiResult.pros || [],
-                            cons: aiResult.cons || [],
-                            description: aiResult.description,
-                            longDescription: aiResult.longDescription,
-                            expertOpinion: aiResult.expertOpinion,
-                            userReviewsSummary: aiResult.userReviewsSummary,
+                            specs: aiData.specs || {},
+                            pros: aiData.pros || [],
+                            cons: aiData.cons || [],
+                            description: aiData.description,
+                            longDescription: aiData.longDescription,
+                            expertOpinion: aiData.expertOpinion,
+                            userReviewsSummary: aiData.userReviewsSummary,
                             affiliateUrl: bolData.url,
                             ean: bolData.ean,
-                            scoreBreakdown: aiResult.scoreBreakdown,
-                            suitability: aiResult.suitability,
-                            faq: aiResult.faq
+                            scoreBreakdown: aiData.scoreBreakdown,
+                            suitability: aiData.suitability,
+                            faq: aiData.faq
                         };
                         await onAddProduct(newProduct);
+                        addLog(`✅ Product toegevoegd: ${newProduct.brand} ${newProduct.model}`);
                     } catch (err) {
-                        addLog(`! Fout bij product: ${err}`);
+                        const errorMsg = err instanceof Error ? err.message : String(err);
+                        addLog(`! Fout bij product: ${errorMsg}`);
                     }
+                } else {
+                    addLog(`- Product bestaat al, overgeslagen`);
                 }
-                await new Promise(r => setTimeout(r, 2000));
             }
 
-            if (stopProcessRef.current) throw new Error("Gestopt");
+            if (stopProcessRef.current) throw new Error("Gestopt door gebruiker");
 
             addLog(`📝 Fase 2: Content Generatie...`);
+            
+            // Generate guide article via server
             const guideTitle = `De Ultieme ${catName} Koopgids 2026`;
-            const guide = await generateArticle('guide', guideTitle, pilotCategory);
-            if (guide.title) {
-                const art = { ...guide, id: `art-${Date.now()}-G`, category: pilotCategory, type: 'guide', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
-                await db.addArticle(art);
-                addLog(`✅ Koopgids gepubliceerd`);
+            addLog(`  Schrijven: ${guideTitle}...`);
+            try {
+                const guide = await aiService.generateArticle('guide', guideTitle, pilotCategory);
+                if (guide.title) {
+                    const art = { ...guide, id: `art-${Date.now()}-G`, category: pilotCategory, type: 'guide', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
+                    await db.addArticle(art);
+                    addLog(`✅ Koopgids gepubliceerd`);
+                }
+            } catch (guideErr) {
+                const errorMsg = guideErr instanceof Error ? guideErr.message : String(guideErr);
+                addLog(`! Fout bij koopgids: ${errorMsg}`);
             }
 
+            // Generate list article via server
             const listTitle = `Top 5 Beste ${catName} van dit moment`;
-            const list = await generateArticle('list', listTitle, pilotCategory);
-            if (list.title) {
-                const art = { ...list, id: `art-${Date.now()}-L`, category: pilotCategory, type: 'list', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
-                const updated = await db.addArticle(art);
-                setSavedArticles(updated);
-                addLog(`✅ Toplijst gepubliceerd`);
+            addLog(`  Schrijven: ${listTitle}...`);
+            try {
+                const list = await aiService.generateArticle('list', listTitle, pilotCategory);
+                if (list.title) {
+                    const art = { ...list, id: `art-${Date.now()}-L`, category: pilotCategory, type: 'list', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
+                    const updated = await db.addArticle(art);
+                    setSavedArticles(updated);
+                    addLog(`✅ Toplijst gepubliceerd`);
+                }
+            } catch (listErr) {
+                const errorMsg = listErr instanceof Error ? listErr.message : String(listErr);
+                addLog(`! Fout bij toplijst: ${errorMsg}`);
             }
 
             addLog(`🎉 KLAAR! Categorie ${catName} is gevuld.`);
         } catch (e) {
-            addLog(`❌ Fout: ${e}`);
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            addLog(`❌ Fout: ${errorMsg}`);
         } finally {
             setIsProcessing(false);
         }
     };
 
     // ========================================================================
-    // 4. ARTICLES
+    // 4. ARTICLES (Server-side AI generation)
     // ========================================================================
     const handleGenerateArticle = async () => { 
-        setIsProcessing(true); setGeneratedArticle(null);
-        try { const r = await generateArticle(studioType, studioTopic, studioCategory); setGeneratedArticle(r); } 
-        catch(e){ console.error(e); } finally { setIsProcessing(false); }
+        if (!studioTopic.trim()) {
+            showError('Vul een onderwerp in');
+            return;
+        }
+        setIsProcessing(true); 
+        setGeneratedArticle(null);
+        setErrorMessage(null);
+        
+        try { 
+            const result = await aiService.generateArticle(studioType, studioTopic, studioCategory); 
+            setGeneratedArticle(result); 
+        } catch(e) { 
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            showError(`Fout bij genereren: ${errorMsg}`);
+        } finally { 
+            setIsProcessing(false); 
+        }
     };
 
     const handleSaveArticle = async () => { 
         if(generatedArticle?.title){ 
-            const art = { ...generatedArticle, id:`art-${Date.now()}`, category:studioCategory, type:studioType, author:'Redactie', date:new Date().toLocaleDateString() } as Article;
-            const updated = await db.addArticle(art);
-            setSavedArticles(updated);
-            setGeneratedArticle(null); 
-            alert('Opgeslagen');
+            try {
+                const art = { ...generatedArticle, id:`art-${Date.now()}`, category:studioCategory, type:studioType, author:'Redactie', date:new Date().toLocaleDateString() } as Article;
+                const updated = await db.addArticle(art);
+                setSavedArticles(updated);
+                setGeneratedArticle(null); 
+                alert('Artikel opgeslagen!');
+            } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : String(e);
+                showError(`Fout bij opslaan: ${errorMsg}`);
+            }
         }
     };
 
@@ -286,6 +342,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     // --- RENDER ---
     return (
         <div className="container mx-auto px-4 py-12 max-w-7xl animate-fade-in text-slate-200">
+            {/* Error Toast */}
+            {errorMessage && (
+                <div className="fixed top-4 right-4 bg-red-900/90 border border-red-700 text-white px-6 py-4 rounded-xl shadow-lg z-50 animate-fade-in">
+                    <div className="flex items-center gap-3">
+                        <i className="fas fa-exclamation-circle text-red-400"></i>
+                        <span>{errorMessage}</span>
+                        <button onClick={() => setErrorMessage(null)} className="ml-4 text-red-400 hover:text-white">
+                            <i className="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
                 <div>
@@ -420,12 +489,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                 <h2 className="text-xl font-bold text-white mb-4">Category Launch</h2>
                                 <p className="text-xs text-slate-400 mb-4">Vult automatisch een categorie met 5 bestsellers, een gids en een toplijst.</p>
                                 <div className="flex gap-2 mb-4">
-                                    <select value={pilotCategory} onChange={e => setPilotCategory(e.target.value)} className="flex-1 bg-slate-950 border border-slate-700 text-white p-3 rounded-xl">
+                                    <select value={pilotCategory} onChange={e => setPilotCategory(e.target.value)} disabled={isProcessing} className="flex-1 bg-slate-950 border border-slate-700 text-white p-3 rounded-xl">
                                         {Object.entries(CATEGORIES).map(([k,v]) => <option key={k} value={k}>{v.name}</option>)}
                                     </select>
-                                    <button onClick={runCategoryLaunch} disabled={isProcessing} className="bg-orange-600 text-white px-6 rounded-xl font-bold">START LAUNCH</button>
+                                    <button onClick={runCategoryLaunch} disabled={isProcessing} className="bg-orange-600 hover:bg-orange-500 text-white px-6 rounded-xl font-bold flex items-center gap-2">
+                                        {isProcessing ? <><i className="fas fa-spinner fa-spin"></i> Bezig...</> : <><i className="fas fa-rocket"></i> START LAUNCH</>}
+                                    </button>
+                                    {isProcessing && (
+                                        <button onClick={() => stopProcessRef.current = true} className="bg-red-900/50 border border-red-800 text-red-400 px-4 rounded-xl text-xs font-bold hover:bg-red-900 hover:text-white transition">
+                                            <i className="fas fa-stop mr-1"></i> STOP
+                                        </button>
+                                    )}
                                 </div>
-                                {isProcessing && <div className="bg-black p-4 rounded-xl h-48 overflow-y-auto font-mono text-xs">{pilotLogs.map((l,i)=><div key={i}>{l}</div>)}</div>}
+                                {(isProcessing || pilotLogs.length > 0) && (
+                                    <div className="bg-black p-4 rounded-xl h-48 overflow-y-auto font-mono text-xs border border-slate-800">
+                                        {pilotLogs.length === 0 ? (
+                                            <div className="text-slate-500">Wachten op logs...</div>
+                                        ) : (
+                                            pilotLogs.map((l,i) => (
+                                                <div key={i} className={`mb-1 pb-1 border-b border-slate-900/50 ${l.includes('✅') ? 'text-green-400' : l.includes('❌') ? 'text-red-400' : l.includes('🚀') || l.includes('🎉') ? 'text-orange-400' : 'text-slate-400'}`}>
+                                                    {l}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 
