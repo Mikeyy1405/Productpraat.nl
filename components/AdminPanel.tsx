@@ -226,14 +226,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 bolReviewsRaw: aiData.bolReviewsRaw
             };
             
-            setEditingProduct(draft);
-            setImportStep(3);
-            setSearchResults([]);
-            setSelectedSearchProduct(null);
-            setSearchQuery('');
-            addLog('✅ Import succesvol! Controleer en sla op.');
-            if (!warnings || warnings.length === 0) {
-                showToast('✅ Product geïmporteerd! Controleer de gegevens en sla op.', 'success');
+            // Direct opslaan zonder editing step
+            setLoadingMessage('Product opslaan...');
+            addLog('💾 Product opslaan in database...');
+
+            try {
+                await onAddProduct(draft as Product);
+                addLog('✅ Product opgeslagen!');
+                showToast('✅ Product succesvol toegevoegd!', 'success');
+                
+                // Reset for next product
+                setSelectedSearchProduct(null);
+                setSearchQuery('');
+                setSearchResults([]);
+                setImportStep(1);
+            } catch (saveError: unknown) {
+                const saveErrorMsg = saveError instanceof Error ? saveError.message : String(saveError);
+                addLog(`❌ Opslaan mislukt: ${saveErrorMsg}`);
+                showError(`Opslaan mislukt: ${saveErrorMsg}`);
+                // Show in edit mode so user can try again
+                setEditingProduct(draft);
+                setImportStep(3);
             }
             
         } catch (error) {
@@ -421,11 +434,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             
             // Reset progress for save phase - separate phase from SSE
             setProgress(0);
-            setLoadingMessage('Producten opslaan in database...');
+            setLoadingMessage('Producten voorbereiden voor bulk opslag...');
             
-            // Now save each candidate to the database (save phase)
-            const totalToSave = candidates.length;
-            let savedCount = 0;
+            // Collect all products first, then bulk insert
+            const productsToAdd: Product[] = [];
+            const skippedCount = { value: 0 };
             
             for (const [index, candidate] of candidates.entries()) {
                 if (stopProcessRef.current) {
@@ -434,81 +447,95 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                     break;
                 }
 
-                // Update save phase progress
-                setProgress(Math.round((index / totalToSave) * 100));
+                // Update progress
+                setProgress(Math.round((index / candidates.length) * 50));
                 setBulkProgress(prev => ({
                     ...prev,
                     current: index + 1,
-                    total: totalToSave,
+                    total: candidates.length,
                     statuses: prev.statuses.map((s, i) => i === index ? 'processing' : s)
                 }));
 
-                try {
-                    setLoadingMessage(`Opslaan: ${candidate.bolData.title.substring(0, 40)}...`);
-                    addLog(`> Opslaan (${index + 1}/${candidates.length}): ${candidate.bolData.title.substring(0, 30)}...`);
-                    
-                    const exists = customProducts.find(p => p.ean === candidate.bolData.ean || p.model === candidate.aiData.model);
-                    if (exists) {
-                        addLog(`- Bestaat al, overgeslagen.`);
-                        setBulkProgress(prev => ({
-                            ...prev,
-                            statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
-                        }));
-                        continue;
-                    }
-
-                    const newProduct: Product = {
-                        id: `bulk-cat-${Date.now()}-${Math.random()}`,
-                        slug: candidate.aiData.slug,
-                        brand: candidate.aiData.brand || 'Merk',
-                        model: candidate.aiData.model || 'Model',
-                        price: candidate.bolData.price || 0,
-                        score: candidate.aiData.score || 7.5,
-                        category: bulkCategorySelected,
-                        image: getBestImage(candidate.bolData),
-                        images: getAllImages(candidate.aiData, candidate.bolData),
-                        specs: candidate.aiData.specs || {},
-                        pros: candidate.aiData.pros || [],
-                        cons: candidate.aiData.cons || [],
-                        description: candidate.aiData.description,
-                        metaDescription: candidate.aiData.metaDescription,
-                        keywords: candidate.aiData.keywords || [],
-                        longDescription: candidate.aiData.longDescription,
-                        expertOpinion: candidate.aiData.expertOpinion,
-                        userReviewsSummary: candidate.aiData.userReviewsSummary,
-                        affiliateUrl: candidate.bolData.url,
-                        ean: candidate.bolData.ean,
-                        scoreBreakdown: candidate.aiData.scoreBreakdown,
-                        suitability: candidate.aiData.suitability,
-                        faq: candidate.aiData.faq,
-                        predicate: candidate.aiData.predicate,
-                        bolReviewsRaw: candidate.aiData.bolReviewsRaw
-                    };
-
-                    await onAddProduct(newProduct);
-                    savedCount++;
-                    addLog(`✅ Toegevoegd: ${newProduct.brand} ${newProduct.model}`);
-                    
+                const exists = customProducts.find(p => p.ean === candidate.bolData.ean || p.model === candidate.aiData.model);
+                if (exists) {
+                    addLog(`- Bestaat al, overgeslagen: ${candidate.bolData.title.substring(0, 30)}...`);
+                    skippedCount.value++;
                     setBulkProgress(prev => ({
                         ...prev,
                         statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
                     }));
-
-                } catch (e) {
-                    const errorMsg = e instanceof Error ? e.message : String(e);
-                    addLog(`❌ Fout bij product ${index + 1}: ${errorMsg}`);
-                    setBulkProgress(prev => ({
-                        ...prev,
-                        statuses: prev.statuses.map((s, i) => i === index ? 'error' : s)
-                    }));
+                    continue;
                 }
+
+                const newProduct: Product = {
+                    id: `bulk-cat-${Date.now()}-${index}-${Math.random()}`,
+                    slug: candidate.aiData.slug,
+                    brand: candidate.aiData.brand || 'Merk',
+                    model: candidate.aiData.model || 'Model',
+                    price: candidate.bolData.price || 0,
+                    score: candidate.aiData.score || 7.5,
+                    category: bulkCategorySelected,
+                    image: getBestImage(candidate.bolData),
+                    images: getAllImages(candidate.aiData, candidate.bolData),
+                    specs: candidate.aiData.specs || {},
+                    pros: candidate.aiData.pros || [],
+                    cons: candidate.aiData.cons || [],
+                    description: candidate.aiData.description,
+                    metaDescription: candidate.aiData.metaDescription,
+                    keywords: candidate.aiData.keywords || [],
+                    longDescription: candidate.aiData.longDescription,
+                    expertOpinion: candidate.aiData.expertOpinion,
+                    userReviewsSummary: candidate.aiData.userReviewsSummary,
+                    affiliateUrl: candidate.bolData.url,
+                    ean: candidate.bolData.ean,
+                    scoreBreakdown: candidate.aiData.scoreBreakdown,
+                    suitability: candidate.aiData.suitability,
+                    faq: candidate.aiData.faq,
+                    predicate: candidate.aiData.predicate,
+                    bolReviewsRaw: candidate.aiData.bolReviewsRaw
+                };
+
+                productsToAdd.push(newProduct);
+                addLog(`✓ Voorbereid: ${newProduct.brand} ${newProduct.model}`);
                 
-                // Update final progress
-                setProgress(Math.round(((index + 1) / totalToSave) * 100));
+                setBulkProgress(prev => ({
+                    ...prev,
+                    statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
+                }));
+            }
+
+            // Bulk insert all products at once
+            if (productsToAdd.length > 0 && !stopProcessRef.current) {
+                setProgress(75);
+                setLoadingMessage(`${productsToAdd.length} producten opslaan in database...`);
+                addLog(`💾 ${productsToAdd.length} producten bulk opslaan...`);
+                
+                try {
+                    await db.addBulk(productsToAdd);
+                    setProgress(100);
+                    addLog(`✅ ${productsToAdd.length} producten succesvol toegevoegd!`);
+                } catch (bulkError) {
+                    const errorMsg = bulkError instanceof Error ? bulkError.message : String(bulkError);
+                    addLog(`❌ Bulk opslag mislukt: ${errorMsg}`);
+                    addLog(`ℹ️ Probeer producten één voor één op te slaan...`);
+                    
+                    // Fallback: try to save one by one
+                    let savedCount = 0;
+                    for (const product of productsToAdd) {
+                        try {
+                            await onAddProduct(product);
+                            savedCount++;
+                        } catch (e) {
+                            const msg = e instanceof Error ? e.message : String(e);
+                            addLog(`❌ Fout bij ${product.brand} ${product.model}: ${msg}`);
+                        }
+                    }
+                    addLog(`✅ ${savedCount}/${productsToAdd.length} producten individueel opgeslagen`);
+                }
             }
 
             setProgress(100);
-            addLog(`🎉 Bulk Category Import Voltooid: ${savedCount} producten opgeslagen`);
+            addLog(`🎉 Bulk Category Import Voltooid: ${productsToAdd.length} producten toegevoegd, ${skippedCount.value} overgeslagen`);
             showToast('Bulk category import voltooid!', 'success');
         } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);
@@ -703,6 +730,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             
             addLog(`  Gevonden: ${candidates.length} producten`);
 
+            // Collect products first for bulk insert
+            const productsToAdd: Product[] = [];
+
             for (const [index, candidate] of candidates.entries()) {
                 if (stopProcessRef.current) {
                     addLog(`⏹️ Launch gestopt door gebruiker`);
@@ -719,7 +749,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         const { bolData, aiData } = await aiService.importFromUrl(candidate.url || candidate.ean);
                         
                         const newProduct: Product = {
-                            id: `auto-${Date.now()}-${Math.random()}`,
+                            id: `auto-${Date.now()}-${index}-${Math.random()}`,
                             slug: aiData.slug,
                             brand: aiData.brand || 'Merk',
                             model: aiData.model || 'Model',
@@ -744,14 +774,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                             faq: aiData.faq,
                             bolReviewsRaw: aiData.bolReviewsRaw
                         };
-                        await onAddProduct(newProduct);
-                        addLog(`✅ Product toegevoegd: ${newProduct.brand} ${newProduct.model}`);
+                        productsToAdd.push(newProduct);
+                        addLog(`✓ Voorbereid: ${newProduct.brand} ${newProduct.model}`);
                     } catch (err) {
                         const errorMsg = err instanceof Error ? err.message : String(err);
                         addLog(`! Fout bij product: ${errorMsg}`);
                     }
                 } else {
                     addLog(`- Product bestaat al, overgeslagen`);
+                }
+            }
+
+            // Bulk insert all products at once
+            if (productsToAdd.length > 0 && !stopProcessRef.current) {
+                setLoadingMessage(`${productsToAdd.length} producten opslaan...`);
+                addLog(`💾 ${productsToAdd.length} producten bulk opslaan...`);
+                try {
+                    await db.addBulk(productsToAdd);
+                    addLog(`✅ ${productsToAdd.length} producten toegevoegd!`);
+                } catch (bulkError) {
+                    const errorMsg = bulkError instanceof Error ? bulkError.message : String(bulkError);
+                    addLog(`❌ Bulk opslag mislukt: ${errorMsg}, probeer individueel...`);
+                    // Fallback: save one by one
+                    for (const product of productsToAdd) {
+                        try {
+                            await onAddProduct(product);
+                            addLog(`✅ Product toegevoegd: ${product.brand} ${product.model}`);
+                        } catch (e) {
+                            const msg = e instanceof Error ? e.message : String(e);
+                            addLog(`! Fout bij ${product.brand} ${product.model}: ${msg}`);
+                        }
+                    }
                 }
             }
 

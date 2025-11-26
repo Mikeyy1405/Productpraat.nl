@@ -94,15 +94,60 @@ export const db = {
 
     add: async (product: Product): Promise<Product[]> => {
         const supabase = getSupabase();
-        if (!supabase) { alert("Database nog niet gereed. Probeer over 2 seconden opnieuw."); return []; }
+        if (!supabase) { 
+            throw new Error("Database niet beschikbaar. Controleer Supabase configuratie."); 
+        }
         try {
             const cleanProduct = JSON.parse(JSON.stringify(product));
             const { error } = await supabase.from('products').insert([cleanProduct]);
-            if (error) throw error;
+            
+            if (error) {
+                // Extract meaningful error message
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                console.error("Supabase Insert Error:", error);
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
             return await db.getAll();
         } catch (e) {
-            console.error("Add Error:", JSON.stringify(e));
-            throw e;
+            console.error("Add Error:", formatError(e));
+            // Re-throw with clear message
+            if (e instanceof Error) {
+                throw e;
+            }
+            throw new Error(`Fout bij opslaan product: ${formatError(e)}`);
+        }
+    },
+
+    /**
+     * Bulk add multiple products at once
+     * More efficient than adding one by one
+     */
+    addBulk: async (products: Product[]): Promise<Product[]> => {
+        const supabase = getSupabase();
+        if (!supabase) { 
+            throw new Error("Database niet beschikbaar. Controleer Supabase configuratie."); 
+        }
+        try {
+            // Clean all products before inserting
+            const cleanProducts = products.map(p => JSON.parse(JSON.stringify(p)));
+            
+            // Insert all at once
+            const { error } = await supabase.from('products').insert(cleanProducts);
+            if (error) {
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                console.error("Supabase Bulk Insert Error:", error);
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
+            console.log(`✅ Bulk inserted ${products.length} products`);
+            return await db.getAll();
+        } catch (e) {
+            console.error("Bulk Add Error:", formatError(e));
+            if (e instanceof Error) {
+                throw e;
+            }
+            throw new Error(`Fout bij bulk opslaan producten: ${formatError(e)}`);
         }
     },
 
