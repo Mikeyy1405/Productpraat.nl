@@ -5,11 +5,11 @@ import { ProductCard } from './components/ProductCard';
 import { AdminPanel } from './components/AdminPanel';
 import { UserReviewSection } from './components/UserReviewSection';
 import { Login } from './components/Login';
-import { Product, CATEGORIES, Article } from './types';
+import { Product, CATEGORIES, Article, ArticleType } from './types';
 import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
-import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl } from './services/urlService';
+import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from './services/urlService';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
@@ -152,7 +152,7 @@ const getSeasonalTheme = (): SeasonalTheme => {
 };
 
 export const App: React.FC = () => {
-    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login' | 'product' | '404'>('home');
+    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login' | 'product' | '404' | 'artikelen'>('home');
     const [activeCategory, setActiveCategory] = useState<string>('wasmachines');
     const [customProducts, setCustomProducts] = useState<Product[]>([]);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -170,9 +170,15 @@ export const App: React.FC = () => {
     
     const [articles, setArticles] = useState<Article[]>([]);
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+    
+    // Artikelen filter state
+    const [articleCategoryFilter, setArticleCategoryFilter] = useState<string>('');
+    const [articleTypeFilter, setArticleTypeFilter] = useState<ArticleType | ''>('');
+    const [articleSearchTerm, setArticleSearchTerm] = useState<string>('');
+    const [articleSortBy, setArticleSortBy] = useState<'newest' | 'oldest' | 'alphabetical'>('newest');
 
     // Handle URL routing on initial load and popstate
-    const handleUrlRouting = (products: Product[]) => {
+    const handleUrlRouting = (products: Product[], loadedArticles: Article[]) => {
         const path = window.location.pathname;
         
         // Check for product URL pattern: /shop/{category}/{slug}
@@ -196,6 +202,35 @@ export const App: React.FC = () => {
                     return;
                 } else {
                     // Product not found - show 404
+                    setView('404');
+                    return;
+                }
+            }
+        }
+        
+        // Check for articles overview URL: /artikelen
+        if (isArticlesOverviewUrl(path)) {
+            setView('artikelen');
+            return;
+        }
+        
+        // Check for single article URL: /artikelen/{slug}
+        if (isArticleUrl(path)) {
+            const parsed = parseArticleUrl(path);
+            if (parsed) {
+                const { slug } = parsed;
+                // Find article by slug
+                const article = loadedArticles.find(a => {
+                    const articleSlug = (a.slug || generateArticleSlug(a)).toLowerCase();
+                    return articleSlug === slug.toLowerCase();
+                });
+                
+                if (article) {
+                    setSelectedArticle(article);
+                    setView('article');
+                    return;
+                } else {
+                    // Article not found - show 404
                     setView('404');
                     return;
                 }
@@ -238,7 +273,7 @@ export const App: React.FC = () => {
                 setArticles(arts);
                 
                 // Handle URL routing after data is loaded
-                handleUrlRouting(prods);
+                handleUrlRouting(prods, arts);
             } catch(e) {
                 console.error("Failed to load data", e);
             } finally {
@@ -253,8 +288,8 @@ export const App: React.FC = () => {
     useEffect(() => {
         // Handle browser back/forward navigation
         const handlePopState = () => {
-            if (customProducts.length > 0) {
-                handleUrlRouting(customProducts);
+            if (customProducts.length > 0 || articles.length > 0) {
+                handleUrlRouting(customProducts, articles);
             }
         };
         window.addEventListener('popstate', handlePopState);
@@ -262,7 +297,7 @@ export const App: React.FC = () => {
         return () => {
             window.removeEventListener('popstate', handlePopState);
         };
-    }, [customProducts]); // Re-register when products change
+    }, [customProducts, articles]); // Re-register when products or articles change
 
     useEffect(() => {
         if (view === 'category') {
@@ -291,8 +326,16 @@ export const App: React.FC = () => {
                 canonicalUrl
             );
             seoService.setProductSchema(p); 
+        } else if (view === 'artikelen') {
+            seoService.setArticlesOverviewMeta();
         } else if (view === 'article' && selectedArticle) {
-            seoService.updateMeta(`${selectedArticle.title}`, selectedArticle.summary, selectedArticle.imageUrl);
+            seoService.updateMeta(
+                selectedArticle.title, 
+                selectedArticle.metaDescription || selectedArticle.summary, 
+                selectedArticle.imageUrl,
+                `${window.location.origin}${getArticleUrl(selectedArticle)}`
+            );
+            seoService.setArticleSchema(selectedArticle);
         } else if (view === 'about') {
             seoService.updateMeta("Over ProductPraat", "Datagedreven productadvies.", undefined, `${window.location.origin}/about`);
         } else if (view === 'contact') {
@@ -321,8 +364,79 @@ export const App: React.FC = () => {
          const relevantCustom = customProducts.filter(p => p.category === activeCategory);
          return [...relevantCustom].sort((a, b) => b.score - a.score).slice(0, 3);
     }, [activeCategory, customProducts]);
+    
+    // Filtered and sorted articles for the artikelen overview
+    const filteredArticles = useMemo(() => {
+        let filtered = [...articles];
+        
+        // Filter by category
+        if (articleCategoryFilter) {
+            filtered = filtered.filter(a => a.category === articleCategoryFilter || (a.categories && a.categories.includes(articleCategoryFilter)));
+        }
+        
+        // Filter by type
+        if (articleTypeFilter) {
+            filtered = filtered.filter(a => a.type === articleTypeFilter);
+        }
+        
+        // Search filter
+        if (articleSearchTerm) {
+            const term = articleSearchTerm.toLowerCase();
+            filtered = filtered.filter(a => 
+                a.title.toLowerCase().includes(term) || 
+                a.summary.toLowerCase().includes(term) ||
+                (a.tags && a.tags.some(t => t.toLowerCase().includes(term)))
+            );
+        }
+        
+        // Sort
+        switch (articleSortBy) {
+            case 'newest':
+                filtered.sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime());
+                break;
+            case 'oldest':
+                filtered.sort((a, b) => new Date(a.created_at || a.date).getTime() - new Date(b.created_at || b.date).getTime());
+                break;
+            case 'alphabetical':
+                filtered.sort((a, b) => a.title.localeCompare(b.title));
+                break;
+        }
+        
+        return filtered;
+    }, [articles, articleCategoryFilter, articleTypeFilter, articleSearchTerm, articleSortBy]);
+    
+    // Helper function to get article type label in Dutch
+    const getArticleTypeLabel = (type: ArticleType): string => {
+        return ARTICLE_TYPE_LABELS[type] || type;
+    };
+    
+    // Helper function to get article type color classes
+    const getArticleTypeColorClasses = (type: ArticleType) => {
+        return ARTICLE_TYPE_COLORS[type] || ARTICLE_TYPE_COLORS['informational'];
+    };
+    
+    // Helper function to calculate reading time (safely strip HTML)
+    const getReadingTime = (htmlContent: string): number => {
+        // Use a temporary DOM element to safely extract text content
+        if (typeof document !== 'undefined') {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const text = tempDiv.textContent || tempDiv.innerText || '';
+            const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+            return Math.ceil(wordCount / 200); // Assume 200 words per minute
+        }
+        // Fallback for server-side: rough estimate based on content length
+        return Math.ceil(htmlContent.length / 1000);
+    };
+    
+    // Get related articles (same category or type)
+    const getRelatedArticles = (article: Article, count: number = 3): Article[] => {
+        return articles
+            .filter(a => a.id !== article.id && (a.category === article.category || a.type === article.type))
+            .slice(0, count);
+    };
 
-    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact' | 'dashboard') => {
+    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact' | 'dashboard' | 'artikelen') => {
         if ((target === 'admin' || target === 'dashboard') && !isAuthenticated) {
             setView('login');
             urlRouter.push('/dashboard');
@@ -330,6 +444,9 @@ export const App: React.FC = () => {
             if (target === 'admin' || target === 'dashboard') {
                 setView('admin');
                 urlRouter.push('/dashboard');
+            } else if (target === 'artikelen') {
+                setView('artikelen');
+                urlRouter.push('/artikelen');
             } else {
                 setView(target);
                 // Update browser URL
@@ -392,7 +509,12 @@ export const App: React.FC = () => {
             window.scrollTo(0, 0);
         }
     };
-    const handleOpenArticle = (article: Article) => { setSelectedArticle(article); setView('article'); window.scrollTo(0, 0); };
+    const handleOpenArticle = (article: Article) => { 
+        setSelectedArticle(article); 
+        setView('article'); 
+        urlRouter.push(getArticleUrl(article));
+        window.scrollTo(0, 0); 
+    };
     const performSearch = (e?: React.FormEvent, term?: string) => {
         if (e) e.preventDefault();
         const query = term || searchTerm;
@@ -543,15 +665,30 @@ export const App: React.FC = () => {
                                         <h2 className="text-3xl font-bold text-white text-center mb-8">Gidsen & Advies</h2>
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                             {articles.slice(0, 4).map(a => (
-                                                <div key={a.id} onClick={() => handleOpenArticle(a)} className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl overflow-hidden cursor-pointer`}>
-                                                    <img src={a.imageUrl} className="h-40 w-full object-cover" />
+                                                <div key={a.id} onClick={() => handleOpenArticle(a)} className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl overflow-hidden cursor-pointer hover:border-slate-600 transition group`}>
+                                                    {a.imageUrl && <img src={a.imageUrl} alt={a.title} className="h-40 w-full object-cover group-hover:scale-105 transition-transform duration-300" />}
                                                     <div className="p-4">
-                                                        <h3 className="font-bold text-white text-sm mb-2">{a.title}</h3>
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <span className={`text-xs px-2 py-0.5 rounded ${getArticleTypeColorClasses(a.type).bg} ${getArticleTypeColorClasses(a.type).text}`}>
+                                                                {getArticleTypeLabel(a.type)}
+                                                            </span>
+                                                        </div>
+                                                        <h3 className="font-bold text-white text-sm mb-2 line-clamp-2">{a.title}</h3>
                                                         <div className={`text-xs ${currentTheme.accentText}`}>Lees meer &rarr;</div>
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
+                                        {articles.length > 4 && (
+                                            <div className="text-center mt-8">
+                                                <button 
+                                                    onClick={() => handleNavigate('artikelen')}
+                                                    className={`${currentTheme.buttonClass} px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2 transition hover:scale-105`}
+                                                >
+                                                    Bekijk alle artikelen <i className="fas fa-arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -559,8 +696,155 @@ export const App: React.FC = () => {
                     )}
 
                     {/* ... OTHER VIEWS ... */}
-                    {view === 'admin' && isAuthenticated && <AdminPanel onAddProduct={handleAddProduct} onDeleteProduct={handleDeleteProduct} customProducts={customProducts} onLogout={handleLogout} />}
+                    {view === 'admin' && isAuthenticated && <AdminPanel onAddProduct={handleAddProduct} onDeleteProduct={handleDeleteProduct} customProducts={customProducts} articles={articles} setArticles={setArticles} onLogout={handleLogout} />}
                     {view === 'login' && <div className="py-20"><Login onLoginSuccess={handleLoginSuccess} /></div>}
+                    
+                    {/* ARTIKELEN OVERVIEW PAGE */}
+                    {view === 'artikelen' && (
+                        <div className={`animate-fade-in pb-20 ${currentTheme.pageBackground}`}>
+                            {/* Header */}
+                            <div className={`${currentTheme.sectionBackground} border-b ${currentTheme.borderColor} py-12`}>
+                                <div className="container mx-auto px-4">
+                                    {/* Breadcrumbs */}
+                                    <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+                                        <button onClick={() => handleNavigate('home')} className="hover:text-white transition">Home</button>
+                                        <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                        <span className="text-white font-medium">Artikelen</span>
+                                    </nav>
+                                    <h1 className="text-4xl font-extrabold text-white mb-4">Artikelen & Koopgidsen</h1>
+                                    <p className="text-xl text-slate-400 max-w-2xl">Ontdek onze expertgidsen, vergelijkingen en kooptips voor de beste producten.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="container mx-auto px-4 py-8">
+                                {/* Filters */}
+                                <div className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl p-4 mb-8`}>
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        {/* Search */}
+                                        <div className="relative">
+                                            <input 
+                                                type="text"
+                                                value={articleSearchTerm}
+                                                onChange={e => setArticleSearchTerm(e.target.value)}
+                                                placeholder="Zoeken in artikelen..."
+                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                            />
+                                            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                                        </div>
+                                        
+                                        {/* Category Filter */}
+                                        <select 
+                                            value={articleCategoryFilter}
+                                            onChange={e => setArticleCategoryFilter(e.target.value)}
+                                            className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
+                                        >
+                                            <option value="">Alle categorieën</option>
+                                            {Object.entries(CATEGORIES).map(([k, v]) => (
+                                                <option key={k} value={k}>{v.name}</option>
+                                            ))}
+                                        </select>
+                                        
+                                        {/* Type Filter */}
+                                        <select 
+                                            value={articleTypeFilter}
+                                            onChange={e => setArticleTypeFilter(e.target.value as ArticleType | '')}
+                                            className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
+                                        >
+                                            <option value="">Alle types</option>
+                                            <option value="comparison">Vergelijking</option>
+                                            <option value="list">Toplijst</option>
+                                            <option value="guide">Koopgids</option>
+                                            <option value="informational">Informatief</option>
+                                        </select>
+                                        
+                                        {/* Sort */}
+                                        <select 
+                                            value={articleSortBy}
+                                            onChange={e => setArticleSortBy(e.target.value as 'newest' | 'oldest' | 'alphabetical')}
+                                            className="bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
+                                        >
+                                            <option value="newest">Nieuwste eerst</option>
+                                            <option value="oldest">Oudste eerst</option>
+                                            <option value="alphabetical">Alfabetisch</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                {/* Results count */}
+                                <div className="text-slate-400 text-sm mb-6">
+                                    {filteredArticles.length} artikel{filteredArticles.length !== 1 ? 'en' : ''} gevonden
+                                </div>
+                                
+                                {/* Articles Grid */}
+                                {filteredArticles.length === 0 ? (
+                                    <div className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl p-12 text-center`}>
+                                        <i className="fas fa-newspaper text-4xl text-slate-600 mb-4"></i>
+                                        <h3 className="text-xl font-bold text-white mb-2">Geen artikelen gevonden</h3>
+                                        <p className="text-slate-400">Probeer andere filters of zoektermen.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {filteredArticles.map(article => (
+                                            <div 
+                                                key={article.id} 
+                                                onClick={() => handleOpenArticle(article)}
+                                                className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl overflow-hidden cursor-pointer hover:border-slate-600 transition group flex flex-col`}
+                                            >
+                                                {/* Thumbnail */}
+                                                {article.imageUrl && (
+                                                    <div className="relative h-48 overflow-hidden">
+                                                        <img 
+                                                            src={article.imageUrl} 
+                                                            alt={article.title}
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                                                        />
+                                                        {/* Type badge */}
+                                                        <div className="absolute top-3 left-3">
+                                                            <span className={`text-xs px-2 py-1 rounded font-medium ${getArticleTypeColorClasses(article.type).bgFull} text-white`}>
+                                                                {getArticleTypeLabel(article.type)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Content */}
+                                                <div className="p-5 flex-1 flex flex-col">
+                                                    {/* Category tag */}
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-xs text-slate-500">
+                                                            <i className={`fas ${CATEGORIES[article.category]?.icon || 'fa-folder'} mr-1`}></i>
+                                                            {CATEGORIES[article.category]?.name || article.category}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    {/* Title */}
+                                                    <h3 className="font-bold text-white text-lg mb-2 line-clamp-2 group-hover:text-blue-400 transition">
+                                                        {article.title}
+                                                    </h3>
+                                                    
+                                                    {/* Summary */}
+                                                    <p className="text-slate-400 text-sm mb-4 line-clamp-2 flex-1">
+                                                        {article.summary}
+                                                    </p>
+                                                    
+                                                    {/* Footer */}
+                                                    <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+                                                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                                                            <span><i className="fas fa-user mr-1"></i>{article.author}</span>
+                                                            <span><i className="fas fa-calendar mr-1"></i>{article.date}</span>
+                                                        </div>
+                                                        <span className={`text-sm font-medium ${currentTheme.accentText}`}>
+                                                            Lees meer <i className="fas fa-arrow-right ml-1"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     
                     {/* ABOUT PAGE */}
                     {view === 'about' && (
@@ -770,10 +1054,129 @@ export const App: React.FC = () => {
                         </div>
                     )}
                     {view === 'article' && selectedArticle && (
-                        <div className={`container mx-auto px-4 py-8 max-w-4xl ${currentTheme.pageBackground}`}>
-                            <button onClick={() => handleNavigate('home')} className="text-slate-400 mb-4">&larr; Terug</button>
-                            <h1 className="text-4xl font-bold text-white mb-6">{selectedArticle.title}</h1>
-                            <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} className="article-preview" />
+                        <div className={`animate-fade-in pb-20 ${currentTheme.pageBackground}`}>
+                            <div className="container mx-auto px-4 py-8 max-w-4xl">
+                                {/* Breadcrumbs */}
+                                <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6" aria-label="Breadcrumb">
+                                    <button onClick={() => handleNavigate('home')} className="hover:text-white transition">Home</button>
+                                    <i className="fas fa-chevron-right text-xs text-slate-600" aria-hidden="true"></i>
+                                    <button onClick={() => handleNavigate('artikelen')} className="hover:text-white transition">Artikelen</button>
+                                    <i className="fas fa-chevron-right text-xs text-slate-600" aria-hidden="true"></i>
+                                    <span className="text-white font-medium line-clamp-1">{selectedArticle.title}</span>
+                                </nav>
+                                
+                                {/* Article Header */}
+                                <header className="mb-8">
+                                    {/* Type badge and Category */}
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <span className={`text-xs px-2 py-1 rounded font-medium ${getArticleTypeColorClasses(selectedArticle.type).bgFull} text-white`}>
+                                            {getArticleTypeLabel(selectedArticle.type)}
+                                        </span>
+                                        <span className="text-sm text-slate-500">
+                                            <i className={`fas ${CATEGORIES[selectedArticle.category]?.icon || 'fa-folder'} mr-1`}></i>
+                                            {CATEGORIES[selectedArticle.category]?.name || selectedArticle.category}
+                                        </span>
+                                    </div>
+                                    
+                                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 leading-tight">{selectedArticle.title}</h1>
+                                    
+                                    {/* Meta info */}
+                                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-400 mb-6">
+                                        <span className="flex items-center gap-1">
+                                            <i className="fas fa-user"></i> {selectedArticle.author}
+                                        </span>
+                                        <span className="flex items-center gap-1">
+                                            <i className="fas fa-calendar"></i> {selectedArticle.date}
+                                        </span>
+                                        {selectedArticle.lastUpdated && selectedArticle.lastUpdated !== selectedArticle.created_at && (
+                                            <span className="flex items-center gap-1 text-green-400">
+                                                <i className="fas fa-sync-alt"></i> Bijgewerkt: {new Date(selectedArticle.lastUpdated).toLocaleDateString('nl-NL')}
+                                            </span>
+                                        )}
+                                        <span className="flex items-center gap-1">
+                                            <i className="fas fa-clock"></i> {getReadingTime(selectedArticle.htmlContent)} min leestijd
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Tags */}
+                                    {selectedArticle.tags && selectedArticle.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedArticle.tags.map((tag, i) => (
+                                                <span key={i} className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded">
+                                                    #{tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </header>
+                                
+                                {/* Featured Image */}
+                                {selectedArticle.imageUrl && (
+                                    <div className="mb-8 rounded-xl overflow-hidden">
+                                        <img 
+                                            src={selectedArticle.imageUrl} 
+                                            alt={selectedArticle.title}
+                                            className="w-full h-64 md:h-96 object-cover"
+                                        />
+                                    </div>
+                                )}
+                                
+                                {/* Summary */}
+                                {selectedArticle.summary && (
+                                    <div className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl p-6 mb-8`}>
+                                        <p className="text-lg text-slate-300 leading-relaxed italic">
+                                            {selectedArticle.summary}
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                {/* Article Content */}
+                                <article className="article-preview mb-12">
+                                    <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} />
+                                </article>
+                                
+                                {/* Related Articles */}
+                                {getRelatedArticles(selectedArticle).length > 0 && (
+                                    <section className="mt-16 pt-8 border-t border-slate-800">
+                                        <h2 className="text-2xl font-bold text-white mb-6">Gerelateerde Artikelen</h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            {getRelatedArticles(selectedArticle).map(related => (
+                                                <div 
+                                                    key={related.id}
+                                                    onClick={() => handleOpenArticle(related)}
+                                                    className={`${currentTheme.sectionBackground} border ${currentTheme.borderColor} rounded-xl overflow-hidden cursor-pointer hover:border-slate-600 transition group`}
+                                                >
+                                                    {related.imageUrl && (
+                                                        <img 
+                                                            src={related.imageUrl} 
+                                                            alt={related.title}
+                                                            className="h-32 w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        />
+                                                    )}
+                                                    <div className="p-4">
+                                                        <span className={`text-xs px-2 py-0.5 rounded ${getArticleTypeColorClasses(related.type).bg} ${getArticleTypeColorClasses(related.type).text}`}>
+                                                            {getArticleTypeLabel(related.type)}
+                                                        </span>
+                                                        <h3 className="font-bold text-white text-sm mt-2 line-clamp-2 group-hover:text-blue-400 transition">
+                                                            {related.title}
+                                                        </h3>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
+                                
+                                {/* Back to articles button */}
+                                <div className="mt-8 pt-8 border-t border-slate-800 text-center">
+                                    <button 
+                                        onClick={() => handleNavigate('artikelen')}
+                                        className={`${currentTheme.buttonClass} px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2`}
+                                    >
+                                        <i className="fas fa-arrow-left"></i> Terug naar artikelen
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </main>

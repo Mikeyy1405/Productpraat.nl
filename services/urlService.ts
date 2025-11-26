@@ -1,4 +1,4 @@
-import { Product, CATEGORIES } from '../types';
+import { Product, Article, ArticleType, CATEGORIES } from '../types';
 
 /**
  * URL Service for handling product URLs and slugs
@@ -140,5 +140,105 @@ export const urlRouter = {
      */
     navigateToCategory: (category: string): void => {
         urlRouter.push(`/shop/${category}`);
+    },
+    
+    /**
+     * Navigate to an article page
+     */
+    navigateToArticle: (article: Article): void => {
+        urlRouter.push(getArticleUrl(article));
+    },
+    
+    /**
+     * Navigate to articles overview
+     */
+    navigateToArticles: (): void => {
+        urlRouter.push('/artikelen');
     }
+};
+
+/** Maximum length for article slugs */
+const MAX_ARTICLE_SLUG_LENGTH = 100;
+
+/** Mapping of article types to Dutch slug prefixes */
+export const ARTICLE_TYPE_SLUG_MAPPING: Record<ArticleType, string> = {
+    'comparison': 'vergelijking',
+    'list': 'toplijst',
+    'guide': 'koopgids',
+    'informational': 'informatief'
+};
+
+/** Mapping of article types to Dutch display labels */
+export const ARTICLE_TYPE_LABELS: Record<ArticleType, string> = {
+    'comparison': 'Vergelijking',
+    'list': 'Toplijst',
+    'guide': 'Koopgids',
+    'informational': 'Informatief'
+};
+
+/** Mapping of article types to color classes for badges */
+export const ARTICLE_TYPE_COLORS: Record<ArticleType, { bg: string; text: string; bgFull: string }> = {
+    'guide': { bg: 'bg-blue-600/20', text: 'text-blue-400', bgFull: 'bg-blue-600' },
+    'list': { bg: 'bg-purple-600/20', text: 'text-purple-400', bgFull: 'bg-purple-600' },
+    'comparison': { bg: 'bg-green-600/20', text: 'text-green-400', bgFull: 'bg-green-600' },
+    'informational': { bg: 'bg-yellow-600/20', text: 'text-yellow-400', bgFull: 'bg-yellow-600' }
+};
+
+/**
+ * Generate an article slug from type and title
+ * Format: {type-dutch}-{title-kebab-case}
+ */
+export const generateArticleSlug = (article: Partial<Article>): string => {
+    const typePrefix = article.type ? ARTICLE_TYPE_SLUG_MAPPING[article.type] : 'artikel';
+    const titleStr = article.title || 'untitled';
+    
+    const titleSlug = titleStr.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/\s+/g, '-')          // Replace spaces with -
+        .replace(/-+/g, '-')           // Replace multiple - with single -
+        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
+    
+    return `${typePrefix}-${titleSlug}`.substring(0, MAX_ARTICLE_SLUG_LENGTH) || 'artikel';
+};
+
+/**
+ * Get the full URL path for an article
+ */
+export const getArticleUrl = (article: Article): string => {
+    const slug = article.slug || generateArticleSlug(article);
+    return `/artikelen/${slug}`;
+};
+
+/**
+ * Parse an article URL to extract the slug
+ */
+export const parseArticleUrl = (path: string): { slug: string } | null => {
+    // Match /artikelen/{slug} pattern
+    const match = path.match(/^\/artikelen\/([^\/]+)\/?$/);
+    if (!match) return null;
+    
+    const [, slug] = match;
+    return { slug: slug.toLowerCase() };
+};
+
+/**
+ * Check if a path matches the article URL pattern
+ */
+export const isArticleUrl = (path: string): boolean => {
+    return /^\/artikelen\/[^\/]+\/?$/.test(path);
+};
+
+/**
+ * Check if a path matches the articles overview page
+ */
+export const isArticlesOverviewUrl = (path: string): boolean => {
+    return path === '/artikelen' || path === '/artikelen/';
+};
+
+/**
+ * Get the canonical URL for an article
+ */
+export const getArticleCanonicalUrl = (article: Article): string => {
+    const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+    return `${baseUrl}${getArticleUrl(article)}`;
 };

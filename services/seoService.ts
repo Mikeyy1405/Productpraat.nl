@@ -1,5 +1,5 @@
-import { Product, CATEGORIES } from '../types';
-import { getCanonicalUrl } from './urlService';
+import { Product, Article, CATEGORIES } from '../types';
+import { getCanonicalUrl, getArticleCanonicalUrl } from './urlService';
 
 export const seoService = {
     /**
@@ -224,5 +224,115 @@ export const seoService = {
         const oldBreadcrumbScript = document.getElementById('json-ld-breadcrumb');
         if (oldBreadcrumbScript) oldBreadcrumbScript.remove();
         seoService.clearCanonicalUrl();
+    },
+
+    /**
+     * Injecteer Schema.org JSON-LD data voor Articles (Rich Snippets)
+     */
+    setArticleSchema: (article: Article) => {
+        // Verwijder oude schema's
+        const oldScript = document.getElementById('json-ld-schema');
+        if (oldScript) oldScript.remove();
+        
+        const oldBreadcrumbScript = document.getElementById('json-ld-breadcrumb');
+        if (oldBreadcrumbScript) oldBreadcrumbScript.remove();
+
+        // Get canonical URL for the article
+        const canonicalUrl = getArticleCanonicalUrl(article);
+        const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+        
+        // Map article type to Schema.org type
+        const schemaTypeMap: Record<string, string> = {
+            'comparison': 'Article',
+            'list': 'Article',
+            'guide': 'HowTo',
+            'informational': 'Article'
+        };
+
+        const categoryName = CATEGORIES[article.category]?.name || article.category;
+
+        const schema: Record<string, unknown> = {
+            "@context": "https://schema.org",
+            "@type": schemaTypeMap[article.type] || 'Article',
+            "headline": article.title,
+            "description": article.metaDescription || article.summary,
+            "image": article.imageUrl || `${baseUrl}/og-default.jpg`,
+            "url": canonicalUrl,
+            "datePublished": article.created_at || article.date,
+            "dateModified": article.lastUpdated || article.created_at || article.date,
+            "author": {
+                "@type": "Organization",
+                "name": article.author || "ProductPraat Redactie"
+            },
+            "publisher": {
+                "@type": "Organization",
+                "name": "ProductPraat.nl",
+                "logo": {
+                    "@type": "ImageObject",
+                    "url": `${baseUrl}/logo.png`
+                }
+            },
+            "mainEntityOfPage": {
+                "@type": "WebPage",
+                "@id": canonicalUrl
+            },
+            "articleSection": categoryName
+        };
+
+        // Add keywords/tags if available
+        if (article.tags && article.tags.length > 0) {
+            schema.keywords = article.tags.join(', ');
+        }
+
+        const script = document.createElement('script');
+        script.id = 'json-ld-schema';
+        script.type = 'application/ld+json';
+        script.text = JSON.stringify(schema);
+        document.head.appendChild(script);
+        
+        // Add breadcrumb schema
+        const breadcrumbSchema = {
+            "@context": "https://schema.org/",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Home",
+                    "item": baseUrl
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Artikelen",
+                    "item": `${baseUrl}/artikelen`
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": article.title,
+                    "item": canonicalUrl
+                }
+            ]
+        };
+        
+        const breadcrumbScriptEl = document.createElement('script');
+        breadcrumbScriptEl.id = 'json-ld-breadcrumb';
+        breadcrumbScriptEl.type = 'application/ld+json';
+        breadcrumbScriptEl.text = JSON.stringify(breadcrumbSchema);
+        document.head.appendChild(breadcrumbScriptEl);
+    },
+
+    /**
+     * Set SEO meta tags for articles overview page
+     */
+    setArticlesOverviewMeta: () => {
+        const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+        seoService.updateMeta(
+            "Artikelen & Koopgidsen - ProductPraat.nl",
+            "Ontdek al onze expertgidsen, vergelijkingen en kooptips. Onafhankelijk advies voor de beste producten.",
+            undefined,
+            `${baseUrl}/artikelen`
+        );
     }
 };
