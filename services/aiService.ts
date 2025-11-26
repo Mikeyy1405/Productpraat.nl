@@ -4,10 +4,17 @@ interface BolData {
     title: string;
     price: number;
     image: string;
+    images?: string[];
     ean: string;
     url: string;
     rawDescription: string;
     specs: Record<string, string>;
+    slug?: string;
+    bolReviews?: {
+        averageRating: number;
+        totalReviews: number;
+        distribution: { rating: number; count: number; }[];
+    } | null;
 }
 
 interface ProductCandidate {

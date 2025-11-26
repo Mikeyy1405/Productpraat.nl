@@ -115,6 +115,74 @@ const getBolHeaders = (token) => ({
     'Accept-Language': 'nl'
 });
 
+// --- HELPER: Generate SEO-friendly slug ---
+const generateSlug = (brand, model) => {
+    const brandStr = brand || '';
+    const modelStr = model || '';
+    const text = `${brandStr} ${modelStr}`.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/\s+/g, '-')          // Replace spaces with -
+        .replace(/-+/g, '-')           // Replace multiple - with single -
+        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
+    return text ? `${text}-review` : 'product-review';
+};
+
+// --- HELPER: Fetch Bol.com ratings/reviews ---
+const fetchBolRatings = async (ean, token) => {
+    try {
+        const ratingsResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/ratings`, {
+            headers: getBolHeaders(token)
+        });
+        const data = ratingsResponse.data;
+        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
+        return {
+            averageRating: data.averageRating || 0,
+            totalReviews: ratings.reduce((sum, r) => sum + (r.count || 0), 0),
+            distribution: ratings
+        };
+    } catch (e) {
+        console.log(`[BOL] Ratings fetch failed for ${ean}, continuing without reviews`);
+        return null;
+    }
+};
+
+// --- HELPER: Fetch all Bol.com images ---
+const fetchBolImages = async (ean, token, defaultImage) => {
+    let images = [defaultImage];
+    let mainImage = defaultImage;
+    
+    try {
+        const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
+            headers: getBolHeaders(token)
+        });
+        if (mediaResponse.data.images && mediaResponse.data.images.length > 0) {
+            // Pre-calculate areas for each image, then sort
+            const imagesWithArea = mediaResponse.data.images.map(img => {
+                const renditions = img.renditions || [];
+                const withArea = renditions.map(r => ({
+                    ...r,
+                    area: (r.width || 0) * (r.height || 0)
+                }));
+                const sorted = withArea.sort((a, b) => b.area - a.area);
+                return sorted[0]?.url || renditions[0]?.url || img.url;
+            });
+            
+            images = imagesWithArea.filter(Boolean).map(url => 
+                url.startsWith('http:') ? url.replace('http:', 'https:') : url
+            );
+            
+            // Update main image to highest quality
+            if (images.length > 0) mainImage = images[0];
+            
+            console.log(`[BOL] Fetched ${images.length} images for product ${ean}`);
+        }
+    } catch (e) {
+        console.log(`[BOL] Media fetch failed for ${ean}, using default image`);
+    }
+    
+    return { images, mainImage };
+};
+
 // --- ROUTES ---
 
 app.post('/api/bol/search-list', async (req, res) => {
@@ -204,21 +272,15 @@ app.post('/api/bol/import', async (req, res) => {
 
         let imageUrl = product.image?.url || PLACEHOLDER_IMG;
         
-        // Try to get better quality image from media endpoint
-        try {
-            const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
-                headers: getBolHeaders(token)
-            });
-            const images = mediaResponse.data.images;
-            if (images && images.length > 0) {
-                const best = images.find(i => i.key === 'XXL') || images.find(i => i.key === 'XL') || images[0];
-                if (best && best.url) imageUrl = best.url;
-            }
-        } catch (e) { 
-            console.log(`[BOL] Media fetch failed, using default image`);
-        }
+        // Fetch all images from media endpoint
+        const { images, mainImage } = await fetchBolImages(ean, token, imageUrl);
+        imageUrl = mainImage;
         
-        if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
+        // Fetch ratings/reviews from Bol.com
+        const bolReviews = await fetchBolRatings(ean, token);
+        if (bolReviews) {
+            console.log(`[BOL] Fetched ${bolReviews.totalReviews} reviews for product ${ean}`);
+        }
 
         let price = 0;
         if (product.offer?.price) price = product.offer.price;
@@ -241,10 +303,12 @@ app.post('/api/bol/import', async (req, res) => {
             title: product.title,
             price,
             image: imageUrl,
+            images,
             ean,
             url: affiliateUrl,
             rawDescription: product.shortDescription || product.description || "",
-            specs
+            specs,
+            bolReviews
         });
 
     } catch (error) {
@@ -295,15 +359,21 @@ const PRODUCT_JSON_TEMPLATE = `
     "score": number (0-10, 1 decimaal),
     "category": "string (kies uit: televisies, audio, laptops, smartphones, wasmachines, stofzuigers, smarthome, matrassen, airfryers, koffie, keuken, verzorging)",
     "specs": { "SpecNaam": "Waarde" },
-    "pros": ["punt 1", "punt 2"],
+    "pros": ["punt 1", "punt 2", "punt 3"],
     "cons": ["punt 1", "punt 2"],
-    "description": "Korte wervende samenvatting (2 zinnen)",
-    "longDescription": "Uitgebreide introductie over het product en voor wie het is.",
-    "expertOpinion": "Onze deskundige mening over de prestaties en waarde.",
-    "userReviewsSummary": "Samenvatting van wat gebruikers online zeggen.",
+    "description": "Korte wervende samenvatting (2-3 zinnen, 150-180 karakters)",
+    "metaDescription": "SEO meta description (150-155 karakters, focus op waarom dit product kopen)",
+    "keywords": ["keyword1", "keyword2", "long-tail keyword"],
+    "longDescription": "Uitgebreide introductie over het product (500+ woorden). Beschrijf design, features, voor wie het is, gebruik cases. SEO-rijk maar natuurlijk.",
+    "expertOpinion": "Onze deskundige mening over de prestaties en waarde (300+ woorden).",
+    "userReviewsSummary": "Volledig HERSCHREVEN samenvatting van gebruikerservaringen. Verwerk ratings en sentimenten in unieke content (250+ woorden). Noem specifieke ervaringen.",
     "scoreBreakdown": { "design": 0, "usability": 0, "performance": 0, "value": 0 },
-    "suitability": { "goodFor": ["situatie 1"], "badFor": ["situatie 2"] },
-    "faq": [{ "question": "Vraag", "answer": "Antwoord" }],
+    "suitability": { "goodFor": ["situatie 1", "situatie 2"], "badFor": ["situatie 1"] },
+    "faq": [
+        { "question": "Vraag 1", "answer": "Uitgebreid antwoord" },
+        { "question": "Vraag 2", "answer": "Uitgebreid antwoord" },
+        { "question": "Vraag 3", "answer": "Uitgebreid antwoord" }
+    ],
     "predicate": "test" | "buy" | null
 }
 `;
@@ -317,7 +387,12 @@ async function generateAIProductReview(bolData) {
     console.log(`[${timestamp}] [AI] Starting product review generation for: ${bolData.title?.substring(0, 50)}...`);
 
     try {
-        const rawText = `Titel: ${bolData.title}\nPrijs: ${bolData.price}\nBeschrijving: ${bolData.rawDescription}\nSpecs: ${JSON.stringify(bolData.specs)}`;
+        // Include Bol reviews in the prompt if available
+        const reviewText = bolData.bolReviews 
+            ? `\nBol.com Reviews (${bolData.bolReviews.totalReviews} reviews, gemiddeld ${bolData.bolReviews.averageRating}/5):\n${JSON.stringify(bolData.bolReviews.distribution)}`
+            : '';
+        
+        const rawText = `Titel: ${bolData.title}\nPrijs: ${bolData.price}\nBeschrijving: ${bolData.rawDescription}\nSpecs: ${JSON.stringify(bolData.specs)}${reviewText}`;
         
         const completion = await openai.chat.completions.create({
             model: AI_MODEL,
@@ -325,8 +400,15 @@ async function generateAIProductReview(bolData) {
                 {
                     role: "system",
                     content: `Je bent een expert product reviewer voor ProductPraat.nl. 
-                    Schrijf een eerlijke, diepgaande review in het Nederlands.
+                    Schrijf een eerlijke, SEO-geoptimaliseerde review in het Nederlands.
                     Context: Het is 2026.
+                    
+                    BELANGRIJK voor SEO:
+                    - Gebruik Bol.com reviews als basis maar herschrijf ze VOLLEDIG uniek
+                    - Voeg lange, informatieve beschrijvingen toe
+                    - Genereer relevante long-tail keywords
+                    - Schrijf een pakkende meta description (max 155 karakters)
+                    - userReviewsSummary MOET gebaseerd zijn op echte reviews maar volledig herschreven
                     
                     BELANGRIJK: Je output MOET valide JSON zijn. Geen markdown, geen introductie. Alleen JSON.
                     Structuur:
@@ -334,10 +416,10 @@ async function generateAIProductReview(bolData) {
                 },
                 {
                     role: "user",
-                    content: `Genereer review data voor:\n${rawText}`
+                    content: `Genereer SEO-geoptimaliseerde review data voor:\n${rawText}`
                 }
             ],
-            max_tokens: 3000,
+            max_tokens: 4000,
             temperature: 0.7,
         });
 
@@ -497,6 +579,13 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 let imageUrl = product.image?.url || PLACEHOLDER_IMG;
                 if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
+                // Fetch all images from media endpoint
+                const { images, mainImage } = await fetchBolImages(product.ean, token, imageUrl);
+                imageUrl = mainImage;
+                
+                // Fetch ratings/reviews from Bol.com
+                const bolReviews = await fetchBolRatings(product.ean, token);
+
                 // Generate proper affiliate URL
                 const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
@@ -512,17 +601,30 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                     title: product.title,
                     price: product.offer?.price || 0,
                     image: imageUrl,
+                    images,
                     ean: product.ean,
                     url: affiliateUrl,
                     rawDescription: product.shortDescription || product.description || "",
-                    specs
+                    specs,
+                    bolReviews
                 };
 
                 // Generate AI content for each product
                 console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
                 const aiData = await generateAIProductReview(bolData);
+                
+                // Generate SEO-friendly slug
+                const slug = generateSlug(aiData.brand, aiData.model);
 
-                candidates.push({ bolData, aiData });
+                candidates.push({ 
+                    bolData: { ...bolData, slug }, 
+                    aiData: { 
+                        ...aiData, 
+                        slug, 
+                        images,
+                        bolReviewsRaw: bolReviews 
+                    } 
+                });
 
                 // Rate limiting - wait 2 seconds between AI calls
                 await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
@@ -580,22 +682,16 @@ app.post('/api/admin/import/url', async (req, res) => {
         const ean = product.ean;
         console.log(`[${timestamp}] [ADMIN] Found product: ${product.title} (EAN: ${ean})`);
 
-        // Get best image from media endpoint
+        // Fetch all images from media endpoint
         let imageUrl = product.image?.url || PLACEHOLDER_IMG;
-        try {
-            const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
-                headers: getBolHeaders(token)
-            });
-            const images = mediaResponse.data.images;
-            if (images && images.length > 0) {
-                const best = images.find(i => i.key === 'XXL') || images.find(i => i.key === 'XL') || images[0];
-                if (best && best.url) imageUrl = best.url;
-            }
-        } catch (e) {
-            console.log(`[${timestamp}] [ADMIN] Media fetch failed, using default image`);
-        }
+        const { images, mainImage } = await fetchBolImages(ean, token, imageUrl);
+        imageUrl = mainImage;
         
-        if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
+        // Fetch ratings/reviews from Bol.com
+        const bolReviews = await fetchBolRatings(ean, token);
+        if (bolReviews) {
+            console.log(`[${timestamp}] [ADMIN] Fetched ${bolReviews.totalReviews} reviews for product ${ean}`);
+        }
 
         // Generate proper affiliate URL
         const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
@@ -612,18 +708,31 @@ app.post('/api/admin/import/url', async (req, res) => {
             title: product.title,
             price: product.offer?.price || 0,
             image: imageUrl,
+            images,
             ean,
             url: affiliateUrl,
             rawDescription: product.shortDescription || product.description || "",
-            specs
+            specs,
+            bolReviews
         };
 
         // Step 2: Generate AI content
         console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
         const aiData = await generateAIProductReview(bolData);
+        
+        // Generate SEO-friendly slug
+        const slug = generateSlug(aiData.brand, aiData.model);
 
-        console.log(`[${timestamp}] [ADMIN] Import completed: ${aiData.brand} ${aiData.model} - Affiliate URL generated`);
-        res.json({ bolData, aiData });
+        console.log(`[${timestamp}] [ADMIN] Import completed: ${aiData.brand} ${aiData.model} - Slug: ${slug}`);
+        res.json({ 
+            bolData: { ...bolData, slug }, 
+            aiData: { 
+                ...aiData, 
+                slug,
+                images,
+                bolReviewsRaw: bolReviews 
+            } 
+        });
     } catch (error) {
         console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.response?.data || error.message);
         res.status(500).json({ error: error.message || 'Product import mislukt' });
@@ -673,6 +782,13 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 let imageUrl = product.image?.url || PLACEHOLDER_IMG;
                 if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
+                // Fetch all images from media endpoint
+                const { images, mainImage } = await fetchBolImages(product.ean, token, imageUrl);
+                imageUrl = mainImage;
+                
+                // Fetch ratings/reviews from Bol.com
+                const bolReviews = await fetchBolRatings(product.ean, token);
+
                 // Generate proper affiliate URL
                 const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
@@ -688,10 +804,12 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                     title: product.title,
                     price: product.offer?.price || 0,
                     image: imageUrl,
+                    images,
                     ean: product.ean,
                     url: affiliateUrl,
                     rawDescription: product.shortDescription || product.description || "",
-                    specs
+                    specs,
+                    bolReviews
                 };
 
                 // Generate AI content for each product
@@ -700,8 +818,19 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 
                 // Override category to match our app category
                 aiData.category = category;
+                
+                // Generate SEO-friendly slug
+                const slug = generateSlug(aiData.brand, aiData.model);
 
-                candidates.push({ bolData, aiData });
+                candidates.push({ 
+                    bolData: { ...bolData, slug }, 
+                    aiData: { 
+                        ...aiData, 
+                        slug,
+                        images,
+                        bolReviewsRaw: bolReviews 
+                    } 
+                });
 
                 // Rate limiting - wait 2 seconds between AI calls
                 await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));

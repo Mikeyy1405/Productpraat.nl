@@ -151,7 +151,7 @@ const getSeasonalTheme = (): SeasonalTheme => {
 };
 
 export const App: React.FC = () => {
-    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login'>('home');
+    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login' | 'product'>('home');
     const [activeCategory, setActiveCategory] = useState<string>('wasmachines');
     const [customProducts, setCustomProducts] = useState<Product[]>([]);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -160,6 +160,7 @@ export const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(authService.isAuthenticated());
     const [currentTheme, setCurrentTheme] = useState<SeasonalTheme>(getSeasonalTheme());
     const [isLoadingData, setIsLoadingData] = useState(true);
+    const [currentSlug, setCurrentSlug] = useState<string>('');
     
     const [filterMinPrice, setFilterMinPrice] = useState<string>('');
     const [filterMaxPrice, setFilterMaxPrice] = useState<string>('');
@@ -207,9 +208,13 @@ export const App: React.FC = () => {
         } else if (view === 'category') {
             const catName = CATEGORIES[activeCategory]?.name || activeCategory;
             seoService.updateMeta(`De Beste ${catName} van 2026`, `Op zoek naar een nieuwe ${catName}? Wij hebben de populairste modellen getest.`);
-        } else if (view === 'details' && selectedProduct) {
+        } else if ((view === 'details' || view === 'product') && selectedProduct) {
             const p = selectedProduct;
-            seoService.updateMeta(`${p.brand} ${p.model} Review 2026`, p.description || `Review van de ${p.brand} ${p.model}.`, p.image);
+            seoService.updateMeta(
+                p.metaDescription || `${p.brand} ${p.model} Review 2026`, 
+                p.description || `Review van de ${p.brand} ${p.model}.`, 
+                p.image
+            );
             seoService.setProductSchema(p); 
         } else if (view === 'article' && selectedArticle) {
             seoService.updateMeta(`${selectedArticle.title}`, selectedArticle.summary, selectedArticle.imageUrl);
@@ -271,7 +276,23 @@ export const App: React.FC = () => {
     };
     const handleOpenProduct = (id: string) => {
         const product = customProducts.find(p => p.id === id);
-        if (product) { setSelectedProduct(product); setActiveCategory(product.category); setView('details'); window.scrollTo(0, 0); }
+        if (product) { 
+            setSelectedProduct(product); 
+            setActiveCategory(product.category); 
+            setCurrentSlug(product.slug || '');
+            setView('product'); 
+            window.scrollTo(0, 0); 
+        }
+    };
+    const handleOpenProductBySlug = (slug: string) => {
+        const product = customProducts.find(p => p.slug === slug);
+        if (product) {
+            setSelectedProduct(product);
+            setActiveCategory(product.category);
+            setCurrentSlug(slug);
+            setView('product');
+            window.scrollTo(0, 0);
+        }
     };
     const handleOpenArticle = (article: Article) => { setSelectedArticle(article); setView('article'); window.scrollTo(0, 0); };
     const performSearch = (e?: React.FormEvent, term?: string) => {
@@ -483,13 +504,25 @@ export const App: React.FC = () => {
                             <div className="grid gap-6">{visibleProducts.map(p => <ProductCard key={p.id} product={p} isCompareSelected={compareList.some(c => c.id === p.id)} onToggleCompare={toggleCompare} onClick={handleOpenProduct} />)}</div>
                         </div>
                     )}
-                    {view === 'details' && selectedProduct && (
+                    {(view === 'details' || view === 'product') && selectedProduct && (
                         <div className={`container mx-auto px-4 py-8 ${currentTheme.pageBackground}`}>
                             <div className="grid lg:grid-cols-2 gap-8">
                                 <div className="bg-white p-8 rounded-xl border border-slate-800"><img src={selectedProduct.image} className="max-w-full max-h-96 object-contain mx-auto" referrerPolicy="no-referrer" /></div>
                                 <div>
+                                    {selectedProduct.slug && (
+                                        <div className="text-xs text-slate-500 mb-2">
+                                            <span className="bg-slate-800 px-2 py-1 rounded">/{selectedProduct.slug}</span>
+                                        </div>
+                                    )}
                                     <h1 className="text-4xl font-bold text-white mb-4">{selectedProduct.brand} {selectedProduct.model}</h1>
                                     <div className="text-4xl font-bold text-[#1877F2] mb-4">{selectedProduct.score}</div>
+                                    {selectedProduct.keywords && selectedProduct.keywords.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-4">
+                                            {selectedProduct.keywords.map((kw, i) => (
+                                                <span key={i} className="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded">{kw}</span>
+                                            ))}
+                                        </div>
+                                    )}
                                     <div dangerouslySetInnerHTML={{ __html: selectedProduct.longDescription || '' }} className="prose prose-invert mb-8" />
                                     <button onClick={() => window.open(selectedProduct.affiliateUrl, '_blank')} className={`w-full py-4 rounded-xl font-bold text-lg mb-8 ${currentTheme.buttonClass}`}>Bekijk aanbieding</button>
                                     <UserReviewSection productId={selectedProduct.id} />

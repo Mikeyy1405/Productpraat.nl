@@ -92,6 +92,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         showToast(msg, 'error');
     };
 
+    // Helper function to get best image from import data
+    const getBestImage = (bolData: { images?: string[]; image: string }) => {
+        return bolData.images?.[0] || bolData.image;
+    };
+
+    // Helper function to get all images from import data
+    const getAllImages = (aiData: { images?: string[] }, bolData: { images?: string[]; image: string }) => {
+        return aiData.images || bolData.images || [bolData.image];
+    };
+
     const handleResetDatabase = async () => { 
         if (confirm("LET OP: Dit wist ALLE data uit Supabase (Producten & Artikelen). Weet je het zeker?")) { 
             await db.clear(); 
@@ -153,16 +163,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
                 const newProduct: Product = {
                     id: `bulk-${Date.now()}-${Math.random()}`,
+                    slug: aiData.slug,
                     brand: aiData.brand || 'Merk',
                     model: aiData.model || 'Model',
                     price: bolData.price || 0,
                     score: aiData.score || 7.5,
                     category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
-                    image: bolData.image,
+                    image: getBestImage(bolData),
+                    images: getAllImages(aiData, bolData),
                     specs: aiData.specs || {},
                     pros: aiData.pros || [],
                     cons: aiData.cons || [],
                     description: aiData.description,
+                    metaDescription: aiData.metaDescription,
+                    keywords: aiData.keywords || [],
                     longDescription: aiData.longDescription,
                     expertOpinion: aiData.expertOpinion,
                     userReviewsSummary: aiData.userReviewsSummary,
@@ -171,7 +185,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                     scoreBreakdown: aiData.scoreBreakdown,
                     suitability: aiData.suitability,
                     faq: aiData.faq,
-                    predicate: aiData.predicate
+                    predicate: aiData.predicate,
+                    bolReviewsRaw: aiData.bolReviewsRaw
                 };
 
                 await onAddProduct(newProduct);
@@ -253,16 +268,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
                     const newProduct: Product = {
                         id: `bulk-cat-${Date.now()}-${Math.random()}`,
+                        slug: candidate.aiData.slug,
                         brand: candidate.aiData.brand || 'Merk',
                         model: candidate.aiData.model || 'Model',
                         price: candidate.bolData.price || 0,
                         score: candidate.aiData.score || 7.5,
                         category: bulkCategorySelected,
-                        image: candidate.bolData.image,
+                        image: getBestImage(candidate.bolData),
+                        images: getAllImages(candidate.aiData, candidate.bolData),
                         specs: candidate.aiData.specs || {},
                         pros: candidate.aiData.pros || [],
                         cons: candidate.aiData.cons || [],
                         description: candidate.aiData.description,
+                        metaDescription: candidate.aiData.metaDescription,
+                        keywords: candidate.aiData.keywords || [],
                         longDescription: candidate.aiData.longDescription,
                         expertOpinion: candidate.aiData.expertOpinion,
                         userReviewsSummary: candidate.aiData.userReviewsSummary,
@@ -271,7 +290,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         scoreBreakdown: candidate.aiData.scoreBreakdown,
                         suitability: candidate.aiData.suitability,
                         faq: candidate.aiData.faq,
-                        predicate: candidate.aiData.predicate
+                        predicate: candidate.aiData.predicate,
+                        bolReviewsRaw: candidate.aiData.bolReviewsRaw
                     };
 
                     await onAddProduct(newProduct);
@@ -336,16 +356,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
             const draft: Partial<Product> = {
                 id: `man-${Date.now()}`,
+                slug: aiData.slug,
                 brand: aiData.brand || 'Merk',
                 model: aiData.model || 'Model',
                 price: bolData.price || 0,
                 score: aiData.score || 8.0,
                 category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
-                image: bolData.image,
+                image: getBestImage(bolData),
+                images: getAllImages(aiData, bolData),
                 specs: aiData.specs || {},
                 pros: aiData.pros || [],
                 cons: aiData.cons || [],
                 description: aiData.description,
+                metaDescription: aiData.metaDescription,
+                keywords: aiData.keywords || [],
                 longDescription: aiData.longDescription,
                 expertOpinion: aiData.expertOpinion,
                 userReviewsSummary: aiData.userReviewsSummary,
@@ -354,7 +378,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 scoreBreakdown: aiData.scoreBreakdown,
                 suitability: aiData.suitability,
                 faq: aiData.faq,
-                predicate: aiData.predicate
+                predicate: aiData.predicate,
+                bolReviewsRaw: aiData.bolReviewsRaw
             };
 
             setEditingProduct(draft);
@@ -420,16 +445,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         
                         const newProduct: Product = {
                             id: `auto-${Date.now()}-${Math.random()}`,
+                            slug: aiData.slug,
                             brand: aiData.brand || 'Merk',
                             model: aiData.model || 'Model',
                             price: bolData.price || 0,
                             score: aiData.score || 7.5,
                             category: pilotCategory,
-                            image: bolData.image,
+                            image: getBestImage(bolData),
+                            images: getAllImages(aiData, bolData),
                             specs: aiData.specs || {},
                             pros: aiData.pros || [],
                             cons: aiData.cons || [],
                             description: aiData.description,
+                            metaDescription: aiData.metaDescription,
+                            keywords: aiData.keywords || [],
                             longDescription: aiData.longDescription,
                             expertOpinion: aiData.expertOpinion,
                             userReviewsSummary: aiData.userReviewsSummary,
@@ -437,7 +466,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                             ean: bolData.ean,
                             scoreBreakdown: aiData.scoreBreakdown,
                             suitability: aiData.suitability,
-                            faq: aiData.faq
+                            faq: aiData.faq,
+                            bolReviewsRaw: aiData.bolReviewsRaw
                         };
                         await onAddProduct(newProduct);
                         addLog(`✅ Product toegevoegd: ${newProduct.brand} ${newProduct.model}`);
