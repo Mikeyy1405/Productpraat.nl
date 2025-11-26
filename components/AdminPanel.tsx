@@ -92,6 +92,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         showToast(msg, 'error');
     };
 
+    // Helper function to get best image from import data
+    const getBestImage = (bolData: { images?: string[]; image: string }) => {
+        return bolData.images?.[0] || bolData.image;
+    };
+
+    // Helper function to get all images from import data
+    const getAllImages = (aiData: { images?: string[] }, bolData: { images?: string[]; image: string }) => {
+        return aiData.images || bolData.images || [bolData.image];
+    };
+
     const handleResetDatabase = async () => { 
         if (confirm("LET OP: Dit wist ALLE data uit Supabase (Producten & Artikelen). Weet je het zeker?")) { 
             await db.clear(); 
@@ -159,8 +169,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                     price: bolData.price || 0,
                     score: aiData.score || 7.5,
                     category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
-                    image: bolData.images?.[0] || bolData.image,
-                    images: aiData.images || bolData.images || [bolData.image],
+                    image: getBestImage(bolData),
+                    images: getAllImages(aiData, bolData),
                     specs: aiData.specs || {},
                     pros: aiData.pros || [],
                     cons: aiData.cons || [],
@@ -264,8 +274,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         price: candidate.bolData.price || 0,
                         score: candidate.aiData.score || 7.5,
                         category: bulkCategorySelected,
-                        image: candidate.bolData.images?.[0] || candidate.bolData.image,
-                        images: candidate.aiData.images || candidate.bolData.images || [candidate.bolData.image],
+                        image: getBestImage(candidate.bolData),
+                        images: getAllImages(candidate.aiData, candidate.bolData),
                         specs: candidate.aiData.specs || {},
                         pros: candidate.aiData.pros || [],
                         cons: candidate.aiData.cons || [],
@@ -352,8 +362,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 price: bolData.price || 0,
                 score: aiData.score || 8.0,
                 category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
-                image: bolData.images?.[0] || bolData.image,
-                images: aiData.images || bolData.images || [bolData.image],
+                image: getBestImage(bolData),
+                images: getAllImages(aiData, bolData),
                 specs: aiData.specs || {},
                 pros: aiData.pros || [],
                 cons: aiData.cons || [],
@@ -441,8 +451,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                             price: bolData.price || 0,
                             score: aiData.score || 7.5,
                             category: pilotCategory,
-                            image: bolData.images?.[0] || bolData.image,
-                            images: aiData.images || bolData.images || [bolData.image],
+                            image: getBestImage(bolData),
+                            images: getAllImages(aiData, bolData),
                             specs: aiData.specs || {},
                             pros: aiData.pros || [],
                             cons: aiData.cons || [],

@@ -117,12 +117,14 @@ const getBolHeaders = (token) => ({
 
 // --- HELPER: Generate SEO-friendly slug ---
 const generateSlug = (brand, model) => {
-    const text = `${brand} ${model}`.toLowerCase()
+    const brandStr = brand || '';
+    const modelStr = model || '';
+    const text = `${brandStr} ${modelStr}`.toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
         .replace(/\s+/g, '-')          // Replace spaces with -
         .replace(/-+/g, '-')           // Replace multiple - with single -
-        .trim();
-    return `${text}-review`;
+        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
+    return text ? `${text}-review` : 'product-review';
 };
 
 // --- HELPER: Fetch Bol.com ratings/reviews ---
@@ -132,10 +134,11 @@ const fetchBolRatings = async (ean, token) => {
             headers: getBolHeaders(token)
         });
         const data = ratingsResponse.data;
+        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
         return {
             averageRating: data.averageRating || 0,
-            totalReviews: data.ratings?.reduce((sum, r) => sum + r.count, 0) || 0,
-            distribution: data.ratings || []
+            totalReviews: ratings.reduce((sum, r) => sum + (r.count || 0), 0),
+            distribution: ratings
         };
     } catch (e) {
         console.log(`[BOL] Ratings fetch failed for ${ean}, continuing without reviews`);
@@ -153,13 +156,20 @@ const fetchBolImages = async (ean, token, defaultImage) => {
             headers: getBolHeaders(token)
         });
         if (mediaResponse.data.images && mediaResponse.data.images.length > 0) {
-            // Get all images, prefer larger sizes
-            images = mediaResponse.data.images.map(img => {
+            // Pre-calculate areas for each image, then sort
+            const imagesWithArea = mediaResponse.data.images.map(img => {
                 const renditions = img.renditions || [];
-                // Sort by size, get largest
-                const sorted = renditions.sort((a, b) => (b.width * b.height) - (a.width * a.height));
+                const withArea = renditions.map(r => ({
+                    ...r,
+                    area: (r.width || 0) * (r.height || 0)
+                }));
+                const sorted = withArea.sort((a, b) => b.area - a.area);
                 return sorted[0]?.url || renditions[0]?.url || img.url;
-            }).filter(Boolean).map(url => url.startsWith('http:') ? url.replace('http:', 'https:') : url);
+            });
+            
+            images = imagesWithArea.filter(Boolean).map(url => 
+                url.startsWith('http:') ? url.replace('http:', 'https:') : url
+            );
             
             // Update main image to highest quality
             if (images.length > 0) mainImage = images[0];
