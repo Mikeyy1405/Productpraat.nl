@@ -4,22 +4,7 @@ import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
-import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from '../services/urlService';
-
-// Helper function to remove the first H1 from HTML content to prevent duplicate titles
-const removeFirstH1 = (htmlContent: string): string => {
-    if (typeof document !== 'undefined') {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        const firstH1 = tempDiv.querySelector('h1');
-        if (firstH1) {
-            firstH1.remove();
-        }
-        return tempDiv.innerHTML;
-    }
-    // Fallback: use regex to remove first H1 tag
-    return htmlContent.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, '');
-};
+import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -2042,7 +2027,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                         {generatedArticle.htmlContent && (
                                                             <div 
                                                                 className="article-preview"
-                                                                dangerouslySetInnerHTML={{ __html: removeFirstH1(generatedArticle.htmlContent) }}
+                                                                dangerouslySetInnerHTML={{ __html: removeFirstH1FromHtml(generatedArticle.htmlContent) }}
                                                             />
                                                         )}
                                                     </div>

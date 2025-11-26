@@ -242,3 +242,25 @@ export const getArticleCanonicalUrl = (article: Article): string => {
     const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
     return `${baseUrl}${getArticleUrl(article)}`;
 };
+
+/**
+ * Remove the first H1 element from HTML content to prevent duplicate titles
+ * This is used when the article title is already displayed separately in the page header
+ */
+export const removeFirstH1FromHtml = (htmlContent: string): string => {
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+            const firstH1 = doc.querySelector('h1');
+            if (firstH1) {
+                firstH1.remove();
+            }
+            return doc.body.innerHTML;
+        } catch {
+            // Fall through to regex fallback
+        }
+    }
+    // Fallback: use regex to remove first H1 tag
+    return htmlContent.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, '');
+};

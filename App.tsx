@@ -9,7 +9,7 @@ import { Product, CATEGORIES, Article, ArticleType } from './types';
 import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
-import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from './services/urlService';
+import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from './services/urlService';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
@@ -413,21 +413,6 @@ export const App: React.FC = () => {
     // Helper function to get article type color classes
     const getArticleTypeColorClasses = (type: ArticleType) => {
         return ARTICLE_TYPE_COLORS[type] || ARTICLE_TYPE_COLORS['informational'];
-    };
-    
-    // Helper function to remove the first H1 from HTML content to prevent duplicate titles
-    const removeFirstH1 = (htmlContent: string): string => {
-        if (typeof document !== 'undefined') {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = htmlContent;
-            const firstH1 = tempDiv.querySelector('h1');
-            if (firstH1) {
-                firstH1.remove();
-            }
-            return tempDiv.innerHTML;
-        }
-        // Fallback: use regex to remove first H1 tag
-        return htmlContent.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, '');
     };
     
     // Helper function to calculate reading time (safely strip HTML)
@@ -1147,7 +1132,7 @@ export const App: React.FC = () => {
                                 
                                 {/* Article Content */}
                                 <article className="article-preview mb-12">
-                                    <div dangerouslySetInnerHTML={{ __html: removeFirstH1(selectedArticle.htmlContent) }} />
+                                    <div dangerouslySetInnerHTML={{ __html: removeFirstH1FromHtml(selectedArticle.htmlContent) }} />
                                 </article>
                                 
                                 {/* Related Articles */}
