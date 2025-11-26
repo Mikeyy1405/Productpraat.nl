@@ -537,6 +537,7 @@ async function generateAIArticle(type, topic, category) {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [AI] Starting article generation: ${type} - ${topic}`);
 
+    let content;
     try {
         const typeInstruction = {
             'comparison': `Vergelijk 2-3 producten. Gebruik <h1> voor titel, <h2> voor productnames, <h3> voor secties (specs, prijs, conclusie). Voeg een HTML <table class="w-full text-left border-collapse border border-slate-700 mb-6"><thead class="bg-slate-800"><tr><th class="border border-slate-700 px-4 py-2">Feature</th><th class="border border-slate-700 px-4 py-2">Product A</th><th class="border border-slate-700 px-4 py-2">Product B</th></tr></thead><tbody>...</tbody></table> toe voor specs. Gebruik <blockquote> voor expert quotes. Voeg 2-3 inline afbeeldingen toe met <figure> tags.`,
@@ -556,39 +557,38 @@ async function generateAIArticle(type, topic, category) {
                     content: `Je bent de hoofdredacteur van ProductPraat.nl.
 Schrijf een uitgebreid, professioneel artikel in perfect Nederlands.
 
+KRITISCH VOOR JSON: Gebruik in HTML ALLEEN enkele quotes (') voor attributen, NOOIT dubbele quotes (")
+Voorbeelden:
+- Correct: <p class='mb-4'>Tekst</p>
+- Correct: <blockquote class='border-l-4 border-blue-500 pl-4 italic'>Quote</blockquote>
+- Fout: <p class="mb-4">Tekst</p>
+
 VERPLICHTE HTML STRUCTUUR:
-- Begin met <h1> voor de hoofdtitel (NIET in de title field, maar in htmlContent)
+- Begin met <h1> voor de hoofdtitel
 - Gebruik <h2> voor hoofdsecties (minimaal 4-5)
 - Gebruik <h3> voor subsecties (minimaal 2-3 per hoofdsectie)
-- Gebruik <p class="mb-4"> voor paragrafen met proper spacing
+- Gebruik <p class='mb-4'> voor paragrafen
 - Gebruik <strong> voor belangrijke termen
-- Gebruik zowel <ul> als <ol> lijsten met <li> items
-- Gebruik <blockquote class="border-l-4 border-blue-500 pl-4 italic text-slate-300 my-6"> voor belangrijke quotes/tips
-- Gebruik tabellen: <table class="w-full border-collapse border border-slate-700 mb-6"><thead class="bg-slate-800"><tr><th class="border border-slate-700 px-4 py-2">Header</th></tr></thead><tbody><tr><td class="border border-slate-700 px-4 py-2">Data</td></tr></tbody></table>
+- Gebruik <ul> en <ol> lijsten met <li> items
+- Gebruik <blockquote class='border-l-4 border-blue-500 pl-4 italic text-slate-300 my-6'> voor quotes/tips
+- Gebruik tabellen: <table class='w-full border-collapse border border-slate-700 mb-6'><thead class='bg-slate-800'><tr><th class='border border-slate-700 px-4 py-2'>Header</th></tr></thead><tbody><tr><td class='border border-slate-700 px-4 py-2'>Data</td></tr></tbody></table>
 
-VERPLICHT: INLINE AFBEELDINGEN
-- Voeg relevante afbeeldingen TOE in de tekst met:
-  <figure class="my-6">
-    <img src="https://placehold.co/800x400/1e293b/64748b?text=Beschrijvende+Tekst" alt="Alt text" class="w-full rounded-lg shadow-lg">
-    <figcaption class="text-sm text-slate-400 mt-2 text-center">Onderschrift voor de afbeelding</figcaption>
-  </figure>
-- Gebruik relevante placeholder URLs met beschrijvende tekst
-- Minimaal 2-3 afbeeldingen per artikel, verspreid door de content
+VERPLICHT: INLINE AFBEELDINGEN (2-3 per artikel)
+<figure class='my-6'><img src='https://placehold.co/800x400/1e293b/64748b?text=Beschrijving' alt='Alt text' class='w-full rounded-lg shadow-lg'><figcaption class='text-sm text-slate-400 mt-2 text-center'>Onderschrift</figcaption></figure>
 
 STIJL:
-- Professioneel maar toegankelijk Nederlands
-- Gebruik actieve stem
-- Concrete voorbeelden en cijfers
+- Professioneel Nederlands
+- Concrete voorbeelden
 - Minimum 800 woorden voor informational, 1500+ voor guide
 
-GEEN markdown blokken (zoals \`\`\`html), alleen de raw HTML string in de JSON.
+GEEN markdown blokken (zoals \`\`\`html), alleen raw HTML in JSON.
 
-Output JSON:
+Output JSON (PURE JSON, geen markdown):
 {
-    "title": "Pakkende Titel (zonder HTML tags)",
-    "summary": "Korte samenvatting (30-40 woorden)",
-    "htmlContent": "<h1>Hoofdtitel</h1><p class=\\"mb-4\\">Intro...</p><h2>Sectie 1</h2>...",
-    "imageUrl": "https://placehold.co/1200x630/1e293b/ffffff?text=Hero+Image"
+    "title": "Pakkende Titel",
+    "summary": "Korte samenvatting 30-40 woorden",
+    "htmlContent": "<h1>Titel</h1><p class='mb-4'>Tekst...</p>",
+    "imageUrl": "https://placehold.co/1200x630/1e293b/ffffff?text=Hero"
 }`
                 },
                 {
@@ -599,7 +599,7 @@ Output JSON:
             max_tokens: 8000
         });
 
-        const content = completion.choices[0].message.content || "{}";
+        content = completion.choices[0].message.content || "{}";
         const cleanJson = extractJson(content);
         const data = JSON.parse(cleanJson);
         
@@ -611,6 +611,10 @@ Output JSON:
         return data;
     } catch (error) {
         console.error(`[${timestamp}] [AI] Error generating article:`, error.message);
+        // Log first 1000 chars for debugging
+        if (content) {
+            console.error(`[${timestamp}] [AI] Response preview:`, content.substring(0, 1000));
+        }
         throw error;
     }
 }

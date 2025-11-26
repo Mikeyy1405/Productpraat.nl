@@ -773,12 +773,128 @@ export const App: React.FC = () => {
                         <div className={`container mx-auto px-4 py-8 max-w-4xl ${currentTheme.pageBackground}`}>
                             <button onClick={() => handleNavigate('home')} className="text-slate-400 mb-4">&larr; Terug</button>
                             <h1 className="text-4xl font-bold text-white mb-6">{selectedArticle.title}</h1>
-                            <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} className="prose prose-invert max-w-none" />
+                            <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} className="article-preview" />
                         </div>
                     )}
                 </main>
                 {renderFooter()}
             </div>
+            
+            {/* Article Preview Styling */}
+            <style>{`
+                .article-preview h1 {
+                    font-size: 2rem;
+                    font-weight: 800;
+                    color: white;
+                    margin-bottom: 1.5rem;
+                    line-height: 1.2;
+                }
+                
+                .article-preview h2 {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: white;
+                    margin-top: 2rem;
+                    margin-bottom: 1rem;
+                    border-bottom: 2px solid #1e40af;
+                    padding-bottom: 0.5rem;
+                }
+                
+                .article-preview h3 {
+                    font-size: 1.25rem;
+                    font-weight: 600;
+                    color: #e2e8f0;
+                    margin-top: 1.5rem;
+                    margin-bottom: 0.75rem;
+                }
+                
+                .article-preview p {
+                    color: #cbd5e1;
+                    line-height: 1.7;
+                    margin-bottom: 1rem;
+                }
+                
+                .article-preview strong {
+                    color: white;
+                    font-weight: 600;
+                }
+                
+                .article-preview ul, .article-preview ol {
+                    color: #cbd5e1;
+                    margin-left: 1.5rem;
+                    margin-bottom: 1rem;
+                }
+                
+                .article-preview ul {
+                    list-style-type: disc;
+                }
+                
+                .article-preview ol {
+                    list-style-type: decimal;
+                }
+                
+                .article-preview li {
+                    margin-bottom: 0.5rem;
+                    line-height: 1.6;
+                }
+                
+                .article-preview blockquote {
+                    border-left: 4px solid #3b82f6;
+                    padding-left: 1rem;
+                    font-style: italic;
+                    color: #94a3b8;
+                    margin: 1.5rem 0;
+                    background: rgba(59, 130, 246, 0.1);
+                    padding: 1rem;
+                    border-radius: 0.5rem;
+                }
+                
+                .article-preview table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 1.5rem 0;
+                    border: 1px solid #334155;
+                }
+                
+                .article-preview thead {
+                    background: #1e293b;
+                }
+                
+                .article-preview th {
+                    border: 1px solid #334155;
+                    padding: 0.75rem 1rem;
+                    text-align: left;
+                    font-weight: 600;
+                    color: white;
+                }
+                
+                .article-preview td {
+                    border: 1px solid #334155;
+                    padding: 0.75rem 1rem;
+                    color: #cbd5e1;
+                }
+                
+                .article-preview tbody tr:hover {
+                    background: rgba(59, 130, 246, 0.1);
+                }
+                
+                .article-preview figure {
+                    margin: 1.5rem 0;
+                }
+                
+                .article-preview figure img {
+                    width: 100%;
+                    border-radius: 0.5rem;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+                }
+                
+                .article-preview figcaption {
+                    font-size: 0.875rem;
+                    color: #94a3b8;
+                    text-align: center;
+                    margin-top: 0.5rem;
+                }
+            `}</style>
         </div>
     );
 };
