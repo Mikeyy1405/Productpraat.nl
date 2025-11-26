@@ -539,9 +539,13 @@ async function generateAIArticle(type, topic, category) {
 
     try {
         const typeInstruction = {
-            'comparison': `Gebruik een HTML <table class="w-full text-left border-collapse border border-slate-700 mb-6"> voor specs. Headers met bg-slate-800.`,
-            'list': `Maak een Top 5. Gebruik <h2> voor productnamen en <ul> voor pluspunten.`,
-            'guide': `Schrijf een 'Ultieme Koopgids' (Long-form, 1500+ woorden). Gebruik <h2>, <h3>, <p>, <ul>.`
+            'comparison': `Vergelijk 2-3 producten. Gebruik <h1> voor titel, <h2> voor productnames, <h3> voor secties (specs, prijs, conclusie). Voeg een HTML <table class="w-full text-left border-collapse border border-slate-700 mb-6"><thead class="bg-slate-800"><tr><th class="border border-slate-700 px-4 py-2">Feature</th><th class="border border-slate-700 px-4 py-2">Product A</th><th class="border border-slate-700 px-4 py-2">Product B</th></tr></thead><tbody>...</tbody></table> toe voor specs. Gebruik <blockquote> voor expert quotes. Voeg 2-3 inline afbeeldingen toe met <figure> tags.`,
+            
+            'list': `Maak een Top 5/Top 10 lijst. Gebruik <h1> voor hoofdtitel, <h2> voor elk product (#1, #2, etc), <h3> voor subsecties (Voordelen, Nadelen, Specs). Gebruik <ul> voor pluspunten en <ol> voor genummerde features. Voeg <blockquote> toe met expert mening per product. Voeg per product een inline afbeelding toe.`,
+            
+            'guide': `Schrijf een 'Ultieme Koopgids' (1500+ woorden). Gebruik <h1> voor hoofdtitel, <h2> voor hoofdsecties (Inleiding, Waar op letten, Top Features, Kooptips, FAQ, Conclusie), <h3> voor subsecties. Gebruik zowel <ul> als <ol> lijsten. Voeg minimaal 1 vergelijkingstabel toe. Gebruik <blockquote> voor expert tips. Voeg 3-4 relevante inline afbeeldingen toe.`,
+            
+            'informational': `Schrijf een informatief artikel (800-1200 woorden). Gebruik <h1> voor hoofdtitel, <h2> voor hoofdsecties (minimaal 4), <h3> voor subsecties (minimaal 2 per h2). Gebruik <ul> en <ol> lijsten. Voeg indien relevant een tabel toe. Gebruik <blockquote> voor belangrijke inzichten. Voeg 2-3 relevante inline afbeeldingen toe.`
         }[type] || '';
 
         const completion = await openai.chat.completions.create({
@@ -550,24 +554,49 @@ async function generateAIArticle(type, topic, category) {
                 {
                     role: "system",
                     content: `Je bent de hoofdredacteur van ProductPraat.nl.
-                    Schrijf een uitgebreid artikel in perfect Nederlands.
-                    Gebruik HTML tags (h2, h3, p, ul, li, strong, table).
-                    GEEN markdown blokken (zoals \`\`\`html), alleen de raw HTML string in de JSON.
-                    
-                    Output JSON:
-                    {
-                        "title": "Pakkende Titel",
-                        "summary": "Korte samenvatting (30 woorden)",
-                        "htmlContent": "De volledige HTML content...",
-                        "imageUrl": ""
-                    }`
+Schrijf een uitgebreid, professioneel artikel in perfect Nederlands.
+
+VERPLICHTE HTML STRUCTUUR:
+- Begin met <h1> voor de hoofdtitel (NIET in de title field, maar in htmlContent)
+- Gebruik <h2> voor hoofdsecties (minimaal 4-5)
+- Gebruik <h3> voor subsecties (minimaal 2-3 per hoofdsectie)
+- Gebruik <p class="mb-4"> voor paragrafen met proper spacing
+- Gebruik <strong> voor belangrijke termen
+- Gebruik zowel <ul> als <ol> lijsten met <li> items
+- Gebruik <blockquote class="border-l-4 border-blue-500 pl-4 italic text-slate-300 my-6"> voor belangrijke quotes/tips
+- Gebruik tabellen: <table class="w-full border-collapse border border-slate-700 mb-6"><thead class="bg-slate-800"><tr><th class="border border-slate-700 px-4 py-2">Header</th></tr></thead><tbody><tr><td class="border border-slate-700 px-4 py-2">Data</td></tr></tbody></table>
+
+VERPLICHT: INLINE AFBEELDINGEN
+- Voeg relevante afbeeldingen TOE in de tekst met:
+  <figure class="my-6">
+    <img src="https://placehold.co/800x400/1e293b/64748b?text=Beschrijvende+Tekst" alt="Alt text" class="w-full rounded-lg shadow-lg">
+    <figcaption class="text-sm text-slate-400 mt-2 text-center">Onderschrift voor de afbeelding</figcaption>
+  </figure>
+- Gebruik relevante placeholder URLs met beschrijvende tekst
+- Minimaal 2-3 afbeeldingen per artikel, verspreid door de content
+
+STIJL:
+- Professioneel maar toegankelijk Nederlands
+- Gebruik actieve stem
+- Concrete voorbeelden en cijfers
+- Minimum 800 woorden voor informational, 1500+ voor guide
+
+GEEN markdown blokken (zoals \`\`\`html), alleen de raw HTML string in de JSON.
+
+Output JSON:
+{
+    "title": "Pakkende Titel (zonder HTML tags)",
+    "summary": "Korte samenvatting (30-40 woorden)",
+    "htmlContent": "<h1>Hoofdtitel</h1><p class=\\"mb-4\\">Intro...</p><h2>Sectie 1</h2>...",
+    "imageUrl": "https://placehold.co/1200x630/1e293b/ffffff?text=Hero+Image"
+}`
                 },
                 {
                     role: "user",
                     content: `Onderwerp: ${topic}\nType: ${type}\nCategorie: ${category}\n${typeInstruction}`
                 }
             ],
-            max_tokens: 6000
+            max_tokens: 8000
         });
 
         const content = completion.choices[0].message.content || "{}";
@@ -575,7 +604,7 @@ async function generateAIArticle(type, topic, category) {
         const data = JSON.parse(cleanJson);
         
         if (!data.imageUrl) {
-            data.imageUrl = `https://placehold.co/800x400/1e293b/ffffff?text=${encodeURIComponent(topic.substring(0, 20))}`;
+            data.imageUrl = `https://placehold.co/1200x630/1e293b/ffffff?text=${encodeURIComponent(topic.substring(0, 20))}`;
         }
 
         console.log(`[${timestamp}] [AI] Article generated successfully: ${data.title}`);

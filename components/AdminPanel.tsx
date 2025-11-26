@@ -555,7 +555,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             try {
                 const guide = await aiService.generateArticle('guide', guideTitle, pilotCategory);
                 if (guide.title) {
-                    const art = { ...guide, id: `art-${Date.now()}-G`, category: pilotCategory, type: 'guide', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
+                    const art = { ...guide, id: `art-${Date.now()}-G`, category: pilotCategory, type: 'guide', author: 'Redactie', date: new Date().toLocaleDateString(), created_at: new Date().toISOString() } as Article;
                     await db.addArticle(art);
                     addLog(`✅ Koopgids gepubliceerd`);
                 }
@@ -569,7 +569,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             try {
                 const list = await aiService.generateArticle('list', listTitle, pilotCategory);
                 if (list.title) {
-                    const art = { ...list, id: `art-${Date.now()}-L`, category: pilotCategory, type: 'list', author: 'Redactie', date: new Date().toLocaleDateString() } as Article;
+                    const art = { ...list, id: `art-${Date.now()}-L`, category: pilotCategory, type: 'list', author: 'Redactie', date: new Date().toLocaleDateString(), created_at: new Date().toISOString() } as Article;
                     const updated = await db.addArticle(art);
                     setSavedArticles(updated);
                     addLog(`✅ Toplijst gepubliceerd`);
@@ -620,7 +620,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const handleSaveArticle = async () => { 
         if(generatedArticle?.title){ 
             try {
-                const art = { ...generatedArticle, id:`art-${Date.now()}`, category:studioCategory, type:studioType, author:'Redactie', date:new Date().toLocaleDateString() } as Article;
+                const art = { ...generatedArticle, id:`art-${Date.now()}`, category:studioCategory, type:studioType, author:'Redactie', date:new Date().toLocaleDateString(), created_at: new Date().toISOString() } as Article;
                 const updated = await db.addArticle(art);
                 setSavedArticles(updated);
                 setGeneratedArticle(null);
@@ -1839,11 +1839,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                 {/* Template Selection */}
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Template Type</label>
-                                                    <div className="grid grid-cols-3 gap-3">
+                                                    <div className="grid grid-cols-4 gap-3">
                                                         {[
                                                             { type: 'guide', icon: 'fa-book', label: 'Koopgids', desc: 'Complete gids' },
                                                             { type: 'list', icon: 'fa-list-ol', label: 'Toplijst', desc: 'Top 5/10 lijst' },
-                                                            { type: 'comparison', icon: 'fa-balance-scale', label: 'Vergelijking', desc: 'A vs B' }
+                                                            { type: 'comparison', icon: 'fa-balance-scale', label: 'Vergelijking', desc: 'A vs B' },
+                                                            { type: 'informational', icon: 'fa-lightbulb', label: 'Informatief', desc: 'Algemeen artikel' }
                                                         ].map(t => (
                                                             <button
                                                                 key={t.type}
@@ -1932,7 +1933,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                     )}
                                                     {generatedArticle.htmlContent && (
                                                         <div 
-                                                            className="prose prose-invert prose-sm max-w-none"
+                                                            className="prose prose-invert prose-lg max-w-none
+                                                                       prose-headings:font-bold prose-headings:text-white
+                                                                       prose-h1:text-3xl prose-h1:mb-4
+                                                                       prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 
+                                                                       prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3
+                                                                       prose-p:text-slate-300 prose-p:mb-4
+                                                                       prose-ul:list-disc prose-ul:ml-6 prose-ul:mb-4
+                                                                       prose-ol:list-decimal prose-ol:ml-6 prose-ol:mb-4
+                                                                       prose-li:text-slate-300 prose-li:mb-2
+                                                                       prose-strong:text-white prose-strong:font-semibold
+                                                                       prose-blockquote:border-l-4 prose-blockquote:border-blue-500 
+                                                                       prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-300
+                                                                       prose-table:w-full prose-table:border-collapse
+                                                                       prose-th:bg-slate-800 prose-th:border prose-th:border-slate-700 prose-th:px-4 prose-th:py-2
+                                                                       prose-td:border prose-td:border-slate-700 prose-td:px-4 prose-td:py-2
+                                                                       prose-img:rounded-lg prose-img:shadow-lg
+                                                                       prose-figcaption:text-sm prose-figcaption:text-slate-400 prose-figcaption:text-center"
                                                             dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
                                                         />
                                                     )}
@@ -1984,10 +2001,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                                             text-xs px-2 py-0.5 rounded
                                                                             ${article.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
                                                                               article.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
+                                                                              article.type === 'informational' ? 'bg-yellow-600/20 text-yellow-400' :
                                                                               'bg-green-600/20 text-green-400'}
                                                                         `}>
                                                                             {article.type === 'guide' ? 'Gids' : 
-                                                                             article.type === 'list' ? 'Toplijst' : 'Vergelijking'}
+                                                                             article.type === 'list' ? 'Toplijst' : 
+                                                                             article.type === 'informational' ? 'Informatief' : 'Vergelijking'}
                                                                         </span>
                                                                         <span className="text-xs text-slate-500">{article.date}</span>
                                                                     </div>
