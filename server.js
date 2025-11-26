@@ -158,6 +158,75 @@ const extractErrorMessage = (error, defaultMessage = 'Er is een fout opgetreden'
            defaultMessage;
 };
 
+// --- HELPER: Get detailed error info for debugging ---
+const getDetailedErrorInfo = (error) => {
+    return {
+        message: error.message || 'Unknown error',
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        code: error.code,
+        isTimeout: error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+    };
+};
+
+// --- HELPER: Retry logic with exponential backoff ---
+const API_TIMEOUT_MS = 30000; // 30 second timeout
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+
+/**
+ * Retry wrapper with exponential backoff
+ * Automatically retries failed operations with increasing delays
+ * 
+ * @param {Function} operation - Async function to execute
+ * @param {string} operationName - Name for logging purposes
+ * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns {Promise<any>} - Result of the operation
+ * @throws {Error} - Last error if all retries fail
+ * 
+ * Retry behavior:
+ * - Attempt 1: immediate
+ * - Attempt 2: after 1 second
+ * - Attempt 3: after 2 seconds
+ * - Does NOT retry on 4xx errors (except 429 rate limit)
+ */
+async function withRetry(operation, operationName, maxRetries = MAX_RETRIES) {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            const errorInfo = getDetailedErrorInfo(error);
+            
+            // Don't retry on client errors (4xx) except 429 (rate limit)
+            if (errorInfo.status && errorInfo.status >= 400 && errorInfo.status < 500 && errorInfo.status !== 429) {
+                console.error(`[RETRY] ${operationName} failed with client error (${errorInfo.status}), not retrying`);
+                throw error;
+            }
+            
+            // Log retry attempt
+            const isLastAttempt = attempt === maxRetries;
+            if (!isLastAttempt) {
+                const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1); // Exponential backoff
+                console.warn(`[RETRY] ${operationName} failed (attempt ${attempt}/${maxRetries}): ${errorInfo.message}. Retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+            } else {
+                console.error(`[RETRY] ${operationName} failed after ${maxRetries} attempts: ${errorInfo.message}`);
+            }
+        }
+    }
+    
+    throw lastError;
+}
+
+// --- HELPER: Make API call with timeout ---
+const axiosWithTimeout = axios.create({
+    timeout: API_TIMEOUT_MS
+});
+
 // --- HELPER: Extract price from Bol.com offer with fallbacks ---
 const extractPrice = (offer) => {
     if (!offer) return 0;
@@ -389,6 +458,82 @@ app.get('/api/config', (req, res) => {
     res.json({
         VITE_SUPABASE_URL: VITE_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY
+    });
+});
+
+// Test connection endpoint - verifies API connectivity
+app.get('/api/admin/test-connection', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ADMIN] GET /api/admin/test-connection`);
+    
+    const results = {
+        timestamp,
+        bol: { status: 'unknown', message: '' },
+        ai: { status: 'unknown', message: '' }
+    };
+    
+    // Test Bol.com API
+    if (!isBolConfigured) {
+        results.bol = { 
+            status: 'not_configured', 
+            message: 'Bol.com API credentials niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.',
+            details: {
+                hasClientId: !!BOL_CLIENT_ID,
+                hasClientSecret: !!BOL_CLIENT_SECRET,
+                hasSiteId: !!SITE_ID
+            }
+        };
+    } else {
+        try {
+            const token = await withRetry(
+                () => getBolToken(),
+                'Bol.com token request'
+            );
+            results.bol = { 
+                status: 'connected', 
+                message: 'Bol.com API verbinding succesvol',
+                tokenValid: !!token
+            };
+        } catch (error) {
+            const errorInfo = getDetailedErrorInfo(error);
+            results.bol = { 
+                status: 'error', 
+                message: extractErrorMessage(error, 'Kon geen verbinding maken met Bol.com API'),
+                details: {
+                    code: errorInfo.code,
+                    status: errorInfo.status,
+                    isTimeout: errorInfo.isTimeout
+                },
+                troubleshooting: [
+                    'Controleer of BOL_CLIENT_ID en BOL_CLIENT_SECRET correct zijn',
+                    'Controleer of je API credentials nog geldig zijn in het Bol.com Partner Platform',
+                    'Probeer nieuwe API credentials aan te maken als het probleem aanhoudt'
+                ]
+            };
+        }
+    }
+    
+    // Test AI API
+    if (!AIML_API_KEY) {
+        results.ai = { 
+            status: 'not_configured', 
+            message: 'AI API key niet geconfigureerd. Stel VITE_API_KEY in.'
+        };
+    } else {
+        results.ai = { 
+            status: 'configured', 
+            message: 'AI API key is geconfigureerd',
+            note: 'AI verbinding wordt pas getest bij eerste gebruik'
+        };
+    }
+    
+    // Overall status
+    const allConnected = results.bol.status === 'connected' && results.ai.status !== 'not_configured';
+    
+    res.json({
+        success: allConnected,
+        message: allConnected ? 'Alle API verbindingen werken' : 'Sommige API verbindingen hebben problemen',
+        ...results
     });
 });
 
@@ -940,20 +1085,85 @@ app.post('/api/admin/import/url', async (req, res) => {
     try {
         const { url } = req.body;
         
+        // Input validation
         if (!url) {
-            return res.status(400).json({ error: 'URL is verplicht' });
+            return res.status(400).json({ 
+                error: 'URL is verplicht',
+                code: 'MISSING_URL',
+                troubleshooting: ['Voer een geldige Bol.com URL of EAN code in']
+            });
+        }
+
+        // Validate URL format if it looks like a URL
+        if (url.startsWith('http')) {
+            try {
+                const parsedUrl = new URL(url);
+                // Strictly check that the hostname ends with bol.com or is bol.com
+                // This prevents bypasses like evil.com/bol.com or bol.com.evil.com
+                const hostname = parsedUrl.hostname.toLowerCase();
+                const isValidBolDomain = hostname === 'bol.com' || 
+                                         hostname === 'www.bol.com' ||
+                                         hostname.endsWith('.bol.com');
+                
+                if (!isValidBolDomain) {
+                    return res.status(400).json({ 
+                        error: 'Alleen Bol.com URLs worden ondersteund',
+                        code: 'INVALID_URL',
+                        troubleshooting: [
+                            'Gebruik een URL van bol.com (bijv. https://www.bol.com/nl/p/...)',
+                            'Of voer direct een EAN code (13 cijfers) in'
+                        ]
+                    });
+                }
+            } catch (urlParseError) {
+                return res.status(400).json({ 
+                    error: 'Ongeldige URL formaat',
+                    code: 'INVALID_URL_FORMAT',
+                    troubleshooting: [
+                        'Controleer of de URL correct is gekopieerd',
+                        'Of voer direct een EAN code (13 cijfers) in'
+                    ]
+                });
+            }
         }
 
         // Check if Bol.com API is configured
         if (!isBolConfigured) {
             console.error(`[${timestamp}] [ADMIN] Bol.com API not configured`);
             return res.status(503).json({ 
-                error: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.' 
+                error: 'Bol.com API niet geconfigureerd',
+                code: 'API_NOT_CONFIGURED',
+                troubleshooting: [
+                    'Stel BOL_CLIENT_ID in',
+                    'Stel BOL_CLIENT_SECRET in',
+                    'Stel BOL_SITE_ID in',
+                    'Herstart de server na het instellen'
+                ]
             });
         }
 
-        // Step 1: Fetch product data from Bol.com
-        const token = await getBolToken();
+        // Step 1: Get token with retry logic
+        console.log(`[${timestamp}] [ADMIN] Requesting Bol.com token...`);
+        let token;
+        try {
+            token = await withRetry(
+                () => getBolToken(),
+                'Bol.com authentication'
+            );
+        } catch (authError) {
+            const errorInfo = getDetailedErrorInfo(authError);
+            console.error(`[${timestamp}] [ADMIN] Authentication failed:`, errorInfo);
+            return res.status(401).json({
+                error: 'Authenticatie bij Bol.com mislukt',
+                code: 'AUTH_FAILED',
+                details: errorInfo.isTimeout ? 'Timeout bij verbinden' : errorInfo.message,
+                troubleshooting: [
+                    'Controleer of je API credentials correct zijn',
+                    'Controleer of je credentials nog geldig zijn in het Bol.com Partner Platform',
+                    'Probeer opnieuw na een paar minuten'
+                ]
+            });
+        }
         
         // Extract EAN from URL if present
         let searchTerm = url;
@@ -962,19 +1172,74 @@ app.post('/api/admin/import/url', async (req, res) => {
         
         console.log(`[${timestamp}] [ADMIN] Searching for product: "${searchTerm}"`);
 
-        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
-            params: { 
-                'search-term': searchTerm,
-                'country-code': 'NL',
-                'include': 'IMAGE,OFFER,SPECIFICATIONS'
-            },
-            headers: getBolHeaders(token)
-        });
+        // Step 2: Search for product with retry logic and timeout
+        let searchResponse;
+        try {
+            searchResponse = await withRetry(async () => {
+                return await axiosWithTimeout.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+                    params: { 
+                        'search-term': searchTerm,
+                        'country-code': 'NL',
+                        'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                    },
+                    headers: getBolHeaders(token)
+                });
+            }, 'Bol.com product search');
+        } catch (searchError) {
+            const errorInfo = getDetailedErrorInfo(searchError);
+            console.error(`[${timestamp}] [ADMIN] Search failed:`, errorInfo);
+            
+            // Check for specific error types
+            if (errorInfo.isTimeout) {
+                return res.status(504).json({
+                    error: 'Bol.com API timeout - probeer het opnieuw',
+                    code: 'TIMEOUT',
+                    troubleshooting: [
+                        'De Bol.com API reageert traag',
+                        'Probeer het over een paar seconden opnieuw',
+                        'Controleer je internetverbinding'
+                    ]
+                });
+            }
+            
+            if (errorInfo.status === 401) {
+                // Token might be expired, clear it
+                cachedToken = null;
+                tokenExpiry = 0;
+                return res.status(401).json({
+                    error: 'Bol.com sessie verlopen - probeer opnieuw',
+                    code: 'TOKEN_EXPIRED',
+                    troubleshooting: ['Probeer het opnieuw - de sessie wordt automatisch vernieuwd']
+                });
+            }
+            
+            if (errorInfo.status === 429) {
+                return res.status(429).json({
+                    error: 'Te veel verzoeken - wacht even en probeer opnieuw',
+                    code: 'RATE_LIMITED',
+                    troubleshooting: [
+                        'Wacht 30 seconden voor je opnieuw probeert',
+                        'Verminder het aantal gelijktijdige imports'
+                    ]
+                });
+            }
+            
+            throw searchError;
+        }
 
         const results = searchResponse.data.results;
         if (!results || results.length === 0) {
             console.log(`[${timestamp}] [ADMIN] No product found for: "${searchTerm}"`);
-            return res.status(404).json({ error: "Geen product gevonden" });
+            return res.status(404).json({ 
+                error: 'Geen product gevonden',
+                code: 'PRODUCT_NOT_FOUND',
+                searchTerm,
+                troubleshooting: [
+                    'Controleer of de URL/EAN correct is',
+                    'Probeer te zoeken met alleen de EAN code (13 cijfers)',
+                    'Het product is mogelijk niet beschikbaar via de Bol.com API'
+                ]
+            });
         }
 
         const product = results[0];
@@ -1017,9 +1282,26 @@ app.post('/api/admin/import/url', async (req, res) => {
             bolReviews
         };
 
-        // Step 2: Generate AI content
+        // Step 3: Generate AI content with error handling
         console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
-        const aiData = await generateAIProductReview(bolData);
+        let aiData;
+        try {
+            aiData = await generateAIProductReview(bolData);
+        } catch (aiError) {
+            console.error(`[${timestamp}] [ADMIN] AI generation failed:`, aiError.message);
+            return res.status(500).json({
+                error: 'AI content generatie mislukt',
+                code: 'AI_GENERATION_FAILED',
+                details: aiError.message,
+                troubleshooting: [
+                    'De AI service is mogelijk tijdelijk niet beschikbaar',
+                    'Probeer het opnieuw na een paar seconden',
+                    'Controleer of de VITE_API_KEY correct is ingesteld'
+                ],
+                // Return partial data so user can still see what was fetched
+                partialData: { bolData }
+            });
+        }
         
         // Generate SEO-friendly slug
         const slug = generateSlug(aiData.brand, aiData.model);
@@ -1035,8 +1317,30 @@ app.post('/api/admin/import/url', async (req, res) => {
             } 
         });
     } catch (error) {
-        console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.response?.data || error.message);
-        res.status(500).json({ error: extractErrorMessage(error, 'Product import mislukt') });
+        const errorInfo = getDetailedErrorInfo(error);
+        console.error(`[${timestamp}] [ADMIN] Import URL error:`, errorInfo);
+        
+        // Only include sanitized debug info in development mode
+        // Never expose raw error objects or stack traces to client
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        
+        res.status(500).json({ 
+            error: extractErrorMessage(error, 'Product import mislukt'),
+            code: 'IMPORT_FAILED',
+            // Only expose safe, non-sensitive debug info
+            ...(isDevelopment && { 
+                debug: { 
+                    errorCode: errorInfo.code,
+                    isTimeout: errorInfo.isTimeout,
+                    status: errorInfo.status
+                } 
+            }),
+            troubleshooting: [
+                'Controleer of de URL geldig is',
+                'Probeer het opnieuw na een paar seconden',
+                'Controleer de API verbinding via "Test Verbinding"'
+            ]
+        });
     }
 });
 

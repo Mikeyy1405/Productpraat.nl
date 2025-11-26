@@ -5,6 +5,7 @@ import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
+import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResult } from '../utils/validation';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -20,6 +21,14 @@ interface Toast {
     id: string;
     message: string;
     type: 'success' | 'error' | 'info' | 'warning';
+}
+
+// Import error state
+interface ImportError {
+    message: string;
+    code?: string;
+    troubleshooting?: string[];
+    canRetry: boolean;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, articles, setArticles, onLogout }) => {
@@ -52,6 +61,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const [importUrl, setImportUrl] = useState('');
     const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
     const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
+    const [importError, setImportError] = useState<ImportError | null>(null);
+    const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
     // --- STATE: ARTICLES ---
     const [studioType, setStudioType] = useState<ArticleType>('comparison');
@@ -406,7 +417,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     // 2. SINGLE IMPORT HANDLER (Server-side with AI) with Wizard Steps
     // ========================================================================
     const handleSingleImport = async () => {
-        if (!importUrl) return;
+        if (!importUrl) {
+            showError('Voer een Bol.com URL of EAN code in');
+            return;
+        }
+        
+        // Reset error state
+        setImportError(null);
+        setValidationResult(null);
         setIsProcessing(true);
         setEditingProduct(null);
         setLoadingMessage('Product ophalen van Bol.com...');
@@ -446,27 +464,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 bolReviewsRaw: aiData.bolReviewsRaw
             };
 
+            // Validate the imported product
+            const validation = validateProduct(draft);
+            setValidationResult(validation);
+            
+            // Check for duplicates
+            const duplicateCheck = checkDuplicateProduct(draft, customProducts);
+            if (duplicateCheck.isDuplicate) {
+                showToast(`Let op: Product met zelfde ${duplicateCheck.duplicateField} bestaat al`, 'warning');
+            }
+
             setEditingProduct(draft);
             setImportStep(3);
             showToast('Product succesvol geïmporteerd!', 'success');
         } catch (e) {
+            console.error('Import error:', e);
             const errorMsg = e instanceof Error ? e.message : String(e);
-            showError(`Fout bij importeren: ${errorMsg}`);
+            
+            // Parse error for troubleshooting tips
+            const errorLines = errorMsg.split('\n');
+            const mainError = errorLines[0];
+            const tips = errorLines.slice(1).filter(line => line.trim().startsWith('•')).map(line => line.replace('•', '').trim());
+            
+            setImportError({
+                message: mainError,
+                troubleshooting: tips.length > 0 ? tips : [
+                    'Controleer of de URL geldig is',
+                    'Probeer het opnieuw na een paar seconden',
+                    'Controleer de API verbinding'
+                ],
+                canRetry: true
+            });
+            
+            showError(`Fout bij importeren: ${mainError}`);
+            setImportStep(1);
         } finally {
             setIsProcessing(false);
+            setLoadingMessage('');
         }
     };
 
     const saveEditedProduct = async () => {
-        if (!editingProduct || !editingProduct.brand) return;
+        if (!editingProduct) {
+            showError('Geen product om op te slaan');
+            return;
+        }
+        
+        // Validate before saving
+        const validation = validateProduct(editingProduct);
+        setValidationResult(validation);
+        
+        if (!validation.isValid) {
+            showError(`Validatie fouten:\n${validation.errors.join('\n')}`);
+            return;
+        }
+        
+        // Show warnings but allow saving
+        if (validation.warnings.length > 0) {
+            console.warn('Product warnings:', validation.warnings);
+        }
+        
         try {
             await onAddProduct(editingProduct as Product);
             setEditingProduct(null);
             setImportUrl('');
             setImportStep(1);
+            setImportError(null);
+            setValidationResult(null);
             showToast('Product succesvol toegevoegd!', 'success');
         } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.error('Save error:', e);
+            const errorMsg = e instanceof Error ? e.message : (typeof e === 'object' ? JSON.stringify(e) : String(e));
             showError(`Fout bij opslaan: ${errorMsg}`);
         }
     };
@@ -618,27 +686,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     };
 
     const handleSaveArticle = async () => { 
-        if(generatedArticle?.title){ 
-            try {
-                const slug = generateArticleSlug({ title: generatedArticle.title, type: studioType } as Article);
-                const art = { 
-                    ...generatedArticle, 
-                    id: `art-${Date.now()}`, 
-                    slug,
-                    category: studioCategory, 
-                    type: studioType, 
-                    author: 'Redactie', 
-                    date: new Date().toLocaleDateString('nl-NL'), 
-                    created_at: new Date().toISOString() 
-                } as Article;
-                const updated = await db.addArticle(art);
-                setArticles(updated);
-                setGeneratedArticle(null);
-                showToast('Artikel opgeslagen!', 'success');
-            } catch (e) {
-                const errorMsg = e instanceof Error ? e.message : String(e);
-                showError(`Fout bij opslaan: ${errorMsg}`);
+        if (!generatedArticle?.title) {
+            showError('Geen artikel om op te slaan');
+            return;
+        }
+        
+        try {
+            const slug = generateArticleSlug({ title: generatedArticle.title, type: studioType } as Article);
+            const art: Article = { 
+                ...generatedArticle, 
+                id: `art-${Date.now()}`, 
+                slug,
+                category: studioCategory, 
+                type: studioType, 
+                author: 'Redactie', 
+                date: new Date().toLocaleDateString('nl-NL'), 
+                created_at: new Date().toISOString(),
+                // Ensure required fields have defaults
+                summary: generatedArticle.summary || '',
+                htmlContent: generatedArticle.htmlContent || ''
+            } as Article;
+            
+            // Validate article before saving
+            const validation = validateArticle(art);
+            if (!validation.isValid) {
+                showError(`Validatie fouten: ${validation.errors.join(', ')}`);
+                return;
             }
+            
+            const updated = await db.addArticle(art);
+            setArticles(updated);
+            setGeneratedArticle(null);
+            showToast('Artikel opgeslagen!', 'success');
+        } catch (e) {
+            console.error('Article save error:', e);
+            // Handle different error types properly
+            let errorMsg: string;
+            if (e instanceof Error) {
+                errorMsg = e.message;
+            } else if (typeof e === 'object' && e !== null) {
+                errorMsg = JSON.stringify(e);
+            } else {
+                errorMsg = String(e);
+            }
+            showError(`Fout bij opslaan: ${errorMsg}`);
         }
     };
 
@@ -662,12 +753,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             if (!editingArticle.slug) {
                 editingArticle.slug = generateArticleSlug(editingArticle);
             }
+            
+            // Validate before saving
+            const validation = validateArticle(editingArticle);
+            if (!validation.isValid) {
+                showError(`Validatie fouten: ${validation.errors.join(', ')}`);
+                return;
+            }
+            
             const updated = await db.updateArticle(editingArticle);
             setArticles(updated);
             setEditingArticle(null);
             showToast('Artikel bijgewerkt!', 'success');
         } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : String(e);
+            console.error('Article update error:', e);
+            let errorMsg: string;
+            if (e instanceof Error) {
+                errorMsg = e.message;
+            } else if (typeof e === 'object' && e !== null) {
+                errorMsg = JSON.stringify(e);
+            } else {
+                errorMsg = String(e);
+            }
             showError(`Fout bij bijwerken: ${errorMsg}`);
         }
     };
@@ -1235,6 +1342,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                                 <div className="font-medium text-white">{loadingMessage}</div>
                                                                 <div className="text-sm text-blue-400">Dit kan enkele seconden duren...</div>
                                                             </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Import Error Display with Retry */}
+                                                    {importError && !isProcessing && (
+                                                        <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 space-y-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <div className="w-10 h-10 rounded-full bg-red-600/30 flex items-center justify-center flex-shrink-0">
+                                                                    <i className="fas fa-exclamation-triangle text-red-400"></i>
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <div className="font-medium text-red-300">{importError.message}</div>
+                                                                    {importError.troubleshooting && importError.troubleshooting.length > 0 && (
+                                                                        <div className="mt-2 text-sm text-red-200/70">
+                                                                            <div className="font-medium mb-1">Tips:</div>
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {importError.troubleshooting.map((tip, idx) => (
+                                                                                    <li key={idx}>{tip}</li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {importError.canRetry && (
+                                                                <div className="flex gap-2 pt-2 border-t border-red-500/20">
+                                                                    <button 
+                                                                        onClick={handleSingleImport}
+                                                                        className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                                                                    >
+                                                                        <i className="fas fa-redo"></i> Opnieuw proberen
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => setImportError(null)}
+                                                                        className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                                                                    >
+                                                                        Sluiten
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>

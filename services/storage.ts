@@ -2,6 +2,20 @@ import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
 import { generateSlug, generateArticleSlug } from './urlService';
 
+/**
+ * Helper function to format error messages consistently
+ * Handles Error objects, plain objects, and other types
+ */
+const formatError = (e: unknown): string => {
+    if (e instanceof Error) {
+        return e.message;
+    }
+    if (typeof e === 'object' && e !== null) {
+        return JSON.stringify(e);
+    }
+    return String(e);
+};
+
 export const db = {
     // --- PRODUCTEN ---
     getAll: async (): Promise<Product[]> => {
@@ -16,7 +30,7 @@ export const db = {
             if (error) throw error;
             return data as Product[] || [];
         } catch (e) {
-            console.error("Fetch Error:", JSON.stringify(e));
+            console.error("Fetch Error:", formatError(e));
             return [];
         }
     },
@@ -153,13 +167,34 @@ export const db = {
 
     addArticle: async (article: Article): Promise<Article[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            throw new Error("Database niet beschikbaar. Controleer de verbinding.");
+        }
         try {
+            // Validate required fields
+            if (!article.title || !article.type || !article.category) {
+                throw new Error("Verplichte velden ontbreken: titel, type of categorie");
+            }
+            
             const cleanArticle = JSON.parse(JSON.stringify(article));
             const { error } = await supabase.from('articles').insert([cleanArticle]);
-            if (error) throw error;
+            
+            if (error) {
+                console.error("Supabase addArticle error:", error);
+                // Extract meaningful error message from Supabase error
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
             return await db.getArticles();
-        } catch (e) { throw e; }
+        } catch (e) {
+            console.error("Add Article Error:", e);
+            // Re-throw with proper error message
+            if (e instanceof Error) {
+                throw e;
+            }
+            throw new Error(`Fout bij opslaan artikel: ${formatError(e)}`);
+        }
     },
 
     deleteArticle: async (id: string): Promise<Article[]> => {
@@ -176,8 +211,15 @@ export const db = {
      */
     updateArticle: async (article: Article): Promise<Article[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            throw new Error("Database niet beschikbaar. Controleer de verbinding.");
+        }
         try {
+            // Validate required fields
+            if (!article.id) {
+                throw new Error("Artikel ID ontbreekt");
+            }
+            
             // Update lastUpdated timestamp
             const updatedArticle = {
                 ...article,
@@ -188,9 +230,21 @@ export const db = {
                 .from('articles')
                 .update(cleanArticle)
                 .eq('id', article.id);
-            if (error) throw error;
+                
+            if (error) {
+                console.error("Supabase updateArticle error:", error);
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
             return await db.getArticles();
-        } catch (e) { throw e; }
+        } catch (e) {
+            console.error("Update Article Error:", e);
+            if (e instanceof Error) {
+                throw e;
+            }
+            throw new Error(`Fout bij bijwerken artikel: ${formatError(e)}`);
+        }
     },
 
     /**
