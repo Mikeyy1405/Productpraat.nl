@@ -1,5 +1,6 @@
 import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
+import { generateSlug } from './urlService';
 
 export const db = {
     // --- PRODUCTEN ---
@@ -16,6 +17,63 @@ export const db = {
             return data as Product[] || [];
         } catch (e) {
             console.error("Fetch Error:", JSON.stringify(e));
+            return [];
+        }
+    },
+
+    /**
+     * Get a product by its category and slug
+     * Used for URL routing: /shop/{category}/{slug}
+     */
+    getBySlug: async (category: string, slug: string): Promise<Product | null> => {
+        const supabase = getSupabase();
+        if (!supabase) return null;
+        try {
+            // First try to find by exact slug match
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .eq('category', category.toLowerCase())
+                .eq('slug', slug.toLowerCase())
+                .limit(1);
+            
+            if (error) throw error;
+            if (data && data.length > 0) {
+                return data[0] as Product;
+            }
+            
+            // If no exact match, try to find by generated slug from brand/model
+            // This handles products that don't have a stored slug
+            const allInCategory = await db.getByCategory(category);
+            const match = allInCategory.find(p => {
+                const generatedSlug = p.slug || generateSlug(p.brand, p.model);
+                return generatedSlug.toLowerCase() === slug.toLowerCase();
+            });
+            
+            return match || null;
+        } catch (e) {
+            console.error("GetBySlug Error:", JSON.stringify(e));
+            return null;
+        }
+    },
+
+    /**
+     * Get all products in a specific category
+     */
+    getByCategory: async (category: string): Promise<Product[]> => {
+        const supabase = getSupabase();
+        if (!supabase) return [];
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .eq('category', category.toLowerCase())
+                .order('score', { ascending: false });
+            
+            if (error) throw error;
+            return data as Product[] || [];
+        } catch (e) {
+            console.error("GetByCategory Error:", JSON.stringify(e));
             return [];
         }
     },
