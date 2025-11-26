@@ -46,11 +46,67 @@ interface BulkImportProgress {
 
 type ProgressCallback = (progress: BulkImportProgress) => void;
 
+// Error response interface for better error handling
+interface ApiErrorResponse {
+    error: string;
+    code?: string;
+    details?: string;
+    troubleshooting?: string[];
+    partialData?: { bolData: BolData };
+}
+
+// Connection test result interface
+interface ConnectionTestResult {
+    success: boolean;
+    message: string;
+    timestamp: string;
+    bol: {
+        status: 'connected' | 'not_configured' | 'error' | 'unknown';
+        message: string;
+        troubleshooting?: string[];
+    };
+    ai: {
+        status: 'configured' | 'not_configured' | 'unknown';
+        message: string;
+    };
+}
+
+/**
+ * Parse API error response and return user-friendly message
+ */
+const parseApiError = (response: Response, data: ApiErrorResponse | null): string => {
+    if (data?.troubleshooting && data.troubleshooting.length > 0) {
+        return `${data.error}\n\nTips:\n• ${data.troubleshooting.join('\n• ')}`;
+    }
+    if (data?.error) {
+        return data.error;
+    }
+    return `Fout ${response.status}: ${response.statusText}`;
+};
+
 /**
  * AI Service - Server-side wrapper
  * All AI API calls are routed through the server to protect API keys
  */
 export const aiService = {
+    /**
+     * Test API connections (Bol.com and AI)
+     */
+    testConnection: async (): Promise<ConnectionTestResult> => {
+        try {
+            const response = await fetch('/api/admin/test-connection');
+            
+            if (!response.ok) {
+                throw new Error('Kon verbinding niet testen');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Connection Test Error:', error);
+            throw error;
+        }
+    },
+
     /**
      * Generate product review data using server-side AI
      */
@@ -261,14 +317,41 @@ export const aiService = {
                 body: JSON.stringify({ url })
             });
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Product import mislukt');
+            // Parse response body
+            let data;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                console.error('Failed to parse response:', parseError);
+                throw new Error('Ongeldige server response - probeer opnieuw');
             }
 
-            return await response.json();
+            if (!response.ok) {
+                // Build detailed error message
+                let errorMessage = data.error || 'Product import mislukt';
+                
+                // Add troubleshooting tips if available
+                if (data.troubleshooting && data.troubleshooting.length > 0) {
+                    errorMessage += '\n\nTips:\n• ' + data.troubleshooting.join('\n• ');
+                }
+                
+                // Add error code for debugging
+                if (data.code) {
+                    console.error(`Import failed with code: ${data.code}`, data);
+                }
+                
+                throw new Error(errorMessage);
+            }
+
+            return data;
         } catch (error) {
             console.error('Import URL Error:', error);
+            
+            // Handle network errors
+            if (error instanceof TypeError && error.message.includes('fetch')) {
+                throw new Error('Netwerk fout - controleer je internetverbinding');
+            }
+            
             throw error;
         }
     },

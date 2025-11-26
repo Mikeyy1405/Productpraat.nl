@@ -153,13 +153,36 @@ export const db = {
 
     addArticle: async (article: Article): Promise<Article[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            throw new Error("Database niet beschikbaar. Controleer de verbinding.");
+        }
         try {
+            // Validate required fields
+            if (!article.title || !article.type || !article.category) {
+                throw new Error("Verplichte velden ontbreken: titel, type of categorie");
+            }
+            
             const cleanArticle = JSON.parse(JSON.stringify(article));
             const { error } = await supabase.from('articles').insert([cleanArticle]);
-            if (error) throw error;
+            
+            if (error) {
+                console.error("Supabase addArticle error:", error);
+                // Extract meaningful error message from Supabase error
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
             return await db.getArticles();
-        } catch (e) { throw e; }
+        } catch (e) {
+            console.error("Add Article Error:", e);
+            // Re-throw with proper error message
+            if (e instanceof Error) {
+                throw e;
+            }
+            // Handle non-Error objects
+            const errorStr = typeof e === 'object' ? JSON.stringify(e) : String(e);
+            throw new Error(`Fout bij opslaan artikel: ${errorStr}`);
+        }
     },
 
     deleteArticle: async (id: string): Promise<Article[]> => {
@@ -176,8 +199,15 @@ export const db = {
      */
     updateArticle: async (article: Article): Promise<Article[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            throw new Error("Database niet beschikbaar. Controleer de verbinding.");
+        }
         try {
+            // Validate required fields
+            if (!article.id) {
+                throw new Error("Artikel ID ontbreekt");
+            }
+            
             // Update lastUpdated timestamp
             const updatedArticle = {
                 ...article,
@@ -188,9 +218,22 @@ export const db = {
                 .from('articles')
                 .update(cleanArticle)
                 .eq('id', article.id);
-            if (error) throw error;
+                
+            if (error) {
+                console.error("Supabase updateArticle error:", error);
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
+            
             return await db.getArticles();
-        } catch (e) { throw e; }
+        } catch (e) {
+            console.error("Update Article Error:", e);
+            if (e instanceof Error) {
+                throw e;
+            }
+            const errorStr = typeof e === 'object' ? JSON.stringify(e) : String(e);
+            throw new Error(`Fout bij bijwerken artikel: ${errorStr}`);
+        }
     },
 
     /**
