@@ -421,10 +421,8 @@ app.post('/api/bol/search-products', async (req, res) => {
                     }
                 }
             }
-            // Fallback: try to extract brand from title (first word)
-            if (!brand && p.title) {
-                brand = p.title.split(' ')[0];
-            }
+            // Note: We don't use fallback extraction from title as it's unreliable
+            // The AI will determine the brand during product enrichment
             
             // Extract description
             const description = p.shortDescription || p.description || '';

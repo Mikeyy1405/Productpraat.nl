@@ -1608,7 +1608,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                                                     </h4>
                                                                                     <div className="flex items-center justify-between">
                                                                                         <span className="text-lg font-bold text-blue-400">
-                                                                                            €{product.price?.toLocaleString('nl-NL', { minimumFractionDigits: 2 }) || '-.--'}
+                                                                                            €{product.price != null ? product.price.toLocaleString('nl-NL', { minimumFractionDigits: 2 }) : '-.--'}
                                                                                         </span>
                                                                                         {product.available ? (
                                                                                             <span className="text-xs text-green-400 flex items-center gap-1">
