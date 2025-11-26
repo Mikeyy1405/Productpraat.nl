@@ -173,10 +173,10 @@ async function fetchBolImages(ean, token, fallbackImage) {
         if (mediaData.images && mediaData.images.length > 0) {
             // Extract all image URLs and ensure HTTPS
             allImages = mediaData.images
-                .sort((a, b) => (b.width * b.height) - (a.width * a.height))
+                .sort((a, b) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)))
                 .map(img => {
                     let url = img?.url || '';
-                    if (url && url.startsWith('http:')) url = url.replace('http:', 'https:');
+                    if (url) url = url.replace(/^http:/, 'https:');
                     return url;
                 })
                 .filter(url => url)
