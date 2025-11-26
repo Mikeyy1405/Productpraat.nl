@@ -71,7 +71,9 @@ export const isProductUrl = (path: string): boolean => {
  * Get the canonical URL for a product
  */
 export const getCanonicalUrl = (product: Product): string => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://productpraat.nl';
+    // Use window.location.origin for dynamic base URL - works in browser environment
+    // Falls back to empty string for server-side or test environments
+    const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
     return `${baseUrl}${getProductUrl(product)}`;
 };
 

@@ -180,11 +180,12 @@ export const App: React.FC = () => {
             const parsed = parseProductUrl(path);
             if (parsed) {
                 const { category, slug } = parsed;
-                // Find the product by category and slug
-                const product = products.find(p => {
+                // First filter by category to reduce the search space
+                const categoryProducts = products.filter(p => p.category.toLowerCase() === category.toLowerCase());
+                // Then find the product by slug
+                const product = categoryProducts.find(p => {
                     const productSlug = (p.slug || generateSlug(p.brand, p.model)).toLowerCase();
-                    return p.category.toLowerCase() === category.toLowerCase() && 
-                           productSlug === slug.toLowerCase();
+                    return productSlug === slug.toLowerCase();
                 });
                 
                 if (product) {
@@ -246,17 +247,22 @@ export const App: React.FC = () => {
         };
         loadData();
         setCurrentTheme(getSeasonalTheme());
-        
+    }, []);
+
+    // Separate effect for popstate handling - uses current products state
+    useEffect(() => {
         // Handle browser back/forward navigation
         const handlePopState = () => {
-            handleUrlRouting(customProducts);
+            if (customProducts.length > 0) {
+                handleUrlRouting(customProducts);
+            }
         };
         window.addEventListener('popstate', handlePopState);
         
         return () => {
             window.removeEventListener('popstate', handlePopState);
         };
-    }, []);
+    }, [customProducts]); // Re-register when products change
 
     useEffect(() => {
         if (view === 'category') {
