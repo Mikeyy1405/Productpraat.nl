@@ -34,6 +34,21 @@ Voor de productie-omgeving op Render.com moeten de volgende variabelen worden in
 | `BOL_CLIENT_SECRET` | Client Secret van Bol.com Retailer API |
 | `BOL_SITE_ID` | Jouw Affiliate Site ID (bijv. 1296565) |
 
+## Database Migrations
+
+Before running the application for the first time or after updates, ensure the Supabase database schema is up to date.
+
+### Applying Migrations
+
+Run the SQL files in `supabase/migrations/` in your Supabase SQL Editor:
+
+1. Go to your Supabase project dashboard
+2. Navigate to **SQL Editor**
+3. Copy and paste the contents of each migration file and execute
+
+**Available Migrations:**
+- `20241126_add_bolreviewsraw_column.sql` - Adds the `bolReviewsRaw` column for storing Bol.com review data
+
 ## Deployment
 
 Dit project is geoptimaliseerd voor deployment op **Render.com** als een **Web Service** (Node).
