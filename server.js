@@ -119,72 +119,20 @@ const getBolHeaders = (token) => ({
     'Accept-Language': 'nl'
 });
 
-// --- HELPER: Generate SEO-friendly slug ---
-const generateSlug = (brand, model) => {
-    const brandStr = brand || '';
-    const modelStr = model || '';
-    const text = `${brandStr} ${modelStr}`.toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-        .replace(/\s+/g, '-')          // Replace spaces with -
-        .replace(/-+/g, '-')           // Replace multiple - with single -
-        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
-    return text ? `${text}-review` : 'product-review';
-};
-
-// --- HELPER: Fetch Bol.com ratings/reviews ---
-const fetchBolRatings = async (ean, token) => {
+// --- HELPER: Clean Bol.com URL (remove tracking params) ---
+const cleanBolUrl = (url) => {
     try {
-        const ratingsResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/ratings`, {
-            headers: getBolHeaders(token)
-        });
-        const data = ratingsResponse.data;
-        const ratings = Array.isArray(data.ratings) ? data.ratings : [];
-        return {
-            averageRating: data.averageRating || 0,
-            totalReviews: ratings.reduce((sum, r) => sum + (r.count || 0), 0),
-            distribution: ratings
-        };
+        const urlObj = new URL(url);
+        // Remove ALL query parameters (cid, bltgh, etc.)
+        urlObj.search = '';
+        // Ensure trailing slash
+        let cleaned = urlObj.toString();
+        if (!cleaned.endsWith('/')) cleaned += '/';
+        return cleaned;
     } catch (e) {
-        console.log(`[BOL] Ratings fetch failed for ${ean}, continuing without reviews`);
-        return null;
+        console.error('Error cleaning URL:', e);
+        return url;
     }
-};
-
-// --- HELPER: Fetch all Bol.com images ---
-const fetchBolImages = async (ean, token, defaultImage) => {
-    let images = [defaultImage];
-    let mainImage = defaultImage;
-    
-    try {
-        const mediaResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/${ean}/media`, {
-            headers: getBolHeaders(token)
-        });
-        if (mediaResponse.data.images && mediaResponse.data.images.length > 0) {
-            // Pre-calculate areas for each image, then sort
-            const imagesWithArea = mediaResponse.data.images.map(img => {
-                const renditions = img.renditions || [];
-                const withArea = renditions.map(r => ({
-                    ...r,
-                    area: (r.width || 0) * (r.height || 0)
-                }));
-                const sorted = withArea.sort((a, b) => b.area - a.area);
-                return sorted[0]?.url || renditions[0]?.url || img.url;
-            });
-            
-            images = imagesWithArea.filter(Boolean).map(url => 
-                url.startsWith('http:') ? url.replace('http:', 'https:') : url
-            );
-            
-            // Update main image to highest quality
-            if (images.length > 0) mainImage = images[0];
-            
-            console.log(`[BOL] Fetched ${images.length} images for product ${ean}`);
-        }
-    } catch (e) {
-        console.log(`[BOL] Media fetch failed for ${ean}, using default image`);
-    }
-    
-    return { images, mainImage };
 };
 
 // --- ROUTES ---
@@ -222,7 +170,8 @@ app.post('/api/bol/search-list', async (req, res) => {
             if (img.startsWith('http:')) img = img.replace('http:', 'https:');
             
             // Generate affiliate URL for each product
-            const productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${p.ean}/`;
+            let productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${p.ean}/`;
+            productUrl = cleanBolUrl(productUrl); // Strip tracking params!
             const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
             
             return {
@@ -290,7 +239,8 @@ app.post('/api/bol/import', async (req, res) => {
         if (product.offer?.price) price = product.offer.price;
 
         // Get product URL and generate affiliate link
-        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
+        let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${ean}/`;
+        productUrl = cleanBolUrl(productUrl); // Strip tracking params!
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
         // Extract specifications
@@ -592,7 +542,8 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 const bolReviews = await fetchBolRatings(product.ean, token);
 
                 // Generate proper affiliate URL
-                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${product.ean}/`;
+                productUrl = cleanBolUrl(productUrl); // Strip tracking params!
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
                 console.log(`[${timestamp}] [ADMIN] Generated affiliate URL for ${product.ean}: ${affiliateUrl}`);
 
@@ -700,7 +651,8 @@ app.post('/api/admin/import/url', async (req, res) => {
         }
 
         // Generate proper affiliate URL
-        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
+        let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${ean}/`;
+        productUrl = cleanBolUrl(productUrl); // Strip tracking params!
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
         console.log(`[${timestamp}] [ADMIN] Generated affiliate URL: ${affiliateUrl}`);
 
@@ -797,7 +749,8 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 const bolReviews = await fetchBolRatings(product.ean, token);
 
                 // Generate proper affiliate URL
-                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${product.ean}/`;
+                productUrl = cleanBolUrl(productUrl); // Strip tracking params!
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
                 console.log(`[${timestamp}] [ADMIN] Generated affiliate URL for ${product.ean}: ${affiliateUrl}`);
 
