@@ -4,7 +4,7 @@ import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
-import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from '../services/urlService';
+import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -2027,7 +2027,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                         {generatedArticle.htmlContent && (
                                                             <div 
                                                                 className="article-preview"
-                                                                dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
+                                                                dangerouslySetInnerHTML={{ __html: removeFirstH1FromHtml(generatedArticle.htmlContent) }}
                                                             />
                                                         )}
                                                     </div>
@@ -2336,6 +2336,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 
                 /* Article Preview Styling */
                 .article-preview h1 {
+                    /* Fallback styling in case H1 is not removed programmatically */
                     font-size: 2rem;
                     font-weight: 800;
                     color: white;

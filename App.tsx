@@ -9,7 +9,7 @@ import { Product, CATEGORIES, Article, ArticleType } from './types';
 import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
-import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from './services/urlService';
+import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from './services/urlService';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
@@ -1132,7 +1132,7 @@ export const App: React.FC = () => {
                                 
                                 {/* Article Content */}
                                 <article className="article-preview mb-12">
-                                    <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} />
+                                    <div dangerouslySetInnerHTML={{ __html: removeFirstH1FromHtml(selectedArticle.htmlContent) }} />
                                 </article>
                                 
                                 {/* Related Articles */}
@@ -1186,6 +1186,7 @@ export const App: React.FC = () => {
             {/* Article Preview Styling */}
             <style>{`
                 .article-preview h1 {
+                    /* Fallback styling in case H1 is not removed programmatically */
                     font-size: 2rem;
                     font-weight: 800;
                     color: white;
