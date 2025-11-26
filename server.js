@@ -175,6 +175,22 @@ const API_TIMEOUT_MS = 30000; // 30 second timeout
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 1000;
 
+/**
+ * Retry wrapper with exponential backoff
+ * Automatically retries failed operations with increasing delays
+ * 
+ * @param {Function} operation - Async function to execute
+ * @param {string} operationName - Name for logging purposes
+ * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns {Promise<any>} - Result of the operation
+ * @throws {Error} - Last error if all retries fail
+ * 
+ * Retry behavior:
+ * - Attempt 1: immediate
+ * - Attempt 2: after 1 second
+ * - Attempt 3: after 2 seconds
+ * - Does NOT retry on 4xx errors (except 429 rate limit)
+ */
 async function withRetry(operation, operationName, maxRetries = MAX_RETRIES) {
     let lastError;
     
@@ -1079,15 +1095,36 @@ app.post('/api/admin/import/url', async (req, res) => {
         }
 
         // Validate URL format if it looks like a URL
-        if (url.startsWith('http') && !url.includes('bol.com')) {
-            return res.status(400).json({ 
-                error: 'Alleen Bol.com URLs worden ondersteund',
-                code: 'INVALID_URL',
-                troubleshooting: [
-                    'Gebruik een URL van bol.com',
-                    'Of voer direct een EAN code (13 cijfers) in'
-                ]
-            });
+        if (url.startsWith('http')) {
+            try {
+                const parsedUrl = new URL(url);
+                // Strictly check that the hostname ends with bol.com or is bol.com
+                // This prevents bypasses like evil.com/bol.com or bol.com.evil.com
+                const hostname = parsedUrl.hostname.toLowerCase();
+                const isValidBolDomain = hostname === 'bol.com' || 
+                                         hostname === 'www.bol.com' ||
+                                         hostname.endsWith('.bol.com');
+                
+                if (!isValidBolDomain) {
+                    return res.status(400).json({ 
+                        error: 'Alleen Bol.com URLs worden ondersteund',
+                        code: 'INVALID_URL',
+                        troubleshooting: [
+                            'Gebruik een URL van bol.com (bijv. https://www.bol.com/nl/p/...)',
+                            'Of voer direct een EAN code (13 cijfers) in'
+                        ]
+                    });
+                }
+            } catch (urlParseError) {
+                return res.status(400).json({ 
+                    error: 'Ongeldige URL formaat',
+                    code: 'INVALID_URL_FORMAT',
+                    troubleshooting: [
+                        'Controleer of de URL correct is gekopieerd',
+                        'Of voer direct een EAN code (13 cijfers) in'
+                    ]
+                });
+            }
         }
 
         // Check if Bol.com API is configured
@@ -1283,10 +1320,21 @@ app.post('/api/admin/import/url', async (req, res) => {
         const errorInfo = getDetailedErrorInfo(error);
         console.error(`[${timestamp}] [ADMIN] Import URL error:`, errorInfo);
         
+        // Only include sanitized debug info in development mode
+        // Never expose raw error objects or stack traces to client
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        
         res.status(500).json({ 
             error: extractErrorMessage(error, 'Product import mislukt'),
             code: 'IMPORT_FAILED',
-            details: process.env.NODE_ENV === 'development' ? errorInfo : undefined,
+            // Only expose safe, non-sensitive debug info
+            ...(isDevelopment && { 
+                debug: { 
+                    errorCode: errorInfo.code,
+                    isTimeout: errorInfo.isTimeout,
+                    status: errorInfo.status
+                } 
+            }),
             troubleshooting: [
                 'Controleer of de URL geldig is',
                 'Probeer het opnieuw na een paar seconden',

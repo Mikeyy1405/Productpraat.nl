@@ -2,6 +2,20 @@ import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
 import { generateSlug, generateArticleSlug } from './urlService';
 
+/**
+ * Helper function to format error messages consistently
+ * Handles Error objects, plain objects, and other types
+ */
+const formatError = (e: unknown): string => {
+    if (e instanceof Error) {
+        return e.message;
+    }
+    if (typeof e === 'object' && e !== null) {
+        return JSON.stringify(e);
+    }
+    return String(e);
+};
+
 export const db = {
     // --- PRODUCTEN ---
     getAll: async (): Promise<Product[]> => {
@@ -16,7 +30,7 @@ export const db = {
             if (error) throw error;
             return data as Product[] || [];
         } catch (e) {
-            console.error("Fetch Error:", JSON.stringify(e));
+            console.error("Fetch Error:", formatError(e));
             return [];
         }
     },
@@ -179,9 +193,7 @@ export const db = {
             if (e instanceof Error) {
                 throw e;
             }
-            // Handle non-Error objects
-            const errorStr = typeof e === 'object' ? JSON.stringify(e) : String(e);
-            throw new Error(`Fout bij opslaan artikel: ${errorStr}`);
+            throw new Error(`Fout bij opslaan artikel: ${formatError(e)}`);
         }
     },
 
@@ -231,8 +243,7 @@ export const db = {
             if (e instanceof Error) {
                 throw e;
             }
-            const errorStr = typeof e === 'object' ? JSON.stringify(e) : String(e);
-            throw new Error(`Fout bij bijwerken artikel: ${errorStr}`);
+            throw new Error(`Fout bij bijwerken artikel: ${formatError(e)}`);
         }
     },
 
