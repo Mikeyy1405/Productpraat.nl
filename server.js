@@ -354,14 +354,14 @@ app.post('/api/bol/search-list', async (req, res) => {
 
 // Manual product search endpoint - returns detailed product info for selection
 app.post('/api/bol/search-products', async (req, res) => {
-    const { searchTerm, limit = 10 } = req.body;
+    const { searchTerm, limit = 50, page = 1, maxPages = 2 } = req.body;
     const timestamp = new Date().toISOString();
     
     if (!searchTerm || !searchTerm.trim()) {
         return res.status(400).json({ error: 'Zoekterm is verplicht', products: [] });
     }
     
-    console.log(`[${timestamp}] [BOL] Manual product search: "${searchTerm}"`);
+    console.log(`[${timestamp}] [BOL] Manual product search: "${searchTerm}" (limit: ${limit}, page: ${page}, maxPages: ${maxPages})`);
     
     try {
         // Check if Bol.com API is configured
@@ -375,74 +375,92 @@ app.post('/api/bol/search-products', async (req, res) => {
         
         const token = await getBolToken();
         
-        // Search Bol.com for products
-        const searchParams = { 
-            'search-term': searchTerm.trim(),
-            'country-code': 'NL',
-            'page': 1,
-            'include': 'IMAGE,OFFER,SPECIFICATIONS'
-        };
+        // Fetch multiple pages and combine results
+        const allResults = [];
+        for (let currentPage = page; currentPage < page + maxPages; currentPage++) {
+            const searchParams = { 
+                'search-term': searchTerm.trim(),
+                'country-code': 'NL',
+                'page': currentPage,
+                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+            };
+            
+            const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+                params: searchParams,
+                headers: getBolHeaders(token)
+            });
+            
+            const results = response.data.results || [];
+            if (results.length === 0) break; // Stop if no more results
+            allResults.push(...results);
+            console.log(`[${timestamp}] [BOL] Page ${currentPage}: found ${results.length} products`);
+        }
         
-        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
-            params: searchParams,
-            headers: getBolHeaders(token)
-        });
+        console.log(`[${timestamp}] [BOL] Total search found ${allResults.length} products across pages`);
         
-        const results = response.data.results || [];
-        console.log(`[${timestamp}] [BOL] Search found ${results.length} products`);
-        
-        if (results.length === 0) {
+        if (allResults.length === 0) {
             return res.json({ products: [], message: 'Geen producten gevonden' });
         }
         
-        // Map results to detailed product objects
-        const products = results.slice(0, Math.min(limit, results.length)).map(p => {
-            let img = p.image?.url || PLACEHOLDER_IMG;
-            if (img.startsWith('http:')) img = img.replace('http:', 'https:');
-            
-            // Generate affiliate URL
-            let productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${p.ean}/`;
-            productUrl = cleanBolUrl(productUrl);
-            const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
-            
-            // Extract price
-            const price = extractPrice(p.offer);
-            
-            // Extract brand from title or specs
-            let brand = '';
-            if (p.specificationGroups) {
-                for (const group of p.specificationGroups) {
-                    const brandSpec = group.specifications?.find(s => 
-                        s.name.toLowerCase() === 'merk' || s.name.toLowerCase() === 'brand'
-                    );
-                    if (brandSpec) {
-                        brand = brandSpec.value;
-                        break;
+        // Filter products without price or image, then map to detailed product objects
+        const products = allResults
+            .filter(p => {
+                // Filter products WITHOUT price or image
+                const hasPrice = p.offer && (p.offer.price > 0 || p.offer.listPrice > 0);
+                const hasImage = p.image && p.image.url;
+                return hasPrice && hasImage; // Only products with BOTH
+            })
+            .slice(0, Math.min(limit, allResults.length))
+            .map(p => {
+                let img = p.image?.url || PLACEHOLDER_IMG;
+                if (img.startsWith('http:')) img = img.replace('http:', 'https:');
+                
+                // Generate affiliate URL
+                let productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${p.ean}/`;
+                productUrl = cleanBolUrl(productUrl);
+                const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
+                
+                // Extract price
+                const price = extractPrice(p.offer);
+                
+                // Extract brand from title or specs
+                let brand = '';
+                if (p.specificationGroups) {
+                    for (const group of p.specificationGroups) {
+                        const brandSpec = group.specifications?.find(s => 
+                            s.name.toLowerCase() === 'merk' || s.name.toLowerCase() === 'brand'
+                        );
+                        if (brandSpec) {
+                            brand = brandSpec.value;
+                            break;
+                        }
                     }
                 }
-            }
-            // Note: We don't use fallback extraction from title as it's unreliable
-            // The AI will determine the brand during product enrichment
-            
-            // Extract description
-            const description = p.shortDescription || p.description || '';
-            
-            return {
-                id: p.ean,
-                ean: p.ean,
-                title: p.title,
-                brand,
-                image: img,
-                price,
-                url: affiliateUrl,
-                rawUrl: productUrl,
-                description: description.substring(0, 200) + (description.length > 200 ? '...' : ''),
-                available: !!(p.offer && p.offer.price)
-            };
-        });
+                // Note: We don't use fallback extraction from title as it's unreliable
+                // The AI will determine the brand during product enrichment
+                
+                // Extract description
+                const description = p.shortDescription || p.description || '';
+                
+                return {
+                    id: p.ean,
+                    ean: p.ean,
+                    title: p.title,
+                    brand,
+                    image: img,
+                    price,
+                    url: affiliateUrl,
+                    rawUrl: productUrl,
+                    description: description.substring(0, 200) + (description.length > 200 ? '...' : ''),
+                    available: !!(p.offer && p.offer.price)
+                };
+            });
         
-        console.log(`[${timestamp}] [BOL] Returning ${products.length} search results`);
-        res.json({ products, total: results.length });
+        // Log how many products were filtered
+        const filteredCount = allResults.length - products.length;
+        console.log(`[${timestamp}] [BOL] Filtered ${allResults.length} -> ${products.length} products (removed ${filteredCount} products without price/image)`);
+        
+        res.json({ products, total: allResults.length, filtered: filteredCount });
         
     } catch (error) {
         console.error(`[${timestamp}] [BOL] Search Products Error:`, error.response?.data || error.message);
@@ -543,6 +561,25 @@ app.post('/api/bol/import-by-ean', async (req, res) => {
             bolReviews
         };
         
+        // Collect warnings for missing data
+        const warnings = [];
+        
+        if (!price || price === 0) {
+            warnings.push('Geen prijs beschikbaar voor dit product');
+        }
+        
+        if (!imageUrl || imageUrl === PLACEHOLDER_IMG) {
+            warnings.push('Geen productafbeelding beschikbaar');
+        }
+        
+        if (images.length === 0) {
+            warnings.push('Geen extra afbeeldingen beschikbaar');
+        }
+        
+        if (warnings.length > 0) {
+            console.warn(`[${timestamp}] [BOL] Import warnings for ${ean}:`, warnings);
+        }
+        
         // Generate AI content
         console.log(`[${timestamp}] [BOL] Generating AI content for: ${product.title.substring(0, 40)}...`);
         let aiData;
@@ -553,7 +590,8 @@ app.post('/api/bol/import-by-ean', async (req, res) => {
             return res.status(500).json({
                 error: 'AI content generatie mislukt',
                 details: aiError.message,
-                partialData: { bolData }
+                partialData: { bolData },
+                warnings
             });
         }
         
@@ -568,7 +606,8 @@ app.post('/api/bol/import-by-ean', async (req, res) => {
                 slug,
                 images,
                 bolReviewsRaw: bolReviews 
-            } 
+            },
+            warnings
         });
         
     } catch (error) {

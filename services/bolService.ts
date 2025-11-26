@@ -80,7 +80,7 @@ export const searchBolProducts = async (term: string, limit: number = 5): Promis
 /**
  * Search for Bol.com products with detailed information for manual selection
  */
-export const searchBolProductsDetailed = async (searchTerm: string, limit: number = 10): Promise<BolSearchResult> => {
+export const searchBolProductsDetailed = async (searchTerm: string, limit: number = 50): Promise<BolSearchResult> => {
     try {
         const response = await fetch('/api/bol/search-products', {
             method: 'POST',
@@ -110,7 +110,7 @@ export const searchBolProductsDetailed = async (searchTerm: string, limit: numbe
 /**
  * Import a product by EAN with AI enrichment
  */
-export const importProductByEan = async (ean: string): Promise<{ bolData: any; aiData: any }> => {
+export const importProductByEan = async (ean: string): Promise<{ bolData: any; aiData: any; warnings?: string[] }> => {
     try {
         const response = await fetch('/api/bol/import-by-ean', {
             method: 'POST',

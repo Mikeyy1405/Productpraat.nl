@@ -145,7 +145,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         addLog(`🔍 Zoeken naar: "${searchQuery}"`);
         
         try {
-            const result = await searchBolProductsDetailed(searchQuery.trim(), 12);
+            const result = await searchBolProductsDetailed(searchQuery.trim(), 50);
             
             if (result.error) {
                 setSearchError(result.error);
@@ -188,9 +188,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             setImportStep(2);
             setLoadingMessage('AI analyse bezig...');
             
-            const { bolData, aiData } = await importProductByEan(selectedSearchProduct.ean);
+            const { bolData, aiData, warnings } = await importProductByEan(selectedSearchProduct.ean);
             
             addLog(`✅ AI data ontvangen - Merk: ${aiData.brand}, Model: ${aiData.model}`);
+            
+            // Display warnings if any
+            if (warnings && warnings.length > 0) {
+                addLog(`⚠️ Waarschuwingen: ${warnings.join(', ')}`);
+                showToast(`Product geïmporteerd met waarschuwingen`, 'warning');
+            }
             
             const draft: Partial<Product> = {
                 id: `search-${Date.now()}`,
@@ -226,7 +232,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             setSelectedSearchProduct(null);
             setSearchQuery('');
             addLog('✅ Import succesvol! Controleer en sla op.');
-            showToast('✅ Product geïmporteerd! Controleer de gegevens en sla op.', 'success');
+            if (!warnings || warnings.length === 0) {
+                showToast('✅ Product geïmporteerd! Controleer de gegevens en sla op.', 'success');
+            }
             
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
