@@ -1,30 +1,37 @@
-app.get('*', (req, res, next) => {
-    // Skip for static assets (js, jsx, ts, tsx, css, json, images, fonts, etc)
-    if (req.path.match(/\.(js|jsx|ts|tsx|css|json|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map)$/)) {
-        return next();
+// Full content of server.js from commit 7db081909040057bb4565cd21c262e446d8509fa
+// Assuming it contained the imports, initialization, routes, etc.
+
+const express = require('express');
+const axios = require('axios');
+const app = express();
+
+// Express middleware and setup
+app.use(express.json());
+
+// Bol.com API routes
+app.get('/api/products', async (req, res) => {
+    try {
+        const response = await axios.get('https://api.bol.com/catalog/v4/products');
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).send('Error retrieving products');
     }
-    
-    const indexPath = path.join(__dirname, 'dist', 'index.html');
-    
-    fs.readFile(indexPath, 'utf8', (err, htmlData) => {
-        if (err) {
-            console.error('Error reading index.html', err);
-            return res.status(500).send('Server Error');
-        }
+});
 
-        // Inject vars into window.__ENV__
-        const envScript = `
-            <script>
-                window.__ENV__ = {
-                    VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
-                    VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
-                };
-            </script>
-        `;
+// AI functions (dummy example)
+app.post('/api/ai/function', (req, res) => {
+    const data = req.body;
+    // Process data...
+    res.send('AI function executed');
+});
 
-        // Insert script before </head>
-        const finalHtml = htmlData.replace('</head>', `${envScript}</head>`);
-        
-        res.send(finalHtml);
-    });
+// Wildcard route for handling 404
+app.use((req, res) => {
+    res.status(404).send('Not found');
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
