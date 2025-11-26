@@ -51,7 +51,7 @@ export interface UserReview {
     date: string;
 }
 
-export type ArticleType = 'comparison' | 'list' | 'guide';
+export type ArticleType = 'comparison' | 'list' | 'guide' | 'informational';
 
 export interface Article {
     id: string;
@@ -63,6 +63,7 @@ export interface Article {
     author: string;
     date: string;
     imageUrl?: string;
+    created_at?: string; // ISO timestamp for database storage
 }
 
 export interface ContentSuggestion {
