@@ -670,7 +670,7 @@ export const App: React.FC = () => {
                                                         <i 
                                                             key={star} 
                                                             className={`fas fa-star text-sm ${
-                                                                star <= Math.round(selectedProduct.bolReviewsRaw!.averageRating) 
+                                                                star <= Math.round(selectedProduct.bolReviewsRaw?.averageRating ?? 0) 
                                                                     ? 'text-yellow-400' 
                                                                     : 'text-slate-600'
                                                             }`}

@@ -88,11 +88,12 @@ export const seoService = {
 
         // Build aggregate rating from Bol.com reviews if available
         let aggregateRating: Record<string, unknown> | undefined;
-        if (product.bolReviewsRaw && product.bolReviewsRaw.totalReviews > 0) {
+        const bolReviews = product.bolReviewsRaw;
+        if (bolReviews && bolReviews.totalReviews > 0) {
             aggregateRating = {
                 "@type": "AggregateRating",
-                "ratingValue": product.bolReviewsRaw.averageRating.toString(),
-                "reviewCount": product.bolReviewsRaw.totalReviews.toString(),
+                "ratingValue": (bolReviews.averageRating ?? 0).toString(),
+                "reviewCount": (bolReviews.totalReviews ?? 0).toString(),
                 "bestRating": "5",
                 "worstRating": "1"
             };
