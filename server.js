@@ -115,6 +115,22 @@ const getBolHeaders = (token) => ({
     'Accept-Language': 'nl'
 });
 
+// --- HELPER: Clean Bol.com URL (remove tracking params) ---
+const cleanBolUrl = (url) => {
+    try {
+        const urlObj = new URL(url);
+        // Remove ALL query parameters (cid, bltgh, etc.)
+        urlObj.search = '';
+        // Ensure trailing slash
+        let cleaned = urlObj.toString();
+        if (!cleaned.endsWith('/')) cleaned += '/';
+        return cleaned;
+    } catch (e) {
+        console.error('Error cleaning URL:', e);
+        return url;
+    }
+};
+
 // --- ROUTES ---
 
 app.post('/api/bol/search-list', async (req, res) => {
@@ -150,7 +166,8 @@ app.post('/api/bol/search-list', async (req, res) => {
             if (img.startsWith('http:')) img = img.replace('http:', 'https:');
             
             // Generate affiliate URL for each product
-            const productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${p.ean}/`;
+            let productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${p.ean}/`;
+            productUrl = cleanBolUrl(productUrl); // Strip tracking params!
             const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
             
             return {
@@ -224,7 +241,8 @@ app.post('/api/bol/import', async (req, res) => {
         if (product.offer?.price) price = product.offer.price;
 
         // Get product URL and generate affiliate link
-        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
+        let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${ean}/`;
+        productUrl = cleanBolUrl(productUrl); // Strip tracking params!
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
         // Extract specifications
@@ -498,7 +516,8 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
                 // Generate proper affiliate URL
-                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${product.ean}/`;
+                productUrl = cleanBolUrl(productUrl); // Strip tracking params!
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
                 const specs = {};
@@ -598,7 +617,8 @@ app.post('/api/admin/import/url', async (req, res) => {
         if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
         // Generate proper affiliate URL
-        const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
+        let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${ean}/`;
+        productUrl = cleanBolUrl(productUrl); // Strip tracking params!
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
         const specs = {};
@@ -674,7 +694,8 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
 
                 // Generate proper affiliate URL
-                const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
+                let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${product.ean}/`;
+                productUrl = cleanBolUrl(productUrl); // Strip tracking params!
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
 
                 const specs = {};
