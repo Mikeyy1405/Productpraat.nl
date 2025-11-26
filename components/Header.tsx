@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { CATEGORIES } from '../types';
 
 interface HeaderProps {
-    onNavigate: (view: 'home' | 'admin' | 'about' | 'contact') => void;
+    onNavigate: (view: 'home' | 'admin' | 'about' | 'contact' | 'artikelen') => void;
     onSelectCategory: (categoryId: string) => void;
     activeView: string;
 }
@@ -147,7 +147,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                             )}
                         </div>
 
-                        <button onClick={() => onNavigate('home')} className="py-2 px-4 rounded-lg hover:text-white hover:bg-slate-800/50 transition">Expert Gidsen</button>
+                        <button onClick={() => onNavigate('artikelen')} className={`py-2 px-4 rounded-lg transition flex items-center gap-2 ${activeView === 'artikelen' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>
+                            <i className="fas fa-newspaper text-xs"></i> Artikelen
+                        </button>
                         <button onClick={() => onNavigate('about')} className={`py-2 px-4 rounded-lg transition ${activeView === 'about' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>Over ons</button>
                         <button onClick={() => onNavigate('contact')} className={`py-2 px-4 rounded-lg transition ${activeView === 'contact' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>Contact</button>
                     </div>
@@ -161,7 +163,10 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                         <div className="pb-4 border-b border-slate-800">
                             <h4 className="text-xs font-bold text-slate-500 uppercase mb-4 tracking-wider">Navigatie</h4>
                             <div className="flex flex-col gap-2">
-                                <button onClick={() => { onNavigate('home'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Home & Gidsen</button>
+                                <button onClick={() => { onNavigate('home'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Home</button>
+                                <button onClick={() => { onNavigate('artikelen'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left flex items-center gap-2">
+                                    <i className="fas fa-newspaper text-[#1877F2]"></i> Artikelen
+                                </button>
                                 <button onClick={() => { onNavigate('about'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Over ons</button>
                                 <button onClick={() => { onNavigate('contact'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Contact</button>
                                 <button onClick={() => { onNavigate('admin'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-[#1877F2] py-2 text-left">Admin Login</button>

@@ -1,4 +1,4 @@
-import { Product, CATEGORIES } from '../types';
+import { Product, Article, ArticleType, CATEGORIES } from '../types';
 
 /**
  * URL Service for handling product URLs and slugs
@@ -140,5 +140,85 @@ export const urlRouter = {
      */
     navigateToCategory: (category: string): void => {
         urlRouter.push(`/shop/${category}`);
+    },
+    
+    /**
+     * Navigate to an article page
+     */
+    navigateToArticle: (article: Article): void => {
+        urlRouter.push(getArticleUrl(article));
+    },
+    
+    /**
+     * Navigate to articles overview
+     */
+    navigateToArticles: (): void => {
+        urlRouter.push('/artikelen');
     }
+};
+
+/**
+ * Generate an article slug from type and title
+ * Format: {type-dutch}-{title-kebab-case}
+ */
+export const generateArticleSlug = (article: Partial<Article>): string => {
+    const typeMapping: Record<ArticleType, string> = {
+        'comparison': 'vergelijking',
+        'list': 'toplijst',
+        'guide': 'koopgids',
+        'informational': 'informatief'
+    };
+    
+    const typePrefix = article.type ? typeMapping[article.type] : 'artikel';
+    const titleStr = article.title || 'untitled';
+    
+    const titleSlug = titleStr.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/\s+/g, '-')          // Replace spaces with -
+        .replace(/-+/g, '-')           // Replace multiple - with single -
+        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
+    
+    return `${typePrefix}-${titleSlug}`.substring(0, 100) || 'artikel';
+};
+
+/**
+ * Get the full URL path for an article
+ */
+export const getArticleUrl = (article: Article): string => {
+    const slug = article.slug || generateArticleSlug(article);
+    return `/artikelen/${slug}`;
+};
+
+/**
+ * Parse an article URL to extract the slug
+ */
+export const parseArticleUrl = (path: string): { slug: string } | null => {
+    // Match /artikelen/{slug} pattern
+    const match = path.match(/^\/artikelen\/([^\/]+)\/?$/);
+    if (!match) return null;
+    
+    const [, slug] = match;
+    return { slug: slug.toLowerCase() };
+};
+
+/**
+ * Check if a path matches the article URL pattern
+ */
+export const isArticleUrl = (path: string): boolean => {
+    return /^\/artikelen\/[^\/]+\/?$/.test(path);
+};
+
+/**
+ * Check if a path matches the articles overview page
+ */
+export const isArticlesOverviewUrl = (path: string): boolean => {
+    return path === '/artikelen' || path === '/artikelen/';
+};
+
+/**
+ * Get the canonical URL for an article
+ */
+export const getArticleCanonicalUrl = (article: Article): string => {
+    const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+    return `${baseUrl}${getArticleUrl(article)}`;
 };

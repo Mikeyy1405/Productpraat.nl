@@ -57,13 +57,18 @@ export interface Article {
     id: string;
     title: string;
     type: ArticleType;
-    category: string;
+    category: string; // Hoofdcategorie (backwards compatible)
+    categories?: string[]; // Meerdere categorieën mogelijk
     summary: string;
     htmlContent: string; // The full article content
     author: string;
     date: string;
     imageUrl?: string;
     created_at?: string; // ISO timestamp for database storage
+    slug?: string; // SEO-friendly URL slug
+    metaDescription?: string; // SEO meta description
+    tags?: string[]; // Extra tags voor SEO
+    lastUpdated?: string; // ISO timestamp voor laatste wijziging
 }
 
 export interface ContentSuggestion {

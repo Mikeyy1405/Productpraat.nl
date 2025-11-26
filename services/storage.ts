@@ -1,6 +1,6 @@
 import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
-import { generateSlug } from './urlService';
+import { generateSlug, generateArticleSlug } from './urlService';
 
 export const db = {
     // --- PRODUCTEN ---
@@ -169,5 +169,60 @@ export const db = {
             await supabase.from('articles').delete().eq('id', id);
             return await db.getArticles();
         } catch (e) { throw e; }
+    },
+
+    /**
+     * Update an existing article
+     */
+    updateArticle: async (article: Article): Promise<Article[]> => {
+        const supabase = getSupabase();
+        if (!supabase) return [];
+        try {
+            // Update lastUpdated timestamp
+            const updatedArticle = {
+                ...article,
+                lastUpdated: new Date().toISOString()
+            };
+            const cleanArticle = JSON.parse(JSON.stringify(updatedArticle));
+            const { error } = await supabase
+                .from('articles')
+                .update(cleanArticle)
+                .eq('id', article.id);
+            if (error) throw error;
+            return await db.getArticles();
+        } catch (e) { throw e; }
+    },
+
+    /**
+     * Get an article by its slug
+     */
+    getArticleBySlug: async (slug: string): Promise<Article | null> => {
+        const supabase = getSupabase();
+        if (!supabase) return null;
+        try {
+            // First try to find by exact slug match
+            const { data, error } = await supabase
+                .from('articles')
+                .select('*')
+                .eq('slug', slug.toLowerCase())
+                .limit(1);
+            
+            if (error) throw error;
+            if (data && data.length > 0) {
+                return data[0] as Article;
+            }
+            
+            // If no exact match, try to find by generated slug from title/type
+            const allArticles = await db.getArticles();
+            const match = allArticles.find(a => {
+                const generatedSlug = a.slug || generateArticleSlug(a);
+                return generatedSlug.toLowerCase() === slug.toLowerCase();
+            });
+            
+            return match || null;
+        } catch (e) {
+            console.error("GetArticleBySlug Error:", JSON.stringify(e));
+            return null;
+        }
     }
 };

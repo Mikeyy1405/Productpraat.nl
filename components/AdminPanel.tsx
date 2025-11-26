@@ -4,11 +4,14 @@ import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
+import { generateArticleSlug } from '../services/urlService';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
     onDeleteProduct: (id: string) => Promise<void>;
     customProducts: Product[];
+    articles: Article[];
+    setArticles: React.Dispatch<React.SetStateAction<Article[]>>;
     onLogout: () => void;
 }
 
@@ -19,7 +22,7 @@ interface Toast {
     type: 'success' | 'error' | 'info' | 'warning';
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, onLogout }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, articles, setArticles, onLogout }) => {
     // --- MAIN NAVIGATION ---
     const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles'>('dashboard');
     const [productSubTab, setProductSubTab] = useState<'import' | 'bulk' | 'autopilot' | 'list'>('import');
@@ -55,8 +58,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const [studioTopic, setStudioTopic] = useState('');
     const [studioCategory, setStudioCategory] = useState('wasmachines');
     const [generatedArticle, setGeneratedArticle] = useState<Partial<Article> | null>(null);
-    const [savedArticles, setSavedArticles] = useState<Article[]>([]);
     const [articleSearchTerm, setArticleSearchTerm] = useState('');
+    const [editingArticle, setEditingArticle] = useState<Article | null>(null);
+    const [articleSubTab, setArticleSubTab] = useState<'generate' | 'list'>('generate');
 
     // --- STATE: PRODUCT LIST ---
     const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -66,10 +70,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
     // --- TOAST NOTIFICATIONS ---
     const [toasts, setToasts] = useState<Toast[]>([]);
-
-    useEffect(() => {
-        db.getArticles().then(setSavedArticles);
-    }, []);
 
     // Toast notification system
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -571,7 +571,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 if (list.title) {
                     const art = { ...list, id: `art-${Date.now()}-L`, category: pilotCategory, type: 'list', author: 'Redactie', date: new Date().toLocaleDateString(), created_at: new Date().toISOString() } as Article;
                     const updated = await db.addArticle(art);
-                    setSavedArticles(updated);
+                    setArticles(updated);
                     addLog(`✅ Toplijst gepubliceerd`);
                 }
             } catch (listErr) {
@@ -620,9 +620,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const handleSaveArticle = async () => { 
         if(generatedArticle?.title){ 
             try {
-                const art = { ...generatedArticle, id:`art-${Date.now()}`, category:studioCategory, type:studioType, author:'Redactie', date:new Date().toLocaleDateString(), created_at: new Date().toISOString() } as Article;
+                const slug = generateArticleSlug({ title: generatedArticle.title, type: studioType } as Article);
+                const art = { 
+                    ...generatedArticle, 
+                    id: `art-${Date.now()}`, 
+                    slug,
+                    category: studioCategory, 
+                    type: studioType, 
+                    author: 'Redactie', 
+                    date: new Date().toLocaleDateString('nl-NL'), 
+                    created_at: new Date().toISOString() 
+                } as Article;
                 const updated = await db.addArticle(art);
-                setSavedArticles(updated);
+                setArticles(updated);
                 setGeneratedArticle(null);
                 showToast('Artikel opgeslagen!', 'success');
             } catch (e) {
@@ -635,8 +645,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const handleDeleteArticle = async (id: string) => { 
         if(confirm('Artikel verwijderen?')) {
             const updated = await db.deleteArticle(id);
-            setSavedArticles(updated);
+            setArticles(updated);
             showToast('Artikel verwijderd', 'info');
+        }
+    };
+    
+    const handleEditArticle = (article: Article) => {
+        setEditingArticle({ ...article });
+        setArticleSubTab('list');
+    };
+    
+    const handleSaveEditedArticle = async () => {
+        if (!editingArticle) return;
+        try {
+            // Generate slug if not present
+            if (!editingArticle.slug) {
+                editingArticle.slug = generateArticleSlug(editingArticle);
+            }
+            const updated = await db.updateArticle(editingArticle);
+            setArticles(updated);
+            setEditingArticle(null);
+            showToast('Artikel bijgewerkt!', 'success');
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            showError(`Fout bij bijwerken: ${errorMsg}`);
+        }
+    };
+    
+    const handleRewriteArticle = async (article: Article) => {
+        if (!confirm('Weet je zeker dat je dit artikel wilt herschrijven met AI? De bestaande content wordt vervangen.')) return;
+        
+        setIsProcessing(true);
+        setLoadingMessage('Artikel herschrijven met AI...');
+        
+        try {
+            const result = await aiService.generateArticle(article.type, article.title, article.category);
+            const updatedArticle: Article = {
+                ...article,
+                htmlContent: result.htmlContent || article.htmlContent,
+                summary: result.summary || article.summary,
+                lastUpdated: new Date().toISOString()
+            };
+            const updated = await db.updateArticle(updatedArticle);
+            setArticles(updated);
+            showToast('Artikel succesvol herschreven!', 'success');
+        } catch (e) {
+            const errorMsg = e instanceof Error ? e.message : String(e);
+            showError(`Fout bij herschrijven: ${errorMsg}`);
+        } finally {
+            setIsProcessing(false);
+            setLoadingMessage('');
         }
     };
 
@@ -743,10 +801,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         }
     };
 
-    const filteredArticles = savedArticles.filter(a => {
+    const filteredArticles = articles.filter(a => {
         if (!articleSearchTerm) return true;
         return a.title.toLowerCase().includes(articleSearchTerm.toLowerCase());
     });
+    
+    // Helper function for article type labels
+    const getArticleTypeLabel = (type: ArticleType): string => {
+        const labels: Record<ArticleType, string> = {
+            'comparison': 'Vergelijking',
+            'list': 'Toplijst',
+            'guide': 'Koopgids',
+            'informational': 'Informatief'
+        };
+        return labels[type] || type;
+    };
 
     // --- RENDER ---
     return (
@@ -840,7 +909,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                     <span className="ml-auto bg-slate-700 text-xs px-2 py-0.5 rounded-full">{customProducts.length}</span>
                                 )}
                                 {!sidebarCollapsed && item.id === 'articles' && (
-                                    <span className="ml-auto bg-slate-700 text-xs px-2 py-0.5 rounded-full">{savedArticles.length}</span>
+                                    <span className="ml-auto bg-slate-700 text-xs px-2 py-0.5 rounded-full">{articles.length}</span>
                                 )}
                             </button>
                         ))}
@@ -940,7 +1009,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                 <i className="fas fa-arrow-up"></i> +5
                                             </span>
                                         </div>
-                                        <div className="text-3xl font-black text-white mb-1">{savedArticles.length}</div>
+                                        <div className="text-3xl font-black text-white mb-1">{articles.length}</div>
                                         <div className="text-slate-400 text-sm">Artikelen</div>
                                     </div>
                                     
@@ -1823,184 +1892,428 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         {/* === ARTICLES TAB === */}
                         {activeTab === 'articles' && (
                             <div className="animate-fade-in">
-                                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                                    {/* Article Studio - Left Panel */}
-                                    <div className="xl:col-span-2 space-y-6">
-                                        {/* Article Generator */}
-                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                                            <div className="bg-gradient-to-r from-green-900/30 to-slate-900 p-4 border-b border-slate-800">
-                                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                                    <i className="fas fa-pen-fancy text-green-400"></i> Artikel Studio
-                                                </h2>
-                                                <p className="text-sm text-slate-400 mt-1">Genereer professionele artikelen met AI</p>
-                                            </div>
-                                            
-                                            <div className="p-6 space-y-5">
-                                                {/* Template Selection */}
-                                                <div>
-                                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Template Type</label>
-                                                    <div className="grid grid-cols-4 gap-3">
-                                                        {[
-                                                            { type: 'guide', icon: 'fa-book', label: 'Koopgids', desc: 'Complete gids' },
-                                                            { type: 'list', icon: 'fa-list-ol', label: 'Toplijst', desc: 'Top 5/10 lijst' },
-                                                            { type: 'comparison', icon: 'fa-balance-scale', label: 'Vergelijking', desc: 'A vs B' },
-                                                            { type: 'informational', icon: 'fa-lightbulb', label: 'Informatief', desc: 'Algemeen artikel' }
-                                                        ].map(t => (
-                                                            <button
-                                                                key={t.type}
-                                                                onClick={() => setStudioType(t.type as ArticleType)}
-                                                                className={`
-                                                                    p-4 rounded-xl border text-center transition-all
-                                                                    ${studioType === t.type 
-                                                                        ? 'bg-green-600/20 border-green-500/50 text-green-400' 
-                                                                        : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-white'
-                                                                    }
-                                                                `}
-                                                            >
-                                                                <i className={`fas ${t.icon} text-xl mb-2`}></i>
-                                                                <div className="font-medium text-sm">{t.label}</div>
-                                                                <div className="text-xs opacity-60">{t.desc}</div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                {/* Article Sub-Navigation */}
+                                <div className="flex flex-wrap gap-2 mb-6 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                                    {[
+                                        { id: 'generate', icon: 'fa-magic', label: 'Genereren', color: 'green' },
+                                        { id: 'list', icon: 'fa-list', label: `Artikelen (${articles.length})`, color: 'slate' }
+                                    ].map(sub => (
+                                        <button
+                                            key={sub.id}
+                                            onClick={() => { setArticleSubTab(sub.id as any); setEditingArticle(null); }}
+                                            className={`
+                                                flex-1 min-w-[120px] flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium text-sm transition-all
+                                                ${articleSubTab === sub.id 
+                                                    ? `bg-${sub.color}-600 text-white shadow-lg` 
+                                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                                }
+                                            `}
+                                        >
+                                            <i className={`fas ${sub.icon}`}></i>
+                                            <span className="hidden sm:inline">{sub.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Article Generator */}
+                                {articleSubTab === 'generate' && (
+                                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                                        {/* Article Studio - Left Panel */}
+                                        <div className="xl:col-span-2 space-y-6">
+                                            {/* Article Generator */}
+                                            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                                <div className="bg-gradient-to-r from-green-900/30 to-slate-900 p-4 border-b border-slate-800">
+                                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                                        <i className="fas fa-pen-fancy text-green-400"></i> Artikel Studio
+                                                    </h2>
+                                                    <p className="text-sm text-slate-400 mt-1">Genereer professionele artikelen met AI</p>
+                                                </div>
+                                                
+                                                <div className="p-6 space-y-5">
+                                                    {/* Template Selection */}
                                                     <div>
-                                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Categorie</label>
-                                                        <select 
-                                                            value={studioCategory} 
-                                                            onChange={(e) => setStudioCategory(e.target.value)}
-                                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-green-500 transition cursor-pointer"
-                                                        >
-                                                            {Object.entries(CATEGORIES).map(([k, v]) => (
-                                                                <option key={k} value={k}>{v.name}</option>
+                                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Template Type</label>
+                                                        <div className="grid grid-cols-4 gap-3">
+                                                            {[
+                                                                { type: 'guide', icon: 'fa-book', label: 'Koopgids', desc: 'Complete gids' },
+                                                                { type: 'list', icon: 'fa-list-ol', label: 'Toplijst', desc: 'Top 5/10 lijst' },
+                                                                { type: 'comparison', icon: 'fa-balance-scale', label: 'Vergelijking', desc: 'A vs B' },
+                                                                { type: 'informational', icon: 'fa-lightbulb', label: 'Informatief', desc: 'Algemeen artikel' }
+                                                            ].map(t => (
+                                                                <button
+                                                                    key={t.type}
+                                                                    onClick={() => setStudioType(t.type as ArticleType)}
+                                                                    className={`
+                                                                        p-4 rounded-xl border text-center transition-all
+                                                                        ${studioType === t.type 
+                                                                            ? 'bg-green-600/20 border-green-500/50 text-green-400' 
+                                                                            : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-white'
+                                                                        }
+                                                                    `}
+                                                                >
+                                                                    <i className={`fas ${t.icon} text-xl mb-2`}></i>
+                                                                    <div className="font-medium text-sm">{t.label}</div>
+                                                                    <div className="text-xs opacity-60">{t.desc}</div>
+                                                                </button>
                                                             ))}
-                                                        </select>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Onderwerp / Titel</label>
-                                                        <input 
-                                                            type="text" 
-                                                            value={studioTopic} 
-                                                            onChange={(e) => setStudioTopic(e.target.value)}
-                                                            placeholder="Bijv: De Beste Airfryers van 2026..."
-                                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-green-500 transition"
-                                                        />
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Categorie</label>
+                                                            <select 
+                                                                value={studioCategory} 
+                                                                onChange={(e) => setStudioCategory(e.target.value)}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-green-500 transition cursor-pointer"
+                                                            >
+                                                                {Object.entries(CATEGORIES).map(([k, v]) => (
+                                                                    <option key={k} value={k}>{v.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Onderwerp / Titel</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={studioTopic} 
+                                                                onChange={(e) => setStudioTopic(e.target.value)}
+                                                                placeholder="Bijv: De Beste Airfryers van 2026..."
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-green-500 transition"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <button 
+                                                        onClick={handleGenerateArticle} 
+                                                        disabled={isProcessing || !studioTopic.trim()}
+                                                        className="w-full bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white py-4 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 transition-all"
+                                                    >
+                                                        {isProcessing ? (
+                                                            <><i className="fas fa-spinner fa-spin"></i> AI schrijft artikel...</>
+                                                        ) : (
+                                                            <><i className="fas fa-magic"></i> Genereer Artikel</>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Generated Article Preview */}
+                                            {generatedArticle && (
+                                                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
+                                                    <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
+                                                        <h3 className="font-bold text-white flex items-center gap-2">
+                                                            <i className="fas fa-file-alt text-green-400"></i> Preview
+                                                        </h3>
+                                                        <div className="flex gap-2">
+                                                            <button 
+                                                                onClick={handleSaveArticle}
+                                                                className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                                                            >
+                                                                <i className="fas fa-save"></i> Opslaan
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setGeneratedArticle(null)}
+                                                                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                                                            >
+                                                                Annuleren
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-6">
+                                                        <h2 className="text-2xl font-bold text-white mb-4">{generatedArticle.title}</h2>
+                                                        {generatedArticle.summary && (
+                                                            <p className="text-slate-400 mb-4 leading-relaxed">{generatedArticle.summary}</p>
+                                                        )}
+                                                        {generatedArticle.htmlContent && (
+                                                            <div 
+                                                                className="article-preview"
+                                                                dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
+                                                            />
+                                                        )}
                                                     </div>
                                                 </div>
-
-                                                <button 
-                                                    onClick={handleGenerateArticle} 
-                                                    disabled={isProcessing || !studioTopic.trim()}
-                                                    className="w-full bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white py-4 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 transition-all"
-                                                >
-                                                    {isProcessing ? (
-                                                        <><i className="fas fa-spinner fa-spin"></i> AI schrijft artikel...</>
-                                                    ) : (
-                                                        <><i className="fas fa-magic"></i> Genereer Artikel</>
-                                                    )}
-                                                </button>
-                                            </div>
+                                            )}
                                         </div>
 
-                                        {/* Generated Article Preview */}
-                                        {generatedArticle && (
+                                        {/* Quick Stats - Right Panel */}
+                                        <div className="xl:col-span-1">
+                                            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden sticky top-24 p-6">
+                                                <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                                                    <i className="fas fa-chart-bar text-blue-400"></i> Statistieken
+                                                </h3>
+                                                <div className="space-y-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-400 text-sm">Totaal artikelen</span>
+                                                        <span className="text-white font-bold">{articles.length}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-400 text-sm">Koopgidsen</span>
+                                                        <span className="text-blue-400 font-bold">{articles.filter(a => a.type === 'guide').length}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-400 text-sm">Toplijsten</span>
+                                                        <span className="text-purple-400 font-bold">{articles.filter(a => a.type === 'list').length}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-400 text-sm">Vergelijkingen</span>
+                                                        <span className="text-green-400 font-bold">{articles.filter(a => a.type === 'comparison').length}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-400 text-sm">Informatief</span>
+                                                        <span className="text-yellow-400 font-bold">{articles.filter(a => a.type === 'informational').length}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Article List with Editor */}
+                                {articleSubTab === 'list' && (
+                                    <div className="space-y-6">
+                                        {/* Article Editor Modal */}
+                                        {editingArticle && (
                                             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden animate-fade-in">
-                                                <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
-                                                    <h3 className="font-bold text-white flex items-center gap-2">
-                                                        <i className="fas fa-file-alt text-green-400"></i> Preview
-                                                    </h3>
+                                                <div className="bg-gradient-to-r from-blue-900/30 to-slate-900 p-4 border-b border-slate-800 flex items-center justify-between">
+                                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                                        <i className="fas fa-edit text-blue-400"></i> Artikel Bewerken
+                                                    </h2>
                                                     <div className="flex gap-2">
                                                         <button 
-                                                            onClick={handleSaveArticle}
+                                                            onClick={handleSaveEditedArticle}
                                                             className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
                                                         >
                                                             <i className="fas fa-save"></i> Opslaan
                                                         </button>
                                                         <button 
-                                                            onClick={() => setGeneratedArticle(null)}
+                                                            onClick={() => setEditingArticle(null)}
                                                             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
                                                         >
                                                             Annuleren
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <div className="p-6">
-                                                    <h2 className="text-2xl font-bold text-white mb-4">{generatedArticle.title}</h2>
-                                                    {generatedArticle.summary && (
-                                                        <p className="text-slate-400 mb-4 leading-relaxed">{generatedArticle.summary}</p>
-                                                    )}
-                                                    {generatedArticle.htmlContent && (
-                                                        <div 
-                                                            className="article-preview"
-                                                            dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
+                                                <div className="p-6 space-y-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Titel</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={editingArticle.title || ''} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, title: e.target.value})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Type</label>
+                                                            <select 
+                                                                value={editingArticle.type} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, type: e.target.value as ArticleType})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
+                                                            >
+                                                                <option value="comparison">Vergelijking</option>
+                                                                <option value="list">Toplijst</option>
+                                                                <option value="guide">Koopgids</option>
+                                                                <option value="informational">Informatief</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Categorie</label>
+                                                            <select 
+                                                                value={editingArticle.category} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, category: e.target.value})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
+                                                            >
+                                                                {Object.entries(CATEGORIES).map(([k, v]) => (
+                                                                    <option key={k} value={k}>{v.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Auteur</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={editingArticle.author || ''} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, author: e.target.value})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Samenvatting (30-40 woorden)</label>
+                                                        <textarea 
+                                                            value={editingArticle.summary || ''} 
+                                                            onChange={(e) => setEditingArticle({...editingArticle, summary: e.target.value})}
+                                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition h-24 resize-none"
                                                         />
-                                                    )}
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Meta Description (max 160 karakters)</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={editingArticle.metaDescription || ''} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, metaDescription: e.target.value.substring(0, 160)})}
+                                                                maxLength={160}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                            <div className="text-xs text-slate-500 mt-1">{(editingArticle.metaDescription || '').length}/160</div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Tags (komma-gescheiden)</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={(editingArticle.tags || []).join(', ')} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, tags: e.target.value.split(',').map(t => t.trim()).filter(t => t)})}
+                                                                placeholder="tag1, tag2, tag3"
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Afbeelding URL</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={editingArticle.imageUrl || ''} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, imageUrl: e.target.value})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Slug (auto-gegenereerd)</label>
+                                                            <input 
+                                                                type="text" 
+                                                                value={editingArticle.slug || generateArticleSlug(editingArticle)} 
+                                                                onChange={(e) => setEditingArticle({...editingArticle, slug: e.target.value})}
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">HTML Content</label>
+                                                        <textarea 
+                                                            value={editingArticle.htmlContent || ''} 
+                                                            onChange={(e) => setEditingArticle({...editingArticle, htmlContent: e.target.value})}
+                                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition h-64 resize-y font-mono text-sm"
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
-                                    </div>
 
-                                    {/* Published Articles - Right Panel */}
-                                    <div className="xl:col-span-1">
-                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden sticky top-24">
+                                        {/* Article List Table */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                                             <div className="bg-slate-950 p-4 border-b border-slate-800">
-                                                <div className="flex items-center justify-between">
-                                                    <h3 className="font-bold text-white flex items-center gap-2">
-                                                        <i className="fas fa-newspaper text-blue-400"></i> Gepubliceerd
-                                                        <span className="text-xs text-slate-500">({savedArticles.length})</span>
-                                                    </h3>
-                                                </div>
-                                                {/* Search */}
-                                                <div className="mt-3 relative">
-                                                    <input 
-                                                        type="text"
-                                                        value={articleSearchTerm}
-                                                        onChange={e => setArticleSearchTerm(e.target.value)}
-                                                        placeholder="Zoeken in artikelen..."
-                                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white outline-none focus:border-blue-500"
-                                                    />
-                                                    <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                                        <i className="fas fa-newspaper text-green-400"></i> Alle Artikelen
+                                                    </h2>
+                                                    {/* Search */}
+                                                    <div className="relative">
+                                                        <input 
+                                                            type="text"
+                                                            value={articleSearchTerm}
+                                                            onChange={e => setArticleSearchTerm(e.target.value)}
+                                                            placeholder="Zoeken..."
+                                                            className="bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white outline-none focus:border-blue-500 w-48"
+                                                        />
+                                                        <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                                                    </div>
                                                 </div>
                                             </div>
                                             
-                                            <div className="divide-y divide-slate-800 max-h-[500px] overflow-y-auto custom-scroll">
+                                            {/* Table Header */}
+                                            <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 bg-slate-900/50 text-xs font-bold text-slate-500 uppercase border-b border-slate-800">
+                                                <div className="col-span-4">Titel</div>
+                                                <div className="col-span-2">Type</div>
+                                                <div className="col-span-2">Categorie</div>
+                                                <div className="col-span-2">Datum</div>
+                                                <div className="col-span-2">Acties</div>
+                                            </div>
+                                            
+                                            {/* Article List */}
+                                            <div className="divide-y divide-slate-800 max-h-[600px] overflow-y-auto custom-scroll">
                                                 {filteredArticles.length === 0 ? (
-                                                    <div className="p-8 text-center text-slate-500">
-                                                        <i className="fas fa-file-alt text-3xl mb-2"></i>
-                                                        <div className="text-sm">Geen artikelen gevonden</div>
+                                                    <div className="p-12 text-center text-slate-500">
+                                                        <i className="fas fa-newspaper text-4xl mb-3"></i>
+                                                        <div>Geen artikelen gevonden</div>
                                                     </div>
                                                 ) : (
                                                     filteredArticles.map(article => (
                                                         <div 
                                                             key={article.id} 
-                                                            className="p-4 hover:bg-slate-800/50 transition group"
+                                                            className="grid grid-cols-12 gap-4 px-4 py-4 items-center hover:bg-slate-800/50 transition"
                                                         >
-                                                            <div className="flex items-start justify-between gap-3">
-                                                                <div className="flex-1 min-w-0">
-                                                                    <h4 className="font-medium text-white text-sm truncate">{article.title}</h4>
-                                                                    <div className="flex items-center gap-2 mt-1">
-                                                                        <span className={`
-                                                                            text-xs px-2 py-0.5 rounded
-                                                                            ${article.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
-                                                                              article.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
-                                                                              article.type === 'informational' ? 'bg-yellow-600/20 text-yellow-400' :
-                                                                              'bg-green-600/20 text-green-400'}
-                                                                        `}>
-                                                                            {article.type === 'guide' ? 'Gids' : 
-                                                                             article.type === 'list' ? 'Toplijst' : 
-                                                                             article.type === 'informational' ? 'Informatief' : 'Vergelijking'}
-                                                                        </span>
-                                                                        <span className="text-xs text-slate-500">{article.date}</span>
+                                                            <div className="col-span-12 md:col-span-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    {article.imageUrl && (
+                                                                        <img 
+                                                                            src={article.imageUrl} 
+                                                                            className="w-12 h-12 object-cover rounded-lg flex-shrink-0" 
+                                                                        />
+                                                                    )}
+                                                                    <div className="min-w-0">
+                                                                        <div className="font-medium text-white text-sm truncate">{article.title}</div>
+                                                                        <div className="text-xs text-slate-500 md:hidden">
+                                                                            {getArticleTypeLabel(article.type)} • {CATEGORIES[article.category]?.name}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
+                                                            </div>
+                                                            <div className="hidden md:block col-span-2">
+                                                                <span className={`
+                                                                    text-xs px-2 py-1 rounded
+                                                                    ${article.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
+                                                                      article.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
+                                                                      article.type === 'comparison' ? 'bg-green-600/20 text-green-400' :
+                                                                      'bg-yellow-600/20 text-yellow-400'}
+                                                                `}>
+                                                                    {getArticleTypeLabel(article.type)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="hidden md:block col-span-2 text-sm text-slate-400">
+                                                                {CATEGORIES[article.category]?.name || article.category}
+                                                            </div>
+                                                            <div className="hidden md:block col-span-2 text-sm text-slate-400">
+                                                                {article.date}
+                                                                {article.lastUpdated && (
+                                                                    <div className="text-xs text-green-400">
+                                                                        <i className="fas fa-sync-alt mr-1"></i>
+                                                                        {new Date(article.lastUpdated).toLocaleDateString('nl-NL')}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="col-span-12 md:col-span-2 flex gap-2">
+                                                                <button 
+                                                                    onClick={() => handleEditArticle(article)}
+                                                                    className="text-blue-400 hover:text-blue-300 transition p-2 bg-blue-600/10 rounded-lg"
+                                                                    title="Bewerken"
+                                                                >
+                                                                    <i className="fas fa-edit"></i>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleRewriteArticle(article)}
+                                                                    disabled={isProcessing}
+                                                                    className="text-purple-400 hover:text-purple-300 transition p-2 bg-purple-600/10 rounded-lg disabled:opacity-50"
+                                                                    title="Herschrijven met AI"
+                                                                >
+                                                                    <i className="fas fa-sync-alt"></i>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => window.open(`/artikelen/${article.slug || generateArticleSlug(article)}`, '_blank')}
+                                                                    className="text-green-400 hover:text-green-300 transition p-2 bg-green-600/10 rounded-lg"
+                                                                    title="Preview"
+                                                                >
+                                                                    <i className="fas fa-eye"></i>
+                                                                </button>
                                                                 <button 
                                                                     onClick={() => handleDeleteArticle(article.id)}
-                                                                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition p-1"
+                                                                    className="text-red-400 hover:text-red-300 transition p-2 bg-red-600/10 rounded-lg"
                                                                     title="Verwijderen"
                                                                 >
-                                                                    <i className="fas fa-trash text-sm"></i>
+                                                                    <i className="fas fa-trash"></i>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -2009,7 +2322,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         )}
                     </div>
