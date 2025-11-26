@@ -31,8 +31,12 @@ if (!isBolConfigured) {
     console.warn('[BOL] Warning: Bol.com API credentials not fully configured.');
     console.warn('[BOL] Required environment variables: BOL_CLIENT_ID, BOL_CLIENT_SECRET, BOL_SITE_ID');
     console.warn('[BOL] Product import features will not work until credentials are provided.');
+    if (!SITE_ID) {
+        console.warn('[BOL] Warning: BOL_SITE_ID is not set - affiliate URLs will not generate correctly');
+    }
 } else {
     console.log('[BOL] Bol.com Marketing API configured successfully');
+    console.log(`[BOL] Affiliate Site ID: ${SITE_ID}`);
 }
 
 // AI API Configuration (Server-side only)
@@ -297,7 +301,8 @@ app.post('/api/bol/import', async (req, res) => {
             });
         }
 
-        console.log(`[BOL] Import successful: ${product.title} - €${price} - Affiliate: ${affiliateUrl.substring(0, 50)}...`);
+        console.log(`[BOL] Import successful: ${product.title} - €${price}`);
+        console.log(`[BOL] Affiliate URL: ${affiliateUrl}`);
         
         res.json({
             title: product.title,
@@ -589,6 +594,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
                 // Generate proper affiliate URL
                 const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+                console.log(`[${timestamp}] [ADMIN] Generated affiliate URL for ${product.ean}: ${affiliateUrl}`);
 
                 const specs = {};
                 if (product.specificationGroups) {
@@ -696,6 +702,7 @@ app.post('/api/admin/import/url', async (req, res) => {
         // Generate proper affiliate URL
         const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${ean}/`;
         const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+        console.log(`[${timestamp}] [ADMIN] Generated affiliate URL: ${affiliateUrl}`);
 
         const specs = {};
         if (product.specificationGroups) {
@@ -792,6 +799,7 @@ app.post('/api/admin/import/by-category', async (req, res) => {
                 // Generate proper affiliate URL
                 const productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/p/${product.ean}/`;
                 const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+                console.log(`[${timestamp}] [ADMIN] Generated affiliate URL for ${product.ean}: ${affiliateUrl}`);
 
                 const specs = {};
                 if (product.specificationGroups) {
