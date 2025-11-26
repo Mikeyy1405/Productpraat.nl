@@ -160,21 +160,36 @@ async function fetchBolImages(ean, token, fallbackImage) {
             { headers: getBolHeaders(token) }
         );
         
-        const images = response.data.images || [];
-        if (images.length === 0) {
+        const mediaData = response.data;
+        let allImages = [];
+        let mainImage = fallbackImage;
+        
+        if (mediaData.images && mediaData.images.length > 0) {
+            // Extract all image URLs and ensure HTTPS
+            allImages = mediaData.images
+                .sort((a, b) => (b.width * b.height) - (a.width * a.height))
+                .map(img => {
+                    let url = img.url || '';
+                    if (url.startsWith('http:')) url = url.replace('http:', 'https:');
+                    return url;
+                })
+                .filter(url => url)
+                .slice(0, 5); // Max 5 images
+            
+            // Use first image as main image
+            if (allImages.length > 0) {
+                mainImage = allImages[0];
+            }
+        }
+        
+        console.log(`[BOL] Fetched ${allImages.length} images for EAN ${ean}`);
+        
+        if (allImages.length === 0) {
+            console.warn(`[BOL] Warning: No images found for ${ean}`);
             return { images: [fallbackImage], mainImage: fallbackImage };
         }
         
-        // Sort by size (largest first) and get URLs
-        const imageUrls = images
-            .sort((a, b) => (b.width * b.height) - (a.width * a.height))
-            .map(img => img.url.replace('http:', 'https:'))
-            .slice(0, 5); // Max 5 images
-        
-        return { 
-            images: imageUrls, 
-            mainImage: imageUrls[0] || fallbackImage 
-        };
+        return { images: allImages, mainImage };
     } catch (error) {
         console.error(`[BOL] Error fetching images for ${ean}:`, error.message);
         return { images: [fallbackImage], mainImage: fallbackImage };
@@ -246,7 +261,7 @@ app.post('/api/bol/search-list', async (req, res) => {
                 image: img,
                 url: affiliateUrl,
                 rawUrl: productUrl,
-                price: p.offer?.price || 0
+                price: p.offer?.price || p.offer?.listPrice || 0
             };
         });
         res.json({ products });
@@ -300,8 +315,13 @@ app.post('/api/bol/import', async (req, res) => {
             console.log(`[BOL] Fetched ${bolReviews.totalReviews} reviews for product ${ean}`);
         }
 
-        let price = 0;
-        if (product.offer?.price) price = product.offer.price;
+        // Improved price extraction with listPrice fallback
+        const offer = product.offer || {};
+        const price = offer.price || offer.listPrice || 0;
+        
+        if (!price) {
+            console.warn(`[BOL] Warning: No price found for ${ean}`);
+        }
 
         // Get product URL and generate affiliate link
         let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${ean}/`;
@@ -662,7 +682,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
 
                 const bolData = {
                     title: product.title,
-                    price: product.offer?.price || 0,
+                    price: product.offer?.price || product.offer?.listPrice || 0,
                     image: imageUrl,
                     images,
                     ean: product.ean,
@@ -771,7 +791,7 @@ app.post('/api/admin/import/url', async (req, res) => {
 
         const bolData = {
             title: product.title,
-            price: product.offer?.price || 0,
+            price: product.offer?.price || product.offer?.listPrice || 0,
             image: imageUrl,
             images,
             ean,
@@ -869,7 +889,7 @@ app.post('/api/admin/import/by-category', async (req, res) => {
 
                 const bolData = {
                     title: product.title,
-                    price: product.offer?.price || 0,
+                    price: product.offer?.price || product.offer?.listPrice || 0,
                     image: imageUrl,
                     images,
                     ean: product.ean,
