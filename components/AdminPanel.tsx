@@ -276,12 +276,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             // Store abort function
             abortControllerRef.current = abort;
             
-            // Wait for all products to be processed
+            // Wait for all products to be processed by server (SSE phase completes at 100%)
             const candidates = await promise;
             
             addLog(`✅ ${candidates.length} producten ontvangen van server`);
             
-            // Now save each candidate to the database
+            // Reset progress for save phase - separate phase from SSE
+            setProgress(0);
+            setLoadingMessage('Producten opslaan in database...');
+            
+            // Now save each candidate to the database (save phase)
+            const totalToSave = candidates.length;
+            let savedCount = 0;
+            
             for (const [index, candidate] of candidates.entries()) {
                 if (stopProcessRef.current) {
                     addLog(`⏹️ Import gestopt door gebruiker`);
@@ -289,9 +296,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                     break;
                 }
 
+                // Update save phase progress
+                setProgress(Math.round((index / totalToSave) * 100));
                 setBulkProgress(prev => ({
                     ...prev,
                     current: index + 1,
+                    total: totalToSave,
                     statuses: prev.statuses.map((s, i) => i === index ? 'processing' : s)
                 }));
 
@@ -338,6 +348,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                     };
 
                     await onAddProduct(newProduct);
+                    savedCount++;
                     addLog(`✅ Toegevoegd: ${newProduct.brand} ${newProduct.model}`);
                     
                     setBulkProgress(prev => ({
@@ -353,9 +364,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         statuses: prev.statuses.map((s, i) => i === index ? 'error' : s)
                     }));
                 }
+                
+                // Update final progress
+                setProgress(Math.round(((index + 1) / totalToSave) * 100));
             }
 
-            addLog(`🎉 Bulk Category Import Voltooid: ${candidates.length} producten verwerkt`);
+            setProgress(100);
+            addLog(`🎉 Bulk Category Import Voltooid: ${savedCount} producten opgeslagen`);
             showToast('Bulk category import voltooid!', 'success');
         } catch (e) {
             const errorMsg = e instanceof Error ? e.message : String(e);

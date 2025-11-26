@@ -107,8 +107,7 @@ async function getBolToken() {
         return cachedToken;
     } catch (error) {
         console.error("[BOL] Auth Error:", error.response?.data || error.message);
-        const errorMsg = error.response?.data?.error_description || error.message || "Authenticatie fout";
-        throw new Error(`Kon niet inloggen bij Bol.com: ${errorMsg}`);
+        throw new Error(`Kon niet inloggen bij Bol.com: ${extractErrorMessage(error, 'Authenticatie fout')}`);
     }
 }
 
@@ -150,6 +149,14 @@ const generateSlug = (brand, model) => {
         .replace(/-+/g, '-')           // Replace multiple - with single -
         .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
     return text || 'product';
+};
+
+// --- HELPER: Extract error message from various error formats ---
+const extractErrorMessage = (error, defaultMessage = 'Er is een fout opgetreden') => {
+    return error.response?.data?.error_description || 
+           error.response?.data?.error || 
+           error.message || 
+           defaultMessage;
 };
 
 // --- HELPER: Extract price from Bol.com offer with fallbacks ---
@@ -997,11 +1004,7 @@ app.post('/api/admin/import/url', async (req, res) => {
         });
     } catch (error) {
         console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.response?.data || error.message);
-        const errorMessage = error.response?.data?.error_description || 
-                            error.response?.data?.error || 
-                            error.message || 
-                            'Product import mislukt';
-        res.status(500).json({ error: errorMessage });
+        res.status(500).json({ error: extractErrorMessage(error, 'Product import mislukt') });
     }
 });
 

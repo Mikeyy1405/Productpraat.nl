@@ -138,9 +138,11 @@ export const aiService = {
             });
             
             const eventSource = new EventSource(`/api/admin/bulk/search-stream?${params}`);
+            let serverTotal = 0; // Track the total from server init event
             
             eventSource.addEventListener('init', (e) => {
                 const data = JSON.parse(e.data);
+                serverTotal = data.total;
                 onProgress({
                     phase: 'searching',
                     current: 0,
@@ -155,7 +157,7 @@ export const aiService = {
                 onProgress({
                     phase: data.phase,
                     current: 0,
-                    total: 0,
+                    total: serverTotal,
                     percentage: 0,
                     message: data.message
                 });
@@ -163,6 +165,7 @@ export const aiService = {
             
             eventSource.addEventListener('progress', (e) => {
                 const data = JSON.parse(e.data);
+                serverTotal = data.total; // Update total from server
                 onProgress({
                     phase: 'processing',
                     current: data.current,
@@ -175,11 +178,12 @@ export const aiService = {
             eventSource.addEventListener('product', (e) => {
                 const data = JSON.parse(e.data);
                 candidates.push(data.candidate);
+                const percentage = serverTotal > 0 ? Math.round(((data.index + 1) / serverTotal) * 100) : 0;
                 onProgress({
                     phase: 'processing',
                     current: data.index + 1,
-                    total: candidates.length + 1,
-                    percentage: Math.round(((data.index + 1) / (candidates.length + 1)) * 100),
+                    total: serverTotal,
+                    percentage,
                     message: data.message,
                     candidate: data.candidate
                 });
@@ -190,8 +194,8 @@ export const aiService = {
                 onProgress({
                     phase: 'processing',
                     current: data.index + 1,
-                    total: 0,
-                    percentage: 0,
+                    total: serverTotal,
+                    percentage: serverTotal > 0 ? Math.round(((data.index + 1) / serverTotal) * 100) : 0,
                     message: data.message,
                     error: data.message
                 });
