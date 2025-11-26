@@ -424,7 +424,7 @@ export const App: React.FC = () => {
                     <ul className="space-y-3 text-sm flex flex-col items-center">
                         {Object.entries(CATEGORIES).slice(0, 5).map(([k, c]) => (
                             <li key={k}>
-                                <button onClick={() => { setActiveCategory(k); setView('category'); window.scrollTo(0,0); }} className={`hover:${currentTheme.accentText} transition flex items-center gap-2 group`}>
+                                <button onClick={() => handleCategorySelect(k)} className={`hover:${currentTheme.accentText} transition flex items-center gap-2 group`}>
                                     <i className={`fas ${c.icon} text-slate-600 group-hover:${currentTheme.accentText} w-5`}></i> {c.name}
                                 </button>
                             </li>
@@ -434,8 +434,8 @@ export const App: React.FC = () => {
                 <div className="flex flex-col items-center">
                     <h4 className="font-bold text-white mb-6 uppercase text-sm tracking-wider">Service & Info</h4>
                     <ul className="space-y-3 text-sm flex flex-col items-center">
-                        <li><button onClick={() => { setView('about'); window.scrollTo(0,0); }} className="hover:text-white transition">Over ons</button></li>
-                        <li><button onClick={() => { setView('contact'); window.scrollTo(0,0); }} className="hover:text-white transition">Contact</button></li>
+                        <li><button onClick={() => handleNavigate('about')} className="hover:text-white transition">Over ons</button></li>
+                        <li><button onClick={() => handleNavigate('contact')} className="hover:text-white transition">Contact</button></li>
                         <li><a href="#" className="hover:text-white transition">Adverteren</a></li>
                     </ul>
                 </div>
@@ -505,7 +505,7 @@ export const App: React.FC = () => {
                                 <div className="container mx-auto px-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         {Object.entries(CATEGORIES).map(([k, d]) => (
-                                            <div key={k} onClick={() => { setActiveCategory(k); setView('category'); }} className={`${currentTheme.sectionBackground} p-6 rounded-2xl border ${currentTheme.borderColor} hover:border-${currentTheme.accentText} cursor-pointer transition flex flex-col items-center text-center`}>
+                                            <div key={k} onClick={() => handleCategorySelect(k)} className={`${currentTheme.sectionBackground} p-6 rounded-2xl border ${currentTheme.borderColor} hover:border-${currentTheme.accentText} cursor-pointer transition flex flex-col items-center text-center`}>
                                                 <i className={`fas ${d.icon} text-2xl mb-2 ${currentTheme.accentText}`}></i>
                                                 <h3 className="font-bold text-slate-200">{d.name}</h3>
                                             </div>
@@ -664,7 +664,7 @@ export const App: React.FC = () => {
                     )}
                     {view === 'article' && selectedArticle && (
                         <div className={`container mx-auto px-4 py-8 max-w-4xl ${currentTheme.pageBackground}`}>
-                            <button onClick={() => setView('home')} className="text-slate-400 mb-4">&larr; Terug</button>
+                            <button onClick={() => handleNavigate('home')} className="text-slate-400 mb-4">&larr; Terug</button>
                             <h1 className="text-4xl font-bold text-white mb-6">{selectedArticle.title}</h1>
                             <div dangerouslySetInnerHTML={{ __html: selectedArticle.htmlContent }} className="prose prose-invert max-w-none" />
                         </div>
