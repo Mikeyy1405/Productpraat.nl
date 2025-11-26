@@ -308,7 +308,8 @@ app.post('/api/bol/search-list', async (req, res) => {
             'search-term': term,
             'country-code': 'NL',
             'page': 1,
-            'include': 'IMAGE,OFFER'
+            'include-image': true,
+            'include-offer': true
         };
         
         // Add category filter if provided
@@ -382,7 +383,9 @@ app.post('/api/bol/search-products', async (req, res) => {
                 'search-term': searchTerm.trim(),
                 'country-code': 'NL',
                 'page': currentPage,
-                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                'include-image': true,
+                'include-offer': true,
+                'include-specifications': true
             };
             
             const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
@@ -506,7 +509,9 @@ app.post('/api/bol/import-by-ean', async (req, res) => {
             params: { 
                 'search-term': ean,
                 'country-code': 'NL',
-                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                'include-image': true,
+                'include-offer': true,
+                'include-specifications': true
             },
             headers: getBolHeaders(token)
         });
@@ -640,7 +645,9 @@ app.post('/api/bol/import', async (req, res) => {
             params: { 
                 'search-term': searchTerm,
                 'country-code': 'NL',
-                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                'include-image': true,
+                'include-offer': true,
+                'include-specifications': true
             },
             headers: getBolHeaders(token)
         });
@@ -1102,7 +1109,9 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
         const searchParams = { 
             'search-term': category,
             'country-code': 'NL',
-            'include': 'IMAGE,OFFER,SPECIFICATIONS'
+            'include-image': true,
+            'include-offer': true,
+            'include-specifications': true
         };
         
         // Add category ID filter if provided
@@ -1232,7 +1241,9 @@ app.get('/api/admin/bulk/search-stream', async (req, res) => {
         const searchParams = { 
             'search-term': category,
             'country-code': 'NL',
-            'include': 'IMAGE,OFFER,SPECIFICATIONS'
+            'include-image': true,
+            'include-offer': true,
+            'include-specifications': true
         };
         
         if (categoryId) {
@@ -1451,7 +1462,9 @@ app.post('/api/admin/import/url', async (req, res) => {
                     params: { 
                         'search-term': searchTerm,
                         'country-code': 'NL',
-                        'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                        'include-image': true,
+                        'include-offer': true,
+                        'include-specifications': true
                     },
                     headers: getBolHeaders(token)
                 });
@@ -1646,7 +1659,9 @@ app.post('/api/admin/import/by-category', async (req, res) => {
             params: { 
                 'search-term': searchTerm,
                 'country-code': 'NL',
-                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+                'include-image': true,
+                'include-offer': true,
+                'include-specifications': true
             },
             headers: getBolHeaders(token)
         });
