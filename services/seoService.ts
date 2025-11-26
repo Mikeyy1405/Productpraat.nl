@@ -26,7 +26,9 @@ export const seoService = {
         // Open Graph (Social Media)
         setMeta('og:title', title, 'property');
         setMeta('og:description', description, 'property');
-        setMeta('og:type', 'website', 'property');
+        setMeta('og:type', 'product', 'property');
+        setMeta('og:site_name', 'ProductPraat.nl', 'property');
+        setMeta('og:locale', 'nl_NL', 'property');
         if (image) setMeta('og:image', image, 'property');
         if (canonicalUrl) setMeta('og:url', canonicalUrl, 'property');
 
@@ -34,6 +36,7 @@ export const seoService = {
         setMeta('twitter:card', 'summary_large_image', 'name');
         setMeta('twitter:title', title, 'name');
         setMeta('twitter:description', description, 'name');
+        setMeta('twitter:site', '@ProductPraat', 'name');
         if (image) setMeta('twitter:image', image, 'name');
 
         // Canonical URL
@@ -70,21 +73,57 @@ export const seoService = {
         // Verwijder oude schema's
         const oldScript = document.getElementById('json-ld-schema');
         if (oldScript) oldScript.remove();
+        
+        const oldBreadcrumbScript = document.getElementById('json-ld-breadcrumb');
+        if (oldBreadcrumbScript) oldBreadcrumbScript.remove();
 
         // Get canonical URL for the product
         const canonicalUrl = getCanonicalUrl(product);
+        const baseUrl = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+        
+        // Use multiple images if available
+        const productImages = product.images && product.images.length > 0 
+            ? product.images 
+            : [product.image];
 
-        const schema = {
+        // Build aggregate rating from Bol.com reviews if available
+        let aggregateRating: Record<string, unknown> | undefined;
+        if (product.bolReviewsRaw && product.bolReviewsRaw.totalReviews > 0) {
+            aggregateRating = {
+                "@type": "AggregateRating",
+                "ratingValue": product.bolReviewsRaw.averageRating.toString(),
+                "reviewCount": product.bolReviewsRaw.totalReviews.toString(),
+                "bestRating": "5",
+                "worstRating": "1"
+            };
+        } else {
+            // Fallback to ProductPraat score (scaled from 10 to 5)
+            aggregateRating = {
+                "@type": "AggregateRating",
+                "ratingValue": (product.score / 2).toFixed(1),
+                "reviewCount": "1",
+                "bestRating": "5",
+                "worstRating": "1"
+            };
+        }
+
+        // Get category name
+        const categoryName = CATEGORIES[product.category]?.name || product.category;
+
+        const schema: Record<string, unknown> = {
             "@context": "https://schema.org/",
             "@type": "Product",
             "name": `${product.brand} ${product.model}`,
-            "image": [product.image],
-            "description": product.description || product.longDescription?.substring(0, 160),
+            "image": productImages,
+            "description": product.metaDescription || product.description || product.longDescription?.substring(0, 160),
             "url": canonicalUrl,
+            "sku": product.ean || undefined,
+            "gtin13": product.ean || undefined,
             "brand": {
                 "@type": "Brand",
                 "name": product.brand
             },
+            "category": categoryName,
             "review": {
                 "@type": "Review",
                 "reviewRating": {
@@ -95,30 +134,84 @@ export const seoService = {
                 "author": {
                     "@type": "Organization",
                     "name": "ProductPraat Redactie"
-                }
+                },
+                "reviewBody": product.description || `Review van de ${product.brand} ${product.model}`
             },
-            "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": product.score.toString(),
-                "reviewCount": "1", // In echte app is dit dynamisch
-                "bestRating": "10",
-                "worstRating": "1"
-            },
+            "aggregateRating": aggregateRating,
             "offers": {
                 "@type": "Offer",
-                "url": product.affiliateUrl !== '#' ? product.affiliateUrl : canonicalUrl,
+                "url": product.affiliateUrl && product.affiliateUrl !== '#' ? product.affiliateUrl : canonicalUrl,
                 "priceCurrency": "EUR",
                 "price": product.price.toString(),
                 "availability": "https://schema.org/InStock",
-                "itemCondition": "https://schema.org/NewCondition"
+                "itemCondition": "https://schema.org/NewCondition",
+                "seller": {
+                    "@type": "Organization",
+                    "name": "Bol.com"
+                }
             }
         };
+
+        // Add pros and cons as additionalProperty
+        if (product.pros && product.pros.length > 0) {
+            schema.positiveNotes = {
+                "@type": "ItemList",
+                "itemListElement": product.pros.map((pro, index) => ({
+                    "@type": "ListItem",
+                    "position": index + 1,
+                    "name": pro
+                }))
+            };
+        }
+        
+        if (product.cons && product.cons.length > 0) {
+            schema.negativeNotes = {
+                "@type": "ItemList",
+                "itemListElement": product.cons.map((con, index) => ({
+                    "@type": "ListItem",
+                    "position": index + 1,
+                    "name": con
+                }))
+            };
+        }
 
         const script = document.createElement('script');
         script.id = 'json-ld-schema';
         script.type = 'application/ld+json';
         script.text = JSON.stringify(schema);
         document.head.appendChild(script);
+        
+        // Add breadcrumb schema
+        const breadcrumbSchema = {
+            "@context": "https://schema.org/",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Home",
+                    "item": baseUrl
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": categoryName,
+                    "item": `${baseUrl}/shop/${product.category}`
+                },
+                {
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": `${product.brand} ${product.model}`,
+                    "item": canonicalUrl
+                }
+            ]
+        };
+        
+        const breadcrumbScriptEl = document.createElement('script');
+        breadcrumbScriptEl.id = 'json-ld-breadcrumb';
+        breadcrumbScriptEl.type = 'application/ld+json';
+        breadcrumbScriptEl.text = JSON.stringify(breadcrumbSchema);
+        document.head.appendChild(breadcrumbScriptEl);
     },
 
     /**
@@ -127,6 +220,8 @@ export const seoService = {
     clearSchema: () => {
         const oldScript = document.getElementById('json-ld-schema');
         if (oldScript) oldScript.remove();
+        const oldBreadcrumbScript = document.getElementById('json-ld-breadcrumb');
+        if (oldBreadcrumbScript) oldBreadcrumbScript.remove();
         seoService.clearCanonicalUrl();
     }
 };

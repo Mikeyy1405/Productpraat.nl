@@ -637,6 +637,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         showToast(`${selectedProducts.size} producten verwijderd`, 'success');
     };
 
+    // Handle price sync for all products with EAN
+    const [isSyncingPrices, setIsSyncingPrices] = useState(false);
+    
+    const handleSyncPrices = async () => {
+        const productsWithEan = customProducts.filter(p => p.ean);
+        if (productsWithEan.length === 0) {
+            showToast('Geen producten met EAN gevonden', 'warning');
+            return;
+        }
+
+        setIsSyncingPrices(true);
+        addLog(`🔄 Start price sync voor ${productsWithEan.length} producten...`);
+        showToast(`Price sync gestart voor ${productsWithEan.length} producten`, 'info');
+
+        try {
+            const result = await aiService.syncPrices(productsWithEan.map(p => ({
+                id: p.id,
+                ean: p.ean,
+                price: p.price,
+                brand: p.brand,
+                model: p.model
+            })));
+
+            if (result.updates.length > 0) {
+                addLog(`✅ ${result.updates.length} prijzen geüpdatet:`);
+                result.updates.forEach(u => {
+                    addLog(`  - ${u.brand} ${u.model}: €${u.oldPrice} → €${u.newPrice}`);
+                });
+                showToast(`${result.updates.length} prijzen geüpdatet!`, 'success');
+            } else {
+                addLog(`ℹ️ Alle prijzen zijn actueel`);
+                showToast('Alle prijzen zijn actueel', 'info');
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addLog(`❌ Fout bij price sync: ${errorMsg}`);
+            showToast(`Fout: ${errorMsg}`, 'error');
+        } finally {
+            setIsSyncingPrices(false);
+        }
+    };
+
     const filteredArticles = savedArticles.filter(a => {
         if (!articleSearchTerm) return true;
         return a.title.toLowerCase().includes(articleSearchTerm.toLowerCase());
@@ -1586,6 +1628,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                         className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white hover:bg-slate-700 transition"
                                                     >
                                                         <i className={`fas fa-sort-${productSortOrder === 'asc' ? 'up' : 'down'}`}></i>
+                                                    </button>
+                                                    
+                                                    {/* Sync Prices Button */}
+                                                    <button
+                                                        onClick={handleSyncPrices}
+                                                        disabled={isSyncingPrices || customProducts.length === 0}
+                                                        className="bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-lg shadow-green-600/20"
+                                                    >
+                                                        {isSyncingPrices ? (
+                                                            <><i className="fas fa-spinner fa-spin"></i> Syncing...</>
+                                                        ) : (
+                                                            <><i className="fas fa-sync-alt"></i> Sync Prijzen</>
+                                                        )}
                                                     </button>
                                                 </div>
                                             </div>

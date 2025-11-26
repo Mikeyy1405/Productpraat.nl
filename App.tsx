@@ -613,20 +613,115 @@ export const App: React.FC = () => {
                     {(view === 'details' || view === 'product') && selectedProduct && (
                         <div className={`container mx-auto px-4 py-8 ${currentTheme.pageBackground}`}>
                             {/* Breadcrumbs */}
-                            <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+                            <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6" aria-label="Breadcrumb">
                                 <button onClick={() => handleNavigate('home')} className="hover:text-white transition">Home</button>
-                                <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                <i className="fas fa-chevron-right text-xs text-slate-600" aria-hidden="true"></i>
                                 <button onClick={() => handleCategorySelect(selectedProduct.category)} className="hover:text-white transition">
                                     {CATEGORIES[selectedProduct.category]?.name || selectedProduct.category}
                                 </button>
-                                <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                <i className="fas fa-chevron-right text-xs text-slate-600" aria-hidden="true"></i>
                                 <span className="text-white font-medium">{selectedProduct.brand} {selectedProduct.model}</span>
                             </nav>
                             <div className="grid lg:grid-cols-2 gap-8">
-                                <div className="bg-white p-8 rounded-xl border border-slate-800"><img src={selectedProduct.image} className="max-w-full max-h-96 object-contain mx-auto" referrerPolicy="no-referrer" /></div>
+                                {/* Image Gallery */}
+                                <div className="space-y-4">
+                                    <div className="bg-white p-8 rounded-xl border border-slate-800">
+                                        <img 
+                                            src={selectedProduct.image} 
+                                            alt={`${selectedProduct.brand} ${selectedProduct.model}`}
+                                            className="max-w-full max-h-96 object-contain mx-auto" 
+                                            referrerPolicy="no-referrer" 
+                                        />
+                                    </div>
+                                    {/* Thumbnail gallery if multiple images */}
+                                    {selectedProduct.images && selectedProduct.images.length > 1 && (
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                            {selectedProduct.images.slice(0, 5).map((img, idx) => (
+                                                <button 
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        // Update main image
+                                                        setSelectedProduct({...selectedProduct, image: img});
+                                                    }}
+                                                    className={`flex-shrink-0 w-20 h-20 bg-white rounded-lg border-2 overflow-hidden transition ${
+                                                        selectedProduct.image === img ? 'border-blue-500' : 'border-slate-700 hover:border-slate-500'
+                                                    }`}
+                                                >
+                                                    <img 
+                                                        src={img} 
+                                                        alt={`${selectedProduct.brand} ${selectedProduct.model} - afbeelding ${idx + 1}`}
+                                                        className="w-full h-full object-contain" 
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                                 <div>
                                     <h1 className="text-4xl font-bold text-white mb-4">{selectedProduct.brand} {selectedProduct.model}</h1>
-                                    <div className="text-4xl font-bold text-[#1877F2] mb-4">{selectedProduct.score}</div>
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className="text-4xl font-bold text-[#1877F2]">{selectedProduct.score}</div>
+                                        {/* Display Bol.com rating if available */}
+                                        {selectedProduct.bolReviewsRaw && selectedProduct.bolReviewsRaw.totalReviews > 0 && (
+                                            <div className="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg">
+                                                <div className="flex items-center gap-1">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <i 
+                                                            key={star} 
+                                                            className={`fas fa-star text-sm ${
+                                                                star <= Math.round(selectedProduct.bolReviewsRaw!.averageRating) 
+                                                                    ? 'text-yellow-400' 
+                                                                    : 'text-slate-600'
+                                                            }`}
+                                                        ></i>
+                                                    ))}
+                                                </div>
+                                                <span className="text-sm text-slate-400">
+                                                    ({selectedProduct.bolReviewsRaw.totalReviews} reviews)
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Price */}
+                                    <div className="text-3xl font-bold text-white mb-4">€{selectedProduct.price.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</div>
+                                    
+                                    {/* Pros and Cons */}
+                                    {(selectedProduct.pros?.length > 0 || selectedProduct.cons?.length > 0) && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                            {selectedProduct.pros && selectedProduct.pros.length > 0 && (
+                                                <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4">
+                                                    <h3 className="font-bold text-green-400 mb-2 flex items-center gap-2">
+                                                        <i className="fas fa-plus-circle"></i> Pluspunten
+                                                    </h3>
+                                                    <ul className="space-y-1">
+                                                        {selectedProduct.pros.map((pro, idx) => (
+                                                            <li key={idx} className="text-sm text-green-300 flex items-start gap-2">
+                                                                <i className="fas fa-check text-xs mt-1.5 text-green-400"></i>
+                                                                <span>{pro}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {selectedProduct.cons && selectedProduct.cons.length > 0 && (
+                                                <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4">
+                                                    <h3 className="font-bold text-red-400 mb-2 flex items-center gap-2">
+                                                        <i className="fas fa-minus-circle"></i> Minpunten
+                                                    </h3>
+                                                    <ul className="space-y-1">
+                                                        {selectedProduct.cons.map((con, idx) => (
+                                                            <li key={idx} className="text-sm text-red-300 flex items-start gap-2">
+                                                                <i className="fas fa-times text-xs mt-1.5 text-red-400"></i>
+                                                                <span>{con}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    
                                     {selectedProduct.keywords && selectedProduct.keywords.length > 0 && (
                                         <div className="flex flex-wrap gap-2 mb-4">
                                             {selectedProduct.keywords.map((kw, i) => (
@@ -635,7 +730,9 @@ export const App: React.FC = () => {
                                         </div>
                                     )}
                                     <div dangerouslySetInnerHTML={{ __html: selectedProduct.longDescription || '' }} className="prose prose-invert mb-8" />
-                                    <button onClick={() => window.open(selectedProduct.affiliateUrl, '_blank')} className={`w-full py-4 rounded-xl font-bold text-lg mb-8 ${currentTheme.buttonClass}`}>Bekijk aanbieding</button>
+                                    <button onClick={() => window.open(selectedProduct.affiliateUrl, '_blank')} className={`w-full py-4 rounded-xl font-bold text-lg mb-8 ${currentTheme.buttonClass}`}>
+                                        <i className="fas fa-external-link-alt mr-2"></i>Bekijk aanbieding
+                                    </button>
                                     <UserReviewSection productId={selectedProduct.id} />
                                 </div>
                             </div>
