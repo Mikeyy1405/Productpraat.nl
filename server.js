@@ -152,6 +152,12 @@ const generateSlug = (brand, model) => {
     return text || 'product';
 };
 
+// --- HELPER: Extract price from Bol.com offer with fallbacks ---
+const extractPrice = (offer) => {
+    if (!offer) return 0;
+    return offer.price || offer.listPrice || 0;
+};
+
 // --- HELPER: Fetch images from Bol.com media endpoint ---
 async function fetchBolImages(ean, token, fallbackImage) {
     try {
@@ -169,8 +175,8 @@ async function fetchBolImages(ean, token, fallbackImage) {
             allImages = mediaData.images
                 .sort((a, b) => (b.width * b.height) - (a.width * a.height))
                 .map(img => {
-                    let url = img.url || '';
-                    if (url.startsWith('http:')) url = url.replace('http:', 'https:');
+                    let url = img?.url || '';
+                    if (url && url.startsWith('http:')) url = url.replace('http:', 'https:');
                     return url;
                 })
                 .filter(url => url)
@@ -261,7 +267,7 @@ app.post('/api/bol/search-list', async (req, res) => {
                 image: img,
                 url: affiliateUrl,
                 rawUrl: productUrl,
-                price: p.offer?.price || p.offer?.listPrice || 0
+                price: extractPrice(p.offer)
             };
         });
         res.json({ products });
@@ -315,9 +321,8 @@ app.post('/api/bol/import', async (req, res) => {
             console.log(`[BOL] Fetched ${bolReviews.totalReviews} reviews for product ${ean}`);
         }
 
-        // Improved price extraction with listPrice fallback
-        const offer = product.offer || {};
-        const price = offer.price || offer.listPrice || 0;
+        // Extract price using helper function
+        const price = extractPrice(product.offer);
         
         if (!price) {
             console.warn(`[BOL] Warning: No price found for ${ean}`);
@@ -682,7 +687,7 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
 
                 const bolData = {
                     title: product.title,
-                    price: product.offer?.price || product.offer?.listPrice || 0,
+                    price: extractPrice(product.offer),
                     image: imageUrl,
                     images,
                     ean: product.ean,
@@ -791,7 +796,7 @@ app.post('/api/admin/import/url', async (req, res) => {
 
         const bolData = {
             title: product.title,
-            price: product.offer?.price || product.offer?.listPrice || 0,
+            price: extractPrice(product.offer),
             image: imageUrl,
             images,
             ean,
@@ -889,7 +894,7 @@ app.post('/api/admin/import/by-category', async (req, res) => {
 
                 const bolData = {
                     title: product.title,
-                    price: product.offer?.price || product.offer?.listPrice || 0,
+                    price: extractPrice(product.offer),
                     image: imageUrl,
                     images,
                     ean: product.ean,
