@@ -352,6 +352,240 @@ app.post('/api/bol/search-list', async (req, res) => {
     }
 });
 
+// Manual product search endpoint - returns detailed product info for selection
+app.post('/api/bol/search-products', async (req, res) => {
+    const { searchTerm, limit = 10 } = req.body;
+    const timestamp = new Date().toISOString();
+    
+    if (!searchTerm || !searchTerm.trim()) {
+        return res.status(400).json({ error: 'Zoekterm is verplicht', products: [] });
+    }
+    
+    console.log(`[${timestamp}] [BOL] Manual product search: "${searchTerm}"`);
+    
+    try {
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [BOL] API not configured`);
+            return res.status(503).json({ 
+                error: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.',
+                products: [] 
+            });
+        }
+        
+        const token = await getBolToken();
+        
+        // Search Bol.com for products
+        const searchParams = { 
+            'search-term': searchTerm.trim(),
+            'country-code': 'NL',
+            'page': 1,
+            'include': 'IMAGE,OFFER,SPECIFICATIONS'
+        };
+        
+        const response = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+            params: searchParams,
+            headers: getBolHeaders(token)
+        });
+        
+        const results = response.data.results || [];
+        console.log(`[${timestamp}] [BOL] Search found ${results.length} products`);
+        
+        if (results.length === 0) {
+            return res.json({ products: [], message: 'Geen producten gevonden' });
+        }
+        
+        // Map results to detailed product objects
+        const products = results.slice(0, Math.min(limit, results.length)).map(p => {
+            let img = p.image?.url || PLACEHOLDER_IMG;
+            if (img.startsWith('http:')) img = img.replace('http:', 'https:');
+            
+            // Generate affiliate URL
+            let productUrl = p.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${p.ean}/`;
+            productUrl = cleanBolUrl(productUrl);
+            const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(p.title)}`;
+            
+            // Extract price
+            const price = extractPrice(p.offer);
+            
+            // Extract brand from title or specs
+            let brand = '';
+            if (p.specificationGroups) {
+                for (const group of p.specificationGroups) {
+                    const brandSpec = group.specifications?.find(s => 
+                        s.name.toLowerCase() === 'merk' || s.name.toLowerCase() === 'brand'
+                    );
+                    if (brandSpec) {
+                        brand = brandSpec.value;
+                        break;
+                    }
+                }
+            }
+            // Fallback: try to extract brand from title (first word)
+            if (!brand && p.title) {
+                brand = p.title.split(' ')[0];
+            }
+            
+            // Extract description
+            const description = p.shortDescription || p.description || '';
+            
+            return {
+                id: p.ean,
+                ean: p.ean,
+                title: p.title,
+                brand,
+                image: img,
+                price,
+                url: affiliateUrl,
+                rawUrl: productUrl,
+                description: description.substring(0, 200) + (description.length > 200 ? '...' : ''),
+                available: !!(p.offer && p.offer.price)
+            };
+        });
+        
+        console.log(`[${timestamp}] [BOL] Returning ${products.length} search results`);
+        res.json({ products, total: results.length });
+        
+    } catch (error) {
+        console.error(`[${timestamp}] [BOL] Search Products Error:`, error.response?.data || error.message);
+        
+        // Return error with details
+        const errorMessage = extractErrorMessage(error, 'Zoeken mislukt');
+        res.status(500).json({ 
+            error: errorMessage,
+            products: [],
+            troubleshooting: [
+                'Controleer of de Bol.com API correct is geconfigureerd',
+                'Probeer een andere zoekterm',
+                'Probeer het later opnieuw'
+            ]
+        });
+    }
+});
+
+// Import a specific product by EAN with AI enrichment
+app.post('/api/bol/import-by-ean', async (req, res) => {
+    const { ean } = req.body;
+    const timestamp = new Date().toISOString();
+    
+    if (!ean) {
+        return res.status(400).json({ error: 'EAN is verplicht' });
+    }
+    
+    console.log(`[${timestamp}] [BOL] Importing product by EAN: ${ean}`);
+    
+    try {
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [BOL] API not configured`);
+            return res.status(503).json({ 
+                error: 'Bol.com API niet geconfigureerd' 
+            });
+        }
+        
+        const token = await getBolToken();
+        
+        // Search for the product by EAN
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+            params: { 
+                'search-term': ean,
+                'country-code': 'NL',
+                'include': 'IMAGE,OFFER,SPECIFICATIONS'
+            },
+            headers: getBolHeaders(token)
+        });
+        
+        const results = searchResponse.data.results;
+        if (!results || results.length === 0) {
+            console.log(`[${timestamp}] [BOL] No product found for EAN: ${ean}`);
+            return res.status(404).json({ error: 'Geen product gevonden met dit EAN' });
+        }
+        
+        // Find the exact EAN match
+        const product = results.find(p => p.ean === ean) || results[0];
+        const productEan = product.ean;
+        console.log(`[${timestamp}] [BOL] Found product: ${product.title} (EAN: ${productEan})`);
+        
+        // Fetch images
+        let imageUrl = product.image?.url || PLACEHOLDER_IMG;
+        const { images, mainImage } = await fetchBolImages(productEan, token, imageUrl);
+        imageUrl = mainImage;
+        
+        // Fetch ratings/reviews
+        const bolReviews = await fetchBolRatings(productEan, token);
+        if (bolReviews) {
+            console.log(`[${timestamp}] [BOL] Fetched ${bolReviews.totalReviews} reviews`);
+        }
+        
+        // Extract price
+        const price = extractPrice(product.offer);
+        
+        // Generate affiliate URL
+        let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${productEan}/`;
+        productUrl = cleanBolUrl(productUrl);
+        const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+        
+        // Extract specifications
+        const specs = {};
+        if (product.specificationGroups) {
+            product.specificationGroups.forEach(g => {
+                g.specifications?.forEach(s => { specs[s.name] = s.value; });
+            });
+        }
+        
+        const bolData = {
+            title: product.title,
+            price,
+            image: imageUrl,
+            images,
+            ean: productEan,
+            url: affiliateUrl,
+            rawDescription: product.shortDescription || product.description || "",
+            specs,
+            bolReviews
+        };
+        
+        // Generate AI content
+        console.log(`[${timestamp}] [BOL] Generating AI content for: ${product.title.substring(0, 40)}...`);
+        let aiData;
+        try {
+            aiData = await generateAIProductReview(bolData);
+        } catch (aiError) {
+            console.error(`[${timestamp}] [BOL] AI generation failed:`, aiError.message);
+            return res.status(500).json({
+                error: 'AI content generatie mislukt',
+                details: aiError.message,
+                partialData: { bolData }
+            });
+        }
+        
+        // Generate SEO-friendly slug
+        const slug = generateSlug(aiData.brand, aiData.model);
+        
+        console.log(`[${timestamp}] [BOL] Import by EAN completed: ${aiData.brand} ${aiData.model}`);
+        res.json({ 
+            bolData: { ...bolData, slug }, 
+            aiData: { 
+                ...aiData, 
+                slug,
+                images,
+                bolReviewsRaw: bolReviews 
+            } 
+        });
+        
+    } catch (error) {
+        console.error(`[${timestamp}] [BOL] Import by EAN Error:`, error.response?.data || error.message);
+        res.status(500).json({ 
+            error: extractErrorMessage(error, 'Import mislukt'),
+            troubleshooting: [
+                'Controleer of het EAN correct is',
+                'Probeer het product opnieuw te zoeken',
+                'Controleer de API verbinding'
+            ]
+        });
+    }
+});
+
 app.post('/api/bol/import', async (req, res) => {
     const { input } = req.body;
     try {

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { aiService } from '../services/aiService';
-import { fetchBolProduct, searchBolProducts } from '../services/bolService';
+import { fetchBolProduct, searchBolProducts, searchBolProductsDetailed, importProductByEan, BolSearchProduct } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
@@ -64,6 +64,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
     const [importError, setImportError] = useState<ImportError | null>(null);
     const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+    
+    // --- STATE: BOL.COM PRODUCT SEARCH ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<BolSearchProduct[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [selectedSearchProduct, setSelectedSearchProduct] = useState<BolSearchProduct | null>(null);
+    const [importMode, setImportMode] = useState<'url' | 'search'>('search');
 
     // --- STATE: ARTICLES ---
     const [studioType, setStudioType] = useState<ArticleType>('comparison');
@@ -119,6 +127,116 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
             await db.clear(); 
             window.location.reload(); 
         } 
+    };
+
+    // ========================================================================
+    // PRODUCT SEARCH HANDLERS
+    // ========================================================================
+    const handleProductSearch = async () => {
+        if (!searchQuery.trim()) {
+            showError('Vul een zoekterm in');
+            return;
+        }
+        
+        setIsSearching(true);
+        setSearchError(null);
+        setSearchResults([]);
+        setSelectedSearchProduct(null);
+        addLog(`🔍 Zoeken naar: "${searchQuery}"`);
+        
+        try {
+            const result = await searchBolProductsDetailed(searchQuery.trim(), 12);
+            
+            if (result.error) {
+                setSearchError(result.error);
+                addLog(`❌ Zoeken mislukt: ${result.error}`);
+                showToast(result.error, 'error');
+            } else if (result.products.length === 0) {
+                setSearchError('Geen producten gevonden. Probeer een andere zoekterm.');
+                addLog(`ℹ️ Geen producten gevonden voor: "${searchQuery}"`);
+            } else {
+                setSearchResults(result.products);
+                addLog(`✅ ${result.products.length} producten gevonden`);
+                showToast(`${result.products.length} producten gevonden`, 'success');
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            setSearchError(errorMsg);
+            addLog(`❌ Zoeken fout: ${errorMsg}`);
+            showToast(`Zoeken mislukt: ${errorMsg}`, 'error');
+        } finally {
+            setIsSearching(false);
+        }
+    };
+    
+    const handleSelectSearchProduct = (product: BolSearchProduct) => {
+        setSelectedSearchProduct(product);
+        addLog(`📦 Geselecteerd: ${product.title.substring(0, 50)}...`);
+    };
+    
+    const handleImportSelectedProduct = async () => {
+        if (!selectedSearchProduct) {
+            showError('Selecteer eerst een product');
+            return;
+        }
+        
+        setIsProcessing(true);
+        setLoadingMessage('Product importeren...');
+        addLog(`📥 Importeren: ${selectedSearchProduct.title.substring(0, 40)}...`);
+        
+        try {
+            setImportStep(2);
+            setLoadingMessage('AI analyse bezig...');
+            
+            const { bolData, aiData } = await importProductByEan(selectedSearchProduct.ean);
+            
+            addLog(`✅ AI data ontvangen - Merk: ${aiData.brand}, Model: ${aiData.model}`);
+            
+            const draft: Partial<Product> = {
+                id: `search-${Date.now()}`,
+                slug: aiData.slug,
+                brand: aiData.brand || 'Merk',
+                model: aiData.model || 'Model',
+                price: bolData.price || 0,
+                score: aiData.score || 8.0,
+                category: aiData.category || Object.keys(CATEGORIES).find(c => bolData.title.toLowerCase().includes(c)) || 'overig',
+                image: getBestImage(bolData),
+                images: getAllImages(aiData, bolData),
+                specs: aiData.specs || {},
+                pros: aiData.pros || [],
+                cons: aiData.cons || [],
+                description: aiData.description,
+                metaDescription: aiData.metaDescription,
+                keywords: aiData.keywords || [],
+                longDescription: aiData.longDescription,
+                expertOpinion: aiData.expertOpinion,
+                userReviewsSummary: aiData.userReviewsSummary,
+                affiliateUrl: bolData.url,
+                ean: bolData.ean,
+                scoreBreakdown: aiData.scoreBreakdown,
+                suitability: aiData.suitability,
+                faq: aiData.faq,
+                predicate: aiData.predicate,
+                bolReviewsRaw: aiData.bolReviewsRaw
+            };
+            
+            setEditingProduct(draft);
+            setImportStep(3);
+            setSearchResults([]);
+            setSelectedSearchProduct(null);
+            setSearchQuery('');
+            addLog('✅ Import succesvol! Controleer en sla op.');
+            showToast('✅ Product geïmporteerd! Controleer de gegevens en sla op.', 'success');
+            
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addLog(`❌ Import fout: ${errorMsg}`);
+            showToast(`Import mislukt: ${errorMsg}`, 'error');
+            setImportStep(1);
+        } finally {
+            setIsProcessing(false);
+            setLoadingMessage('');
+        }
     };
 
     // ========================================================================
@@ -1323,20 +1441,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                     ))}
                                 </div>
 
-                                {/* 1. SINGLE IMPORT with Wizard */}
+                                {/* 1. SINGLE IMPORT with Search */}
                                 {productSubTab === 'import' && (
                                     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                                         {/* Import Steps Header */}
                                         <div className="bg-slate-950 p-4 border-b border-slate-800">
                                             <div className="flex items-center justify-between mb-4">
                                                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                                    <i className="fas fa-magic text-blue-400"></i> Single Import Wizard
+                                                    <i className="fas fa-search text-blue-400"></i> Product Toevoegen
                                                 </h2>
                                             </div>
                                             {/* Step Indicator */}
                                             <div className="flex items-center gap-2">
                                                 {[
-                                                    { step: 1, label: 'URL Invoeren' },
+                                                    { step: 1, label: 'Zoeken & Selecteren' },
                                                     { step: 2, label: 'AI Verwerking' },
                                                     { step: 3, label: 'Bewerken & Opslaan' }
                                                 ].map((s, idx) => (
@@ -1365,32 +1483,221 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                         <div className="p-6">
                                             {!editingProduct ? (
                                                 <div className="space-y-6">
-                                                    <div>
-                                                        <label className="block text-sm font-medium text-slate-400 mb-2">
-                                                            <i className="fas fa-link mr-2"></i>Bol.com Product URL
-                                                        </label>
-                                                        <div className="flex gap-3">
-                                                            <input 
-                                                                type="text" 
-                                                                value={importUrl} 
-                                                                onChange={e => setImportUrl(e.target.value)} 
-                                                                placeholder="https://www.bol.com/nl/p/..." 
-                                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
-                                                            />
-                                                            <button 
-                                                                onClick={handleSingleImport} 
-                                                                disabled={isProcessing || !importUrl}
-                                                                className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50 text-white px-6 rounded-xl font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
-                                                            >
-                                                                {isProcessing ? (
-                                                                    <><i className="fas fa-spinner fa-spin"></i> Importeren...</>
-                                                                ) : (
-                                                                    <><i className="fas fa-download"></i> Importeer</>
-                                                                )}
-                                                            </button>
-                                                        </div>
+                                                    {/* Import Mode Toggle */}
+                                                    <div className="flex gap-2 mb-4">
+                                                        <button
+                                                            onClick={() => setImportMode('search')}
+                                                            disabled={isProcessing}
+                                                            className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                                                                importMode === 'search'
+                                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                                            }`}
+                                                        >
+                                                            <i className="fas fa-search"></i>
+                                                            <span>Zoeken op Bol.com</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setImportMode('url')}
+                                                            disabled={isProcessing}
+                                                            className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                                                                importMode === 'url'
+                                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                                            }`}
+                                                        >
+                                                            <i className="fas fa-link"></i>
+                                                            <span>Import via URL</span>
+                                                        </button>
                                                     </div>
+
+                                                    {/* SEARCH MODE */}
+                                                    {importMode === 'search' && (
+                                                        <div className="space-y-4">
+                                                            {/* Search Input */}
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                    <i className="fas fa-search mr-2"></i>Zoek producten op Bol.com
+                                                                </label>
+                                                                <div className="flex gap-3">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={searchQuery} 
+                                                                        onChange={e => setSearchQuery(e.target.value)} 
+                                                                        onKeyPress={e => e.key === 'Enter' && handleProductSearch()}
+                                                                        placeholder="Bijv: Samsung wasmachine, LG OLED TV, Philips airfryer..." 
+                                                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                                    />
+                                                                    <button 
+                                                                        onClick={handleProductSearch} 
+                                                                        disabled={isSearching || !searchQuery.trim()}
+                                                                        className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50 text-white px-6 rounded-xl font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+                                                                    >
+                                                                        {isSearching ? (
+                                                                            <><i className="fas fa-spinner fa-spin"></i> Zoeken...</>
+                                                                        ) : (
+                                                                            <><i className="fas fa-search"></i> Zoeken</>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                                <p className="text-xs text-slate-500 mt-2">
+                                                                    Tip: Zoek op productnaam, merk, of type product
+                                                                </p>
+                                                            </div>
+
+                                                            {/* Search Error */}
+                                                            {searchError && !isSearching && (
+                                                                <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
+                                                                    <i className="fas fa-exclamation-circle text-red-400"></i>
+                                                                    <span className="text-red-300">{searchError}</span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Search Results */}
+                                                            {searchResults.length > 0 && (
+                                                                <div className="space-y-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h3 className="text-lg font-bold text-white">
+                                                                            <i className="fas fa-list mr-2 text-blue-400"></i>
+                                                                            {searchResults.length} producten gevonden
+                                                                        </h3>
+                                                                        <button 
+                                                                            onClick={() => { setSearchResults([]); setSelectedSearchProduct(null); }}
+                                                                            className="text-sm text-slate-400 hover:text-white transition"
+                                                                        >
+                                                                            <i className="fas fa-times mr-1"></i> Wissen
+                                                                        </button>
+                                                                    </div>
+
+                                                                    {/* Product Grid */}
+                                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scroll pr-2">
+                                                                        {searchResults.map(product => (
+                                                                            <div 
+                                                                                key={product.ean}
+                                                                                onClick={() => handleSelectSearchProduct(product)}
+                                                                                className={`
+                                                                                    relative p-4 rounded-xl border-2 cursor-pointer transition-all
+                                                                                    ${selectedSearchProduct?.ean === product.ean 
+                                                                                        ? 'bg-blue-900/30 border-blue-500 shadow-lg shadow-blue-500/20' 
+                                                                                        : 'bg-slate-800/50 border-slate-700 hover:border-slate-600 hover:bg-slate-800'
+                                                                                    }
+                                                                                `}
+                                                                            >
+                                                                                {/* Selected indicator */}
+                                                                                {selectedSearchProduct?.ean === product.ean && (
+                                                                                    <div className="absolute top-2 right-2 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                                                                                        <i className="fas fa-check text-white text-xs"></i>
+                                                                                    </div>
+                                                                                )}
+                                                                                
+                                                                                {/* Product Image */}
+                                                                                <div className="bg-white rounded-lg p-2 mb-3 h-32 flex items-center justify-center">
+                                                                                    <img 
+                                                                                        src={product.image} 
+                                                                                        alt={product.title}
+                                                                                        className="max-w-full max-h-full object-contain"
+                                                                                        referrerPolicy="no-referrer"
+                                                                                    />
+                                                                                </div>
+                                                                                
+                                                                                {/* Product Info */}
+                                                                                <div className="space-y-2">
+                                                                                    <div className="text-xs text-slate-500">{product.brand}</div>
+                                                                                    <h4 className="text-sm font-medium text-white line-clamp-2 min-h-[2.5rem]">
+                                                                                        {product.title}
+                                                                                    </h4>
+                                                                                    <div className="flex items-center justify-between">
+                                                                                        <span className="text-lg font-bold text-blue-400">
+                                                                                            €{product.price?.toLocaleString('nl-NL', { minimumFractionDigits: 2 }) || '-.--'}
+                                                                                        </span>
+                                                                                        {product.available ? (
+                                                                                            <span className="text-xs text-green-400 flex items-center gap-1">
+                                                                                                <i className="fas fa-check-circle"></i> Beschikbaar
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className="text-xs text-slate-500">Prijs onbekend</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+
+                                                                    {/* Import Selected Button */}
+                                                                    {selectedSearchProduct && (
+                                                                        <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <div className="flex items-center gap-4">
+                                                                                    <img 
+                                                                                        src={selectedSearchProduct.image}
+                                                                                        alt={selectedSearchProduct.title}
+                                                                                        className="w-16 h-16 object-contain bg-white rounded-lg"
+                                                                                        referrerPolicy="no-referrer"
+                                                                                    />
+                                                                                    <div>
+                                                                                        <div className="font-medium text-white">{selectedSearchProduct.title.substring(0, 50)}...</div>
+                                                                                        <div className="text-sm text-blue-400">€{selectedSearchProduct.price?.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <button 
+                                                                                    onClick={handleImportSelectedProduct}
+                                                                                    disabled={isProcessing}
+                                                                                    className="bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center gap-2 transition-all"
+                                                                                >
+                                                                                    {isProcessing ? (
+                                                                                        <><i className="fas fa-spinner fa-spin"></i> Importeren...</>
+                                                                                    ) : (
+                                                                                        <><i className="fas fa-plus-circle"></i> Importeer dit product</>
+                                                                                    )}
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {/* No results message */}
+                                                            {searchResults.length === 0 && !isSearching && !searchError && searchQuery && (
+                                                                <div className="text-center py-8 text-slate-500">
+                                                                    <i className="fas fa-search text-4xl mb-3"></i>
+                                                                    <div>Klik op "Zoeken" om producten te vinden</div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* URL MODE */}
+                                                    {importMode === 'url' && (
+                                                        <div className="space-y-4">
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-slate-400 mb-2">
+                                                                    <i className="fas fa-link mr-2"></i>Bol.com Product URL
+                                                                </label>
+                                                                <div className="flex gap-3">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={importUrl} 
+                                                                        onChange={e => setImportUrl(e.target.value)} 
+                                                                        placeholder="https://www.bol.com/nl/p/..." 
+                                                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                                                    />
+                                                                    <button 
+                                                                        onClick={handleSingleImport} 
+                                                                        disabled={isProcessing || !importUrl}
+                                                                        className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50 text-white px-6 rounded-xl font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2"
+                                                                    >
+                                                                        {isProcessing ? (
+                                                                            <><i className="fas fa-spinner fa-spin"></i> Importeren...</>
+                                                                        ) : (
+                                                                            <><i className="fas fa-download"></i> Importeer</>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     
+                                                    {/* Processing indicator */}
                                                     {isProcessing && (
                                                         <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4 flex items-center gap-4">
                                                             <div className="w-10 h-10 rounded-full bg-blue-600/30 flex items-center justify-center">
