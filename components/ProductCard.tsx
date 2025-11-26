@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Product } from '../types';
+import { getProductUrl } from '../services/urlService';
 
 interface ProductCardProps {
     product: Product;
@@ -12,6 +13,9 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSelected, onToggleCompare, onClick, variant = 'list' }) => {
     const [imgError, setImgError] = useState(false);
+    
+    // Generate the SEO-friendly product URL
+    const productUrl = getProductUrl(product);
     
     let scoreClass = 'border-red-500 text-red-500';
     if (product.score >= 7.5) scoreClass = 'border-emerald-500 text-emerald-500';
@@ -33,6 +37,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
             );
         }
         return null;
+    };
+
+    const handleProductClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        onClick(product.id);
     };
 
     const handleDealClick = (e: React.MouseEvent) => {
@@ -57,8 +66,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
                 {renderSeal()}
 
                 {/* Image Section */}
-                <div 
-                    onClick={() => onClick(product.id)}
+                <a 
+                    href={productUrl}
+                    onClick={handleProductClick}
                     className="h-48 bg-white p-4 flex items-center justify-center cursor-pointer relative overflow-hidden"
                 >
                     <img 
@@ -72,17 +82,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
                     <div className={`absolute top-2 right-2 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border-2 bg-slate-900 shadow-sm ${scoreClass}`}>
                         {product.score.toLocaleString('nl-NL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                     </div>
-                </div>
+                </a>
 
                 {/* Info Section */}
                 <div className="p-5 flex flex-col flex-1">
                     <div className="mb-1 text-[10px] text-[#1877F2] uppercase font-bold tracking-wider">{product.brand}</div>
-                    <h3 
-                        onClick={() => onClick(product.id)}
+                    <a 
+                        href={productUrl}
+                        onClick={handleProductClick}
                         className="text-base font-bold text-white mb-2 cursor-pointer hover:text-[#1877F2] transition leading-tight line-clamp-2"
                     >
                         {product.model}
-                    </h3>
+                    </a>
                     
                     <div className="flex flex-wrap gap-y-1 gap-x-3 text-xs text-slate-400 mb-4 line-clamp-2">
                         {Object.entries(product.specs).slice(0, 2).map(([k, v]) => (
@@ -119,8 +130,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
     return (
         <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr_180px] gap-6 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:-translate-y-1 hover:shadow-xl hover:shadow-black/20 hover:border-slate-700 transition-all duration-300 group">
             {/* Image Section */}
-            <div 
-                onClick={() => onClick(product.id)}
+            <a 
+                href={productUrl}
+                onClick={handleProductClick}
                 className="relative p-6 flex items-center justify-center bg-white lg:border-r border-slate-800 min-h-[200px] cursor-pointer"
             >
                 {renderSeal()}
@@ -131,32 +143,33 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
                     onError={() => setImgError(true)}
                     className="max-w-full max-h-32 object-contain mix-blend-multiply group-hover:scale-105 transition duration-500" 
                 />
-            </div>
+            </a>
 
             {/* Info Section */}
             <div className="p-6 flex flex-col justify-center">
                 <div className="mb-1 text-[10px] text-[#1877F2] uppercase font-bold tracking-wider">{product.brand}</div>
-                <h3 
-                    onClick={() => onClick(product.id)}
+                <a 
+                    href={productUrl}
+                    onClick={handleProductClick}
                     className="text-lg font-bold text-white mb-2 cursor-pointer hover:text-[#1877F2] transition leading-tight"
                 >
                     {product.brand} {product.model}
-                </h3>
+                </a>
                 
                 {product.description && (
-                    <p onClick={() => onClick(product.id)} className="text-xs text-slate-400 mb-4 italic line-clamp-2 cursor-pointer">
+                    <a href={productUrl} onClick={handleProductClick} className="text-xs text-slate-400 mb-4 italic line-clamp-2 cursor-pointer">
                         "{product.description}"
-                    </p>
+                    </a>
                 )}
 
-                <div onClick={() => onClick(product.id)} className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-400 mb-4 cursor-pointer">
+                <a href={productUrl} onClick={handleProductClick} className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-400 mb-4 cursor-pointer">
                     {Object.entries(product.specs).slice(0, 3).map(([k, v]) => (
                         <div key={k} className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
                             <span className="font-medium text-slate-300">{k}:</span> {v}
                         </div>
                     ))}
-                </div>
+                </a>
 
                 <div className="space-y-1.5 mt-auto pt-4 border-t border-slate-800">
                     {product.pros.slice(0, 2).map((pro, i) => (

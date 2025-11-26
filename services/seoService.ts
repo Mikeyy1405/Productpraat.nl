@@ -1,10 +1,11 @@
 import { Product, CATEGORIES } from '../types';
+import { getCanonicalUrl } from './urlService';
 
 export const seoService = {
     /**
      * Update de document titel en meta description dynamisch
      */
-    updateMeta: (title: string, description: string, image?: string) => {
+    updateMeta: (title: string, description: string, image?: string, canonicalUrl?: string) => {
         // Update Title
         document.title = title;
 
@@ -27,12 +28,39 @@ export const seoService = {
         setMeta('og:description', description, 'property');
         setMeta('og:type', 'website', 'property');
         if (image) setMeta('og:image', image, 'property');
+        if (canonicalUrl) setMeta('og:url', canonicalUrl, 'property');
 
         // Twitter Card
         setMeta('twitter:card', 'summary_large_image', 'name');
         setMeta('twitter:title', title, 'name');
         setMeta('twitter:description', description, 'name');
         if (image) setMeta('twitter:image', image, 'name');
+
+        // Canonical URL
+        if (canonicalUrl) {
+            seoService.setCanonicalUrl(canonicalUrl);
+        }
+    },
+
+    /**
+     * Set the canonical URL for the current page
+     */
+    setCanonicalUrl: (url: string) => {
+        let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement;
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'canonical';
+            document.head.appendChild(link);
+        }
+        link.href = url;
+    },
+
+    /**
+     * Remove the canonical URL
+     */
+    clearCanonicalUrl: () => {
+        const link = document.querySelector('link[rel="canonical"]');
+        if (link) link.remove();
     },
 
     /**
@@ -43,12 +71,16 @@ export const seoService = {
         const oldScript = document.getElementById('json-ld-schema');
         if (oldScript) oldScript.remove();
 
+        // Get canonical URL for the product
+        const canonicalUrl = getCanonicalUrl(product);
+
         const schema = {
             "@context": "https://schema.org/",
             "@type": "Product",
             "name": `${product.brand} ${product.model}`,
             "image": [product.image],
             "description": product.description || product.longDescription?.substring(0, 160),
+            "url": canonicalUrl,
             "brand": {
                 "@type": "Brand",
                 "name": product.brand
@@ -74,7 +106,7 @@ export const seoService = {
             },
             "offers": {
                 "@type": "Offer",
-                "url": product.affiliateUrl !== '#' ? product.affiliateUrl : window.location.href,
+                "url": product.affiliateUrl !== '#' ? product.affiliateUrl : canonicalUrl,
                 "priceCurrency": "EUR",
                 "price": product.price.toString(),
                 "availability": "https://schema.org/InStock",
@@ -95,5 +127,6 @@ export const seoService = {
     clearSchema: () => {
         const oldScript = document.getElementById('json-ld-schema');
         if (oldScript) oldScript.remove();
+        seoService.clearCanonicalUrl();
     }
 };

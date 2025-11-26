@@ -9,6 +9,7 @@ import { Product, CATEGORIES, Article } from './types';
 import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
+import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl } from './services/urlService';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
@@ -151,7 +152,7 @@ const getSeasonalTheme = (): SeasonalTheme => {
 };
 
 export const App: React.FC = () => {
-    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login' | 'product'>('home');
+    const [view, setView] = useState<'home' | 'category' | 'admin' | 'details' | 'search' | 'article' | 'about' | 'contact' | 'login' | 'product' | '404'>('home');
     const [activeCategory, setActiveCategory] = useState<string>('wasmachines');
     const [customProducts, setCustomProducts] = useState<Product[]>([]);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -170,6 +171,59 @@ export const App: React.FC = () => {
     const [articles, setArticles] = useState<Article[]>([]);
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
+    // Handle URL routing on initial load and popstate
+    const handleUrlRouting = (products: Product[]) => {
+        const path = window.location.pathname;
+        
+        // Check for product URL pattern: /shop/{category}/{slug}
+        if (isProductUrl(path)) {
+            const parsed = parseProductUrl(path);
+            if (parsed) {
+                const { category, slug } = parsed;
+                // Find the product by category and slug
+                const product = products.find(p => {
+                    const productSlug = (p.slug || generateSlug(p.brand, p.model)).toLowerCase();
+                    return p.category.toLowerCase() === category.toLowerCase() && 
+                           productSlug === slug.toLowerCase();
+                });
+                
+                if (product) {
+                    setSelectedProduct(product);
+                    setActiveCategory(product.category);
+                    setCurrentSlug(slug);
+                    setView('product');
+                    return;
+                } else {
+                    // Product not found - show 404
+                    setView('404');
+                    return;
+                }
+            }
+        }
+        
+        // Check for category URL pattern: /shop/{category}
+        const categoryMatch = path.match(/^\/shop\/([^\/]+)\/?$/);
+        if (categoryMatch) {
+            const category = categoryMatch[1].toLowerCase();
+            if (CATEGORIES[category]) {
+                setActiveCategory(category);
+                setView('category');
+                return;
+            }
+        }
+        
+        // Default views based on path
+        if (path === '/' || path === '') {
+            setView('home');
+        } else if (path === '/about') {
+            setView('about');
+        } else if (path === '/contact') {
+            setView('contact');
+        } else if (path === '/admin') {
+            setView(isAuthenticated ? 'admin' : 'login');
+        }
+    };
+
     useEffect(() => {
         console.log("ProductPraat v1.4.6 Started - Clean Database Mode");
         const loadData = async () => {
@@ -181,6 +235,9 @@ export const App: React.FC = () => {
                 
                 const arts = await db.getArticles();
                 setArticles(arts);
+                
+                // Handle URL routing after data is loaded
+                handleUrlRouting(prods);
             } catch(e) {
                 console.error("Failed to load data", e);
             } finally {
@@ -189,6 +246,16 @@ export const App: React.FC = () => {
         };
         loadData();
         setCurrentTheme(getSeasonalTheme());
+        
+        // Handle browser back/forward navigation
+        const handlePopState = () => {
+            handleUrlRouting(customProducts);
+        };
+        window.addEventListener('popstate', handlePopState);
+        
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
     }, []);
 
     useEffect(() => {
@@ -200,28 +267,32 @@ export const App: React.FC = () => {
         }
     }, [activeCategory, view]);
 
-    // ... SEO Logic (Kept same) ...
+    // ... SEO Logic with canonical URLs ...
     useEffect(() => {
         seoService.clearSchema(); 
         if (view === 'home') {
-            seoService.updateMeta("ProductPraat.nl - Wij testen ALLES voor in huis", "100% onafhankelijke reviews.");
+            seoService.updateMeta("ProductPraat.nl - Wij testen ALLES voor in huis", "100% onafhankelijke reviews.", undefined, window.location.origin);
         } else if (view === 'category') {
             const catName = CATEGORIES[activeCategory]?.name || activeCategory;
-            seoService.updateMeta(`De Beste ${catName} van 2026`, `Op zoek naar een nieuwe ${catName}? Wij hebben de populairste modellen getest.`);
+            seoService.updateMeta(`De Beste ${catName} van 2026`, `Op zoek naar een nieuwe ${catName}? Wij hebben de populairste modellen getest.`, undefined, `${window.location.origin}/shop/${activeCategory}`);
         } else if ((view === 'details' || view === 'product') && selectedProduct) {
             const p = selectedProduct;
+            const canonicalUrl = getCanonicalUrl(p);
             seoService.updateMeta(
                 p.metaDescription || `${p.brand} ${p.model} Review 2026`, 
                 p.description || `Review van de ${p.brand} ${p.model}.`, 
-                p.image
+                p.image,
+                canonicalUrl
             );
             seoService.setProductSchema(p); 
         } else if (view === 'article' && selectedArticle) {
             seoService.updateMeta(`${selectedArticle.title}`, selectedArticle.summary, selectedArticle.imageUrl);
         } else if (view === 'about') {
-            seoService.updateMeta("Over ProductPraat", "Datagedreven productadvies.");
+            seoService.updateMeta("Over ProductPraat", "Datagedreven productadvies.", undefined, `${window.location.origin}/about`);
         } else if (view === 'contact') {
-            seoService.updateMeta("Contact - ProductPraat", "Neem contact op met de redactie.");
+            seoService.updateMeta("Contact - ProductPraat", "Neem contact op met de redactie.", undefined, `${window.location.origin}/contact`);
+        } else if (view === '404') {
+            seoService.updateMeta("Pagina niet gevonden - ProductPraat", "De gevraagde pagina kon niet worden gevonden.");
         }
     }, [view, activeCategory, selectedProduct, searchTerm, selectedArticle]);
 
@@ -246,19 +317,33 @@ export const App: React.FC = () => {
     }, [activeCategory, customProducts]);
 
     const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact') => {
-        if (target === 'admin' && !isAuthenticated) setView('login');
-        else setView(target);
+        if (target === 'admin' && !isAuthenticated) {
+            setView('login');
+            urlRouter.push('/admin');
+        } else {
+            setView(target);
+            // Update browser URL
+            if (target === 'home') urlRouter.push('/');
+            else if (target === 'about') urlRouter.push('/about');
+            else if (target === 'contact') urlRouter.push('/contact');
+            else if (target === 'admin') urlRouter.push('/admin');
+        }
         window.scrollTo(0,0);
     };
 
-    const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); };
-    const handleLogout = () => { setIsAuthenticated(false); setView('login'); };
+    const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/admin'); };
+    const handleLogout = () => { setIsAuthenticated(false); setView('login'); urlRouter.push('/admin'); };
     
     // ASYNC HANDLERS FOR SUPABASE INTERACTION
     const handleAddProduct = async (newProduct: Product) => {
         const updatedList = await db.add(newProduct);
         setCustomProducts(updatedList);
-        if (CATEGORIES[newProduct.category]) { setActiveCategory(newProduct.category); setView('category'); window.scrollTo(0, 0); }
+        if (CATEGORIES[newProduct.category]) { 
+            setActiveCategory(newProduct.category); 
+            setView('category'); 
+            urlRouter.push(`/shop/${newProduct.category}`);
+            window.scrollTo(0, 0); 
+        }
     };
 
     const handleDeleteProduct = async (id: string) => {
@@ -266,7 +351,7 @@ export const App: React.FC = () => {
         setCustomProducts(updatedList);
     };
 
-    // ... Compare, OpenProduct, OpenArticle handlers (Same logic) ...
+    // ... Compare, OpenProduct, OpenArticle handlers with URL updates ...
     const toggleCompare = (id: string) => {
         const product = customProducts.find(p => p.id === id);
         if (!product) return;
@@ -279,8 +364,11 @@ export const App: React.FC = () => {
         if (product) { 
             setSelectedProduct(product); 
             setActiveCategory(product.category); 
-            setCurrentSlug(product.slug || '');
+            const productSlug = product.slug || generateSlug(product.brand, product.model);
+            setCurrentSlug(productSlug);
             setView('product'); 
+            // Update browser URL to SEO-friendly format
+            urlRouter.push(getProductUrl(product));
             window.scrollTo(0, 0); 
         }
     };
@@ -301,9 +389,15 @@ export const App: React.FC = () => {
         if (!query.trim()) return;
         setSearchTerm(query);
         setView('search');
+        urlRouter.push(`/search?q=${encodeURIComponent(query)}`);
         window.scrollTo(0, 0);
     };
-    const handleCategorySelect = (categoryId: string) => { setActiveCategory(categoryId); setView('category'); window.scrollTo(0, 0); };
+    const handleCategorySelect = (categoryId: string) => { 
+        setActiveCategory(categoryId); 
+        setView('category'); 
+        urlRouter.push(`/shop/${categoryId}`);
+        window.scrollTo(0, 0); 
+    };
 
     // --- FOOTER (Same as before) ---
     const renderFooter = () => (
@@ -500,20 +594,31 @@ export const App: React.FC = () => {
 
                     {view === 'category' && (
                         <div className={`container mx-auto px-4 py-8 ${currentTheme.pageBackground}`}>
+                            {/* Breadcrumbs */}
+                            <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+                                <button onClick={() => handleNavigate('home')} className="hover:text-white transition">Home</button>
+                                <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                <span className="text-white font-medium">{CATEGORIES[activeCategory]?.name}</span>
+                            </nav>
                             <h1 className="text-3xl font-bold text-white mb-6">{CATEGORIES[activeCategory]?.name}</h1>
                             <div className="grid gap-6">{visibleProducts.map(p => <ProductCard key={p.id} product={p} isCompareSelected={compareList.some(c => c.id === p.id)} onToggleCompare={toggleCompare} onClick={handleOpenProduct} />)}</div>
                         </div>
                     )}
                     {(view === 'details' || view === 'product') && selectedProduct && (
                         <div className={`container mx-auto px-4 py-8 ${currentTheme.pageBackground}`}>
+                            {/* Breadcrumbs */}
+                            <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+                                <button onClick={() => handleNavigate('home')} className="hover:text-white transition">Home</button>
+                                <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                <button onClick={() => handleCategorySelect(selectedProduct.category)} className="hover:text-white transition">
+                                    {CATEGORIES[selectedProduct.category]?.name || selectedProduct.category}
+                                </button>
+                                <i className="fas fa-chevron-right text-xs text-slate-600"></i>
+                                <span className="text-white font-medium">{selectedProduct.brand} {selectedProduct.model}</span>
+                            </nav>
                             <div className="grid lg:grid-cols-2 gap-8">
                                 <div className="bg-white p-8 rounded-xl border border-slate-800"><img src={selectedProduct.image} className="max-w-full max-h-96 object-contain mx-auto" referrerPolicy="no-referrer" /></div>
                                 <div>
-                                    {selectedProduct.slug && (
-                                        <div className="text-xs text-slate-500 mb-2">
-                                            <span className="bg-slate-800 px-2 py-1 rounded">/{selectedProduct.slug}</span>
-                                        </div>
-                                    )}
                                     <h1 className="text-4xl font-bold text-white mb-4">{selectedProduct.brand} {selectedProduct.model}</h1>
                                     <div className="text-4xl font-bold text-[#1877F2] mb-4">{selectedProduct.score}</div>
                                     {selectedProduct.keywords && selectedProduct.keywords.length > 0 && (
@@ -526,6 +631,33 @@ export const App: React.FC = () => {
                                     <div dangerouslySetInnerHTML={{ __html: selectedProduct.longDescription || '' }} className="prose prose-invert mb-8" />
                                     <button onClick={() => window.open(selectedProduct.affiliateUrl, '_blank')} className={`w-full py-4 rounded-xl font-bold text-lg mb-8 ${currentTheme.buttonClass}`}>Bekijk aanbieding</button>
                                     <UserReviewSection productId={selectedProduct.id} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* 404 Not Found Page */}
+                    {view === '404' && (
+                        <div className={`container mx-auto px-4 py-16 text-center ${currentTheme.pageBackground}`}>
+                            <div className="max-w-md mx-auto">
+                                <div className="text-8xl font-black text-slate-700 mb-4">404</div>
+                                <h1 className="text-3xl font-bold text-white mb-4">Pagina niet gevonden</h1>
+                                <p className="text-slate-400 mb-8">
+                                    Het product dat je zoekt bestaat niet of is verplaatst. 
+                                    Probeer te zoeken of bekijk onze categorieën.
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                    <button 
+                                        onClick={() => handleNavigate('home')} 
+                                        className={`px-6 py-3 rounded-xl font-bold ${currentTheme.buttonClass}`}
+                                    >
+                                        <i className="fas fa-home mr-2"></i>Naar Home
+                                    </button>
+                                    <button 
+                                        onClick={() => handleCategorySelect('wasmachines')} 
+                                        className="px-6 py-3 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-white transition"
+                                    >
+                                        <i className="fas fa-th-large mr-2"></i>Bekijk Categorieën
+                                    </button>
                                 </div>
                             </div>
                         </div>
