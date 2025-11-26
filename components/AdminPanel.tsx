@@ -6,6 +6,7 @@ import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
 import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResult } from '../utils/validation';
+import { AnalyticsWidget } from './AnalyticsWidget';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -417,24 +418,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     // 2. SINGLE IMPORT HANDLER (Server-side with AI) with Wizard Steps
     // ========================================================================
     const handleSingleImport = async () => {
-        if (!importUrl) {
-            showError('Voer een Bol.com URL of EAN code in');
+        if (!importUrl.trim()) {
+            showError('❌ Vul een Bol.com product URL in');
             return;
         }
         
-        // Reset error state
-        setImportError(null);
-        setValidationResult(null);
+        // Validate that it's a proper Bol.com URL with strict hostname check
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(importUrl);
+        } catch {
+            showError('❌ Gebruik een geldige URL');
+            return;
+        }
+        
+        const urlHost = parsedUrl.hostname.toLowerCase();
+        // Check for exact match or subdomain of bol.com (e.g., www.bol.com)
+        const isBolComDomain = urlHost === 'bol.com' || urlHost.match(/^[a-z0-9-]+\.bol\.com$/);
+        if (!isBolComDomain) {
+            showError('❌ Gebruik een geldige Bol.com product URL');
+            return;
+        }
+        
         setIsProcessing(true);
         setEditingProduct(null);
-        setLoadingMessage('Product ophalen van Bol.com...');
         setImportStep(1);
+        setLoadingMessage('Product ophalen...');
+        addLog(`📥 Start import: ${importUrl}`);
         
         try {
-            setLoadingMessage('AI analyse bezig...');
             setImportStep(2);
+            setLoadingMessage('AI analyse bezig...');
+            addLog('🔄 Calling API...');
             
             const { bolData, aiData } = await aiService.importFromUrl(importUrl);
+            
+            addLog(`✅ Received data - Brand: ${aiData.brand}, Model: ${aiData.model}`);
+            
+            if (!bolData) {
+                throw new Error('Bol.com data ontbreekt in server response');
+            }
+            if (!aiData) {
+                throw new Error('AI analyse data ontbreekt in server response');
+            }
 
             const draft: Partial<Product> = {
                 id: `man-${Date.now()}`,
@@ -464,39 +490,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 bolReviewsRaw: aiData.bolReviewsRaw
             };
 
-            // Validate the imported product
-            const validation = validateProduct(draft);
-            setValidationResult(validation);
-            
-            // Check for duplicates
-            const duplicateCheck = checkDuplicateProduct(draft, customProducts);
-            if (duplicateCheck.isDuplicate) {
-                showToast(`Let op: Product met zelfde ${duplicateCheck.duplicateField} bestaat al`, 'warning');
-            }
-
             setEditingProduct(draft);
             setImportStep(3);
-            showToast('Product succesvol geïmporteerd!', 'success');
-        } catch (e) {
-            console.error('Import error:', e);
-            const errorMsg = e instanceof Error ? e.message : String(e);
+            addLog('✅ Import succesvol!');
+            showToast('✅ Product succesvol geïmporteerd!', 'success');
             
-            // Parse error for troubleshooting tips
-            const errorLines = errorMsg.split('\n');
-            const mainError = errorLines[0];
-            const tips = errorLines.slice(1).filter(line => line.trim().startsWith('•')).map(line => line.replace('•', '').trim());
+        } catch (e: any) {
+            const errorMsg = e?.message || String(e);
+            addLog(`❌ Import fout: ${errorMsg}`);
+            console.error('❌ Full import error:', e);
             
-            setImportError({
-                message: mainError,
-                troubleshooting: tips.length > 0 ? tips : [
-                    'Controleer of de URL geldig is',
-                    'Probeer het opnieuw na een paar seconden',
-                    'Controleer de API verbinding'
-                ],
-                canRetry: true
-            });
+            if (errorMsg.includes('credentials') || errorMsg.includes('geconfigureerd')) {
+                showError('❌ Bol.com API niet geconfigureerd - controleer environment variabelen');
+                addLog('💡 Tip: Check BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in Render');
+            } else if (errorMsg.includes('404') || errorMsg.includes('niet gevonden')) {
+                showError('❌ Product niet gevonden - controleer de URL');
+            } else if (errorMsg.includes('timeout')) {
+                showError('❌ Timeout - Bol.com reageert niet, probeer opnieuw');
+            } else if (errorMsg.includes('401') || errorMsg.includes('403')) {
+                showError('❌ Authenticatie fout - API credentials zijn mogelijk ongeldig');
+                addLog('💡 Tip: Controleer of je API keys correct zijn in Render environment');
+            } else {
+                showError(`❌ Import mislukt: ${errorMsg}`);
+            }
             
-            showError(`Fout bij importeren: ${mainError}`);
             setImportStep(1);
         } finally {
             setIsProcessing(false);
@@ -1145,7 +1162,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                     <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                         <i className="fas fa-bolt text-yellow-400"></i> Snelle Acties
                                     </h3>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                         <button 
                                             onClick={() => { setActiveTab('products'); setProductSubTab('import'); }}
                                             className="p-4 bg-slate-800 hover:bg-blue-600/20 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all group"
@@ -1174,8 +1191,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                             <i className="fas fa-rocket text-2xl text-orange-400 mb-2 group-hover:scale-110 transition-transform"></i>
                                             <div className="font-medium text-white text-sm">Auto-Pilot</div>
                                         </button>
+                                        <button 
+                                            onClick={async () => {
+                                                addLog('🔍 Testing Bol.com API connection...');
+                                                try {
+                                                    showToast('🔍 Testing API...', 'info');
+                                                    const response = await fetch('/api/bol/search-list', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ term: 'wasmachine', limit: 1 })
+                                                    });
+                                                    
+                                                    if (!response.ok) {
+                                                        const errorData = await response.json();
+                                                        throw new Error(errorData.error || `HTTP ${response.status}`);
+                                                    }
+                                                    
+                                                    const data = await response.json();
+                                                    addLog(`✅ API Response: ${JSON.stringify(data).substring(0, 200)}...`);
+                                                    
+                                                    if (data.products && data.products.length > 0) {
+                                                        showToast('✅ Bol.com API werkt!', 'success');
+                                                        addLog(`✅ Found ${data.products.length} products - API is working correctly`);
+                                                    } else {
+                                                        showError('⚠️ API werkt maar geen producten gevonden');
+                                                        addLog('⚠️ API returned empty products array');
+                                                    }
+                                                } catch (e: any) {
+                                                    const errorMsg = e?.message || String(e);
+                                                    addLog(`❌ API Test failed: ${errorMsg}`);
+                                                    showError(`❌ API test mislukt: ${errorMsg}`);
+                                                    console.error('API test error:', e);
+                                                }
+                                            }}
+                                            className="p-4 bg-slate-800 hover:bg-green-600/20 rounded-xl border border-slate-700 hover:border-green-500/50 transition-all group"
+                                        >
+                                            <i className="fas fa-plug text-2xl text-green-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                                            <div className="font-medium text-white text-sm">Test API</div>
+                                        </button>
                                     </div>
                                 </div>
+
+                                {/* Analytics Widget */}
+                                <AnalyticsWidget products={customProducts} articles={articles} />
 
                                 {/* Recent Activity & Category Overview */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
