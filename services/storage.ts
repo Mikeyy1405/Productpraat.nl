@@ -66,7 +66,7 @@ export const db = {
             
             return match || null;
         } catch (e) {
-            console.error("GetBySlug Error:", JSON.stringify(e));
+            console.error("GetBySlug Error:", formatError(e));
             return null;
         }
     },
@@ -87,7 +87,7 @@ export const db = {
             if (error) throw error;
             return data as Product[] || [];
         } catch (e) {
-            console.error("GetByCategory Error:", JSON.stringify(e));
+            console.error("GetByCategory Error:", formatError(e));
             return [];
         }
     },
