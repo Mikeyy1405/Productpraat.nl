@@ -405,12 +405,12 @@ app.post('/api/bol/search-products', async (req, res) => {
         // Filter products without price or image, then map to detailed product objects
         const products = allResults
             .filter(p => {
-                // Filter products WITHOUT price or image
-                const hasPrice = p.offer && (p.offer.price > 0 || p.offer.listPrice > 0);
+                // Filter products WITHOUT price or image using extractPrice for consistency
+                const hasPrice = extractPrice(p.offer) > 0;
                 const hasImage = p.image && p.image.url;
                 return hasPrice && hasImage; // Only products with BOTH
             })
-            .slice(0, Math.min(limit, allResults.length))
+            .slice(0, limit)
             .map(p => {
                 let img = p.image?.url || PLACEHOLDER_IMG;
                 if (img.startsWith('http:')) img = img.replace('http:', 'https:');
