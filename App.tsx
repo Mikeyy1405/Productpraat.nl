@@ -1186,11 +1186,8 @@ export const App: React.FC = () => {
             {/* Article Preview Styling */}
             <style>{`
                 .article-preview h1 {
-                    font-size: 2rem;
-                    font-weight: 800;
-                    color: white;
-                    margin-bottom: 1.5rem;
-                    line-height: 1.2;
+                    /* Hide H1 in article content since title is already displayed in the page header */
+                    display: none;
                 }
                 
                 .article-preview h2 {

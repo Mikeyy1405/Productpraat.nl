@@ -2336,11 +2336,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 
                 /* Article Preview Styling */
                 .article-preview h1 {
-                    font-size: 2rem;
-                    font-weight: 800;
-                    color: white;
-                    margin-bottom: 1.5rem;
-                    line-height: 1.2;
+                    /* Hide H1 in article content since title is already displayed above the preview */
+                    display: none;
                 }
                 
                 .article-preview h2 {
