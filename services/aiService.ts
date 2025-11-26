@@ -169,5 +169,32 @@ export const aiService = {
             console.error('Get Categories Error:', error);
             throw error;
         }
+    },
+
+    /**
+     * Sync prices for products from Bol.com
+     */
+    syncPrices: async (products: Array<{ id: string; ean?: string; price: number; brand: string; model: string }>): Promise<{ 
+        success: boolean; 
+        updates: Array<{ id: string; ean: string; oldPrice: number; newPrice: number; brand: string; model: string }>; 
+        totalChecked: number 
+    }> => {
+        try {
+            const response = await fetch('/api/admin/sync-prices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ products })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Price sync mislukt');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Price Sync Error:', error);
+            throw error;
+        }
     }
 };

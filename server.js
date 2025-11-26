@@ -123,17 +123,82 @@ const getBolHeaders = (token) => ({
 const cleanBolUrl = (url) => {
     try {
         const urlObj = new URL(url);
-        // Remove ALL query parameters (cid, bltgh, etc.)
-        urlObj.search = '';
-        // Ensure trailing slash
-        let cleaned = urlObj.toString();
-        if (!cleaned.endsWith('/')) cleaned += '/';
-        return cleaned;
+        // Keep only essential path and domain, remove all query parameters
+        return `${urlObj.origin}${urlObj.pathname}`;
     } catch (e) {
         console.error('Error cleaning URL:', e);
         return url;
     }
 };
+
+// --- HELPER: Generate affiliate URL with correct Partner Platform structure ---
+const generateAffiliateUrl = (productUrl, title, ean) => {
+    // Clean URL first
+    const cleanUrl = cleanBolUrl(productUrl);
+    
+    // Use correct Partner Platform structure
+    return `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(cleanUrl)}&name=${encodeURIComponent(title)}`;
+};
+
+// --- HELPER: Generate SEO-friendly slug ---
+const generateSlug = (brand, model) => {
+    const brandStr = brand || '';
+    const modelStr = model || '';
+    const text = `${brandStr} ${modelStr}`.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+        .replace(/\s+/g, '-')          // Replace spaces with -
+        .replace(/-+/g, '-')           // Replace multiple - with single -
+        .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
+    return text || 'product';
+};
+
+// --- HELPER: Fetch images from Bol.com media endpoint ---
+async function fetchBolImages(ean, token, fallbackImage) {
+    try {
+        const response = await axios.get(
+            `https://api.bol.com/marketing/catalog/v1/products/${ean}/media`,
+            { headers: getBolHeaders(token) }
+        );
+        
+        const images = response.data.images || [];
+        if (images.length === 0) {
+            return { images: [fallbackImage], mainImage: fallbackImage };
+        }
+        
+        // Sort by size (largest first) and get URLs
+        const imageUrls = images
+            .sort((a, b) => (b.width * b.height) - (a.width * a.height))
+            .map(img => img.url.replace('http:', 'https:'))
+            .slice(0, 5); // Max 5 images
+        
+        return { 
+            images: imageUrls, 
+            mainImage: imageUrls[0] || fallbackImage 
+        };
+    } catch (error) {
+        console.error(`[BOL] Error fetching images for ${ean}:`, error.message);
+        return { images: [fallbackImage], mainImage: fallbackImage };
+    }
+}
+
+// --- HELPER: Fetch ratings from Bol.com ratings endpoint ---
+async function fetchBolRatings(ean, token) {
+    try {
+        const response = await axios.get(
+            `https://api.bol.com/marketing/catalog/v1/products/${ean}/ratings`,
+            { headers: getBolHeaders(token) }
+        );
+        
+        return {
+            averageRating: response.data.averageRating || 0,
+            totalReviews: response.data.ratings?.reduce((sum, r) => sum + r.count, 0) || 0,
+            distribution: response.data.ratings || []
+        };
+    } catch (error) {
+        console.error(`[BOL] Error fetching ratings for ${ean}:`, error.message);
+        return null;
+    }
+}
 
 // --- ROUTES ---
 
@@ -314,11 +379,11 @@ const PRODUCT_JSON_TEMPLATE = `
     "score": number (0-10, 1 decimaal),
     "category": "string (kies uit: televisies, audio, laptops, smartphones, wasmachines, stofzuigers, smarthome, matrassen, airfryers, koffie, keuken, verzorging)",
     "specs": { "SpecNaam": "Waarde" },
-    "pros": ["punt 1", "punt 2", "punt 3"],
-    "cons": ["punt 1", "punt 2"],
+    "pros": ["punt 1", "punt 2", "punt 3", "punt 4", "punt 5"],
+    "cons": ["punt 1", "punt 2", "punt 3"],
     "description": "Korte wervende samenvatting (2-3 zinnen, 150-180 karakters)",
-    "metaDescription": "SEO meta description (150-155 karakters, focus op waarom dit product kopen)",
-    "keywords": ["keyword1", "keyword2", "long-tail keyword"],
+    "metaDescription": "SEO meta description (exact 155-160 karakters, gebruik merk + model + belangrijkste USP + koopargument)",
+    "keywords": ["keyword1", "keyword2", "long-tail keyword 1", "long-tail keyword 2", "long-tail keyword 3"],
     "longDescription": "Uitgebreide introductie over het product (500+ woorden). Beschrijf design, features, voor wie het is, gebruik cases. SEO-rijk maar natuurlijk.",
     "expertOpinion": "Onze deskundige mening over de prestaties en waarde (300+ woorden).",
     "userReviewsSummary": "Volledig HERSCHREVEN samenvatting van gebruikerservaringen. Verwerk ratings en sentimenten in unieke content (250+ woorden). Noem specifieke ervaringen.",
@@ -358,12 +423,18 @@ async function generateAIProductReview(bolData) {
                     Schrijf een eerlijke, SEO-geoptimaliseerde review in het Nederlands.
                     Context: Het is 2026.
                     
-                    BELANGRIJK voor SEO:
+                    VERPLICHTE VEREISTEN:
+                    - Genereer EXACT 3-5 voordelen (pros) gebaseerd op specs en reviews - wees specifiek en concreet
+                    - Genereer EXACT 2-3 nadelen (cons) - wees kritisch en eerlijk, noem echte beperkingen
+                    - metaDescription: EXACT 155-160 karakters, bevat het merk, model, belangrijkste specs en koopargument
+                    - keywords: Genereer 5-8 relevante zoekwoorden inclusief long-tail keywords
                     - Gebruik Bol.com reviews als basis maar herschrijf ze VOLLEDIG uniek
-                    - Voeg lange, informatieve beschrijvingen toe
-                    - Genereer relevante long-tail keywords
-                    - Schrijf een pakkende meta description (max 155 karakters)
                     - userReviewsSummary MOET gebaseerd zijn op echte reviews maar volledig herschreven
+                    
+                    SEO TIPS:
+                    - Gebruik het merk en model in de description en metaDescription
+                    - Voeg lange, informatieve beschrijvingen toe
+                    - Genereer relevante long-tail keywords (bijv. "beste wasmachine grote gezinnen 2026")
                     
                     BELANGRIJK: Je output MOET valide JSON zijn. Geen markdown, geen introductie. Alleen JSON.
                     Structuur:
@@ -383,6 +454,41 @@ async function generateAIProductReview(bolData) {
         
         const cleanJson = extractJson(content);
         const result = JSON.parse(cleanJson);
+        
+        // Ensure minimum pros and cons
+        if (!result.pros || result.pros.length < 3) {
+            console.warn(`[${timestamp}] [AI] Warning: Insufficient pros (${result.pros?.length || 0}), padding with defaults`);
+            result.pros = result.pros || [];
+            while (result.pros.length < 3) {
+                result.pros.push('Goede prijs-kwaliteitverhouding');
+            }
+        }
+        if (!result.cons || result.cons.length < 2) {
+            console.warn(`[${timestamp}] [AI] Warning: Insufficient cons (${result.cons?.length || 0}), padding with defaults`);
+            result.cons = result.cons || [];
+            while (result.cons.length < 2) {
+                result.cons.push('Prijs kan hoog zijn voor sommige gebruikers');
+            }
+        }
+        
+        // Ensure keywords exist
+        if (!result.keywords || result.keywords.length < 5) {
+            result.keywords = result.keywords || [];
+            const brand = result.brand || 'product';
+            const model = result.model || '';
+            const category = result.category || 'elektronica';
+            if (result.keywords.length < 5) {
+                const defaultKeywords = [
+                    `${brand} ${model} review`,
+                    `${brand} ${model} kopen`,
+                    `beste ${category} 2026`,
+                    `${brand} ${model} test`,
+                    `${category} vergelijken`
+                ];
+                result.keywords = [...result.keywords, ...defaultKeywords].slice(0, 8);
+            }
+        }
+        
         console.log(`[${timestamp}] [AI] Product review generated successfully for: ${result.brand} ${result.model}`);
         return result;
     } catch (error) {
@@ -817,6 +923,66 @@ app.get('/api/admin/categories', (req, res) => {
             searchTerm: CATEGORY_SEARCH_TERMS[key]
         }))
     });
+});
+
+// 7. Sync prices for products (called from admin panel)
+app.post('/api/admin/sync-prices', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ADMIN] POST /api/admin/sync-prices`);
+    
+    try {
+        const token = await getBolToken();
+        const { productIds, products } = req.body; // Array of product IDs or full products to sync
+        
+        if (!productIds && !products) {
+            return res.status(400).json({ error: 'productIds of products is verplicht' });
+        }
+
+        const updates = [];
+        const productsToSync = products || [];
+        
+        for (const product of productsToSync) {
+            if (!product || !product.ean) continue;
+            
+            try {
+                console.log(`[${timestamp}] [SYNC] Fetching price for EAN: ${product.ean}`);
+                
+                const offerResponse = await axios.get(
+                    `https://api.bol.com/marketing/catalog/v1/products/${product.ean}/offers/best`,
+                    {
+                        params: { 'country-code': 'NL' },
+                        headers: getBolHeaders(token)
+                    }
+                );
+                
+                const newPrice = offerResponse.data.price;
+                if (newPrice && newPrice !== product.price) {
+                    updates.push({ 
+                        id: product.id, 
+                        ean: product.ean,
+                        oldPrice: product.price, 
+                        newPrice,
+                        brand: product.brand,
+                        model: product.model
+                    });
+                    console.log(`[${timestamp}] [SYNC] Price updated for ${product.brand} ${product.model}: €${product.price} -> €${newPrice}`);
+                } else {
+                    console.log(`[${timestamp}] [SYNC] Price unchanged for ${product.brand} ${product.model}: €${product.price}`);
+                }
+            } catch (error) {
+                console.error(`[${timestamp}] [SYNC] Error syncing price for ${product.id}:`, error.message);
+            }
+            
+            // Small delay to prevent rate limiting
+            await new Promise(r => setTimeout(r, 500));
+        }
+        
+        console.log(`[${timestamp}] [SYNC] Price sync completed: ${updates.length} prices updated`);
+        res.json({ success: true, updates, totalChecked: productsToSync.length });
+    } catch (error) {
+        console.error(`[${timestamp}] [ADMIN] Sync prices error:`, error.response?.data || error.message);
+        res.status(500).json({ error: error.message || 'Price sync mislukt' });
+    }
 });
 
 // --- SERVER SIDE INJECTION OF ENV VARS ---
