@@ -4,7 +4,7 @@ import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts } from '../services/bolService';
 import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
-import { generateArticleSlug } from '../services/urlService';
+import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from '../services/urlService';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -808,13 +808,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     
     // Helper function for article type labels
     const getArticleTypeLabel = (type: ArticleType): string => {
-        const labels: Record<ArticleType, string> = {
-            'comparison': 'Vergelijking',
-            'list': 'Toplijst',
-            'guide': 'Koopgids',
-            'informational': 'Informatief'
-        };
-        return labels[type] || type;
+        return ARTICLE_TYPE_LABELS[type] || type;
+    };
+    
+    // Helper function to get article type color classes
+    const getArticleTypeColorClasses = (type: ArticleType) => {
+        return ARTICLE_TYPE_COLORS[type] || ARTICLE_TYPE_COLORS['informational'];
     };
 
     // --- RENDER ---
@@ -2265,10 +2264,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                             <div className="hidden md:block col-span-2">
                                                                 <span className={`
                                                                     text-xs px-2 py-1 rounded
-                                                                    ${article.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
-                                                                      article.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
-                                                                      article.type === 'comparison' ? 'bg-green-600/20 text-green-400' :
-                                                                      'bg-yellow-600/20 text-yellow-400'}
+                                                                    ${getArticleTypeColorClasses(article.type).bg} ${getArticleTypeColorClasses(article.type).text}
                                                                 `}>
                                                                     {getArticleTypeLabel(article.type)}
                                                                 </span>

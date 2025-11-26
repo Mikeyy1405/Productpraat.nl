@@ -9,7 +9,7 @@ import { Product, CATEGORIES, Article, ArticleType } from './types';
 import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
-import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug } from './services/urlService';
+import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from './services/urlService';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
@@ -407,20 +407,26 @@ export const App: React.FC = () => {
     
     // Helper function to get article type label in Dutch
     const getArticleTypeLabel = (type: ArticleType): string => {
-        const labels: Record<ArticleType, string> = {
-            'comparison': 'Vergelijking',
-            'list': 'Toplijst',
-            'guide': 'Koopgids',
-            'informational': 'Informatief'
-        };
-        return labels[type] || type;
+        return ARTICLE_TYPE_LABELS[type] || type;
     };
     
-    // Helper function to calculate reading time
+    // Helper function to get article type color classes
+    const getArticleTypeColorClasses = (type: ArticleType) => {
+        return ARTICLE_TYPE_COLORS[type] || ARTICLE_TYPE_COLORS['informational'];
+    };
+    
+    // Helper function to calculate reading time (safely strip HTML)
     const getReadingTime = (htmlContent: string): number => {
-        const text = htmlContent.replace(/<[^>]*>/g, '');
-        const wordCount = text.split(/\s+/).length;
-        return Math.ceil(wordCount / 200); // Assume 200 words per minute
+        // Use a temporary DOM element to safely extract text content
+        if (typeof document !== 'undefined') {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const text = tempDiv.textContent || tempDiv.innerText || '';
+            const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+            return Math.ceil(wordCount / 200); // Assume 200 words per minute
+        }
+        // Fallback for server-side: rough estimate based on content length
+        return Math.ceil(htmlContent.length / 1000);
     };
     
     // Get related articles (same category or type)
@@ -663,12 +669,7 @@ export const App: React.FC = () => {
                                                     {a.imageUrl && <img src={a.imageUrl} alt={a.title} className="h-40 w-full object-cover group-hover:scale-105 transition-transform duration-300" />}
                                                     <div className="p-4">
                                                         <div className="flex items-center gap-2 mb-2">
-                                                            <span className={`text-xs px-2 py-0.5 rounded ${
-                                                                a.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
-                                                                a.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
-                                                                a.type === 'comparison' ? 'bg-green-600/20 text-green-400' :
-                                                                'bg-yellow-600/20 text-yellow-400'
-                                                            }`}>
+                                                            <span className={`text-xs px-2 py-0.5 rounded ${getArticleTypeColorClasses(a.type).bg} ${getArticleTypeColorClasses(a.type).text}`}>
                                                                 {getArticleTypeLabel(a.type)}
                                                             </span>
                                                         </div>
@@ -799,12 +800,7 @@ export const App: React.FC = () => {
                                                         />
                                                         {/* Type badge */}
                                                         <div className="absolute top-3 left-3">
-                                                            <span className={`text-xs px-2 py-1 rounded font-medium ${
-                                                                article.type === 'guide' ? 'bg-blue-600 text-white' :
-                                                                article.type === 'list' ? 'bg-purple-600 text-white' :
-                                                                article.type === 'comparison' ? 'bg-green-600 text-white' :
-                                                                'bg-yellow-600 text-white'
-                                                            }`}>
+                                                            <span className={`text-xs px-2 py-1 rounded font-medium ${getArticleTypeColorClasses(article.type).bgFull} text-white`}>
                                                                 {getArticleTypeLabel(article.type)}
                                                             </span>
                                                         </div>
@@ -1073,12 +1069,7 @@ export const App: React.FC = () => {
                                 <header className="mb-8">
                                     {/* Type badge and Category */}
                                     <div className="flex items-center gap-3 mb-4">
-                                        <span className={`text-xs px-2 py-1 rounded font-medium ${
-                                            selectedArticle.type === 'guide' ? 'bg-blue-600 text-white' :
-                                            selectedArticle.type === 'list' ? 'bg-purple-600 text-white' :
-                                            selectedArticle.type === 'comparison' ? 'bg-green-600 text-white' :
-                                            'bg-yellow-600 text-white'
-                                        }`}>
+                                        <span className={`text-xs px-2 py-1 rounded font-medium ${getArticleTypeColorClasses(selectedArticle.type).bgFull} text-white`}>
                                             {getArticleTypeLabel(selectedArticle.type)}
                                         </span>
                                         <span className="text-sm text-slate-500">
@@ -1163,12 +1154,7 @@ export const App: React.FC = () => {
                                                         />
                                                     )}
                                                     <div className="p-4">
-                                                        <span className={`text-xs px-2 py-0.5 rounded ${
-                                                            related.type === 'guide' ? 'bg-blue-600/20 text-blue-400' :
-                                                            related.type === 'list' ? 'bg-purple-600/20 text-purple-400' :
-                                                            related.type === 'comparison' ? 'bg-green-600/20 text-green-400' :
-                                                            'bg-yellow-600/20 text-yellow-400'
-                                                        }`}>
+                                                        <span className={`text-xs px-2 py-0.5 rounded ${getArticleTypeColorClasses(related.type).bg} ${getArticleTypeColorClasses(related.type).text}`}>
                                                             {getArticleTypeLabel(related.type)}
                                                         </span>
                                                         <h3 className="font-bold text-white text-sm mt-2 line-clamp-2 group-hover:text-blue-400 transition">

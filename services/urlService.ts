@@ -157,19 +157,39 @@ export const urlRouter = {
     }
 };
 
+/** Maximum length for article slugs */
+const MAX_ARTICLE_SLUG_LENGTH = 100;
+
+/** Mapping of article types to Dutch slug prefixes */
+export const ARTICLE_TYPE_SLUG_MAPPING: Record<ArticleType, string> = {
+    'comparison': 'vergelijking',
+    'list': 'toplijst',
+    'guide': 'koopgids',
+    'informational': 'informatief'
+};
+
+/** Mapping of article types to Dutch display labels */
+export const ARTICLE_TYPE_LABELS: Record<ArticleType, string> = {
+    'comparison': 'Vergelijking',
+    'list': 'Toplijst',
+    'guide': 'Koopgids',
+    'informational': 'Informatief'
+};
+
+/** Mapping of article types to color classes for badges */
+export const ARTICLE_TYPE_COLORS: Record<ArticleType, { bg: string; text: string; bgFull: string }> = {
+    'guide': { bg: 'bg-blue-600/20', text: 'text-blue-400', bgFull: 'bg-blue-600' },
+    'list': { bg: 'bg-purple-600/20', text: 'text-purple-400', bgFull: 'bg-purple-600' },
+    'comparison': { bg: 'bg-green-600/20', text: 'text-green-400', bgFull: 'bg-green-600' },
+    'informational': { bg: 'bg-yellow-600/20', text: 'text-yellow-400', bgFull: 'bg-yellow-600' }
+};
+
 /**
  * Generate an article slug from type and title
  * Format: {type-dutch}-{title-kebab-case}
  */
 export const generateArticleSlug = (article: Partial<Article>): string => {
-    const typeMapping: Record<ArticleType, string> = {
-        'comparison': 'vergelijking',
-        'list': 'toplijst',
-        'guide': 'koopgids',
-        'informational': 'informatief'
-    };
-    
-    const typePrefix = article.type ? typeMapping[article.type] : 'artikel';
+    const typePrefix = article.type ? ARTICLE_TYPE_SLUG_MAPPING[article.type] : 'artikel';
     const titleStr = article.title || 'untitled';
     
     const titleSlug = titleStr.toLowerCase()
@@ -178,7 +198,7 @@ export const generateArticleSlug = (article: Partial<Article>): string => {
         .replace(/-+/g, '-')           // Replace multiple - with single -
         .replace(/^-+|-+$/g, '');      // Remove leading/trailing hyphens
     
-    return `${typePrefix}-${titleSlug}`.substring(0, 100) || 'artikel';
+    return `${typePrefix}-${titleSlug}`.substring(0, MAX_ARTICLE_SLUG_LENGTH) || 'artikel';
 };
 
 /**
