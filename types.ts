@@ -31,6 +31,15 @@ export interface Product {
         question: string;
         answer: string;
     }[];
+    slug?: string; // SEO-friendly URL slug, e.g., "samsung-galaxy-s24-review"
+    bolReviewsRaw?: {
+        averageRating: number;
+        totalReviews: number;
+        distribution: { rating: number; count: number; }[];
+    };
+    images?: string[]; // Multiple images from Bol.com media endpoint
+    metaDescription?: string; // SEO meta description
+    keywords?: string[]; // SEO keywords
 }
 
 export interface UserReview {
