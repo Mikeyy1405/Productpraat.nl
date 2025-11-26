@@ -633,6 +633,14 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
             return res.status(400).json({ error: 'Category is verplicht' });
         }
 
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [ADMIN] Bol.com API not configured`);
+            return res.status(503).json({ 
+                error: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.' 
+            });
+        }
+
         // Step 1: Search Bol.com for products using the correct endpoint
         const token = await getBolToken();
         
@@ -729,6 +737,162 @@ app.post('/api/admin/bulk/search-and-add', async (req, res) => {
     }
 });
 
+// 3b. Bulk Search and Add Products with Streaming Progress (SSE)
+app.get('/api/admin/bulk/search-stream', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    const { category, limit = 5, categoryId } = req.query;
+    
+    console.log(`[${timestamp}] [ADMIN] GET /api/admin/bulk/search-stream - category: ${category}`);
+    
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const sendEvent = (type, data) => {
+        res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+        if (!category) {
+            sendEvent('error', { message: 'Category is verplicht' });
+            res.end();
+            return;
+        }
+
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [ADMIN] Bol.com API not configured`);
+            sendEvent('error', { message: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.' });
+            res.end();
+            return;
+        }
+
+        // Step 1: Search Bol.com for products
+        sendEvent('status', { phase: 'searching', message: `Producten zoeken voor: ${category}...` });
+        
+        const token = await getBolToken();
+        
+        const searchParams = { 
+            'search-term': category,
+            'country-code': 'NL',
+            'include': 'IMAGE,OFFER,SPECIFICATIONS'
+        };
+        
+        if (categoryId) {
+            searchParams['category-id'] = categoryId;
+        }
+        
+        const searchResponse = await axios.get(`https://api.bol.com/marketing/catalog/v1/products/search`, {
+            params: searchParams,
+            headers: getBolHeaders(token)
+        });
+
+        const results = searchResponse.data.results || [];
+        const productsToProcess = results.slice(0, Math.min(Number(limit), results.length));
+        const total = productsToProcess.length;
+        
+        sendEvent('init', { total, message: `${total} producten gevonden` });
+
+        const candidates = [];
+
+        for (const [index, product] of productsToProcess.entries()) {
+            try {
+                // Send progress update
+                sendEvent('progress', { 
+                    current: index + 1, 
+                    total, 
+                    percentage: Math.round(((index + 1) / total) * 100),
+                    message: `Verwerken: ${product.title.substring(0, 40)}...`,
+                    productTitle: product.title
+                });
+
+                let imageUrl = product.image?.url || PLACEHOLDER_IMG;
+                if (imageUrl.startsWith('http:')) imageUrl = imageUrl.replace('http:', 'https:');
+
+                // Fetch all images from media endpoint
+                const { images, mainImage } = await fetchBolImages(product.ean, token, imageUrl);
+                imageUrl = mainImage;
+                
+                // Fetch ratings/reviews from Bol.com
+                const bolReviews = await fetchBolRatings(product.ean, token);
+
+                // Generate proper affiliate URL
+                let productUrl = product.urls?.find(u => u.key === 'productpage')?.value || `https://www.bol.com/nl/nl/p/${product.ean}/`;
+                productUrl = cleanBolUrl(productUrl);
+                const affiliateUrl = `https://partner.bol.com/click/click?p=2&t=url&s=${SITE_ID}&f=TXL&url=${encodeURIComponent(productUrl)}&name=${encodeURIComponent(product.title)}`;
+
+                const specs = {};
+                if (product.specificationGroups) {
+                    product.specificationGroups.forEach(g => {
+                        g.specifications?.forEach(s => { specs[s.name] = s.value; });
+                    });
+                }
+
+                const bolData = {
+                    title: product.title,
+                    price: extractPrice(product.offer),
+                    image: imageUrl,
+                    images,
+                    ean: product.ean,
+                    url: affiliateUrl,
+                    rawDescription: product.shortDescription || product.description || "",
+                    specs,
+                    bolReviews
+                };
+
+                // Generate AI content
+                console.log(`[${timestamp}] [ADMIN] Generating AI content for: ${product.title.substring(0, 40)}...`);
+                const aiData = await generateAIProductReview(bolData);
+                
+                const slug = generateSlug(aiData.brand, aiData.model);
+
+                const candidate = { 
+                    bolData: { ...bolData, slug }, 
+                    aiData: { 
+                        ...aiData, 
+                        slug, 
+                        images,
+                        bolReviewsRaw: bolReviews 
+                    } 
+                };
+
+                candidates.push(candidate);
+                
+                // Send product completion event
+                sendEvent('product', { 
+                    index, 
+                    candidate, 
+                    message: `✅ ${aiData.brand} ${aiData.model} verwerkt`
+                });
+
+                // Rate limiting
+                await new Promise(r => setTimeout(r, AI_RATE_LIMIT_DELAY_MS));
+            } catch (productError) {
+                console.error(`[${timestamp}] [ADMIN] Error processing product ${product.ean}:`, productError.message);
+                sendEvent('product_error', { 
+                    index, 
+                    ean: product.ean, 
+                    message: `❌ Fout: ${productError.message}` 
+                });
+            }
+        }
+
+        // Send completion event
+        sendEvent('complete', { 
+            total: candidates.length, 
+            message: `Import voltooid: ${candidates.length} producten verwerkt` 
+        });
+        
+        res.end();
+    } catch (error) {
+        console.error(`[${timestamp}] [ADMIN] Bulk stream error:`, error.message);
+        sendEvent('error', { message: error.message || 'Bulk import mislukt' });
+        res.end();
+    }
+});
+
 // 4. Import Single Product from URL
 app.post('/api/admin/import/url', async (req, res) => {
     const timestamp = new Date().toISOString();
@@ -739,6 +903,14 @@ app.post('/api/admin/import/url', async (req, res) => {
         
         if (!url) {
             return res.status(400).json({ error: 'URL is verplicht' });
+        }
+
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [ADMIN] Bol.com API not configured`);
+            return res.status(503).json({ 
+                error: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.' 
+            });
         }
 
         // Step 1: Fetch product data from Bol.com
@@ -825,7 +997,11 @@ app.post('/api/admin/import/url', async (req, res) => {
         });
     } catch (error) {
         console.error(`[${timestamp}] [ADMIN] Import URL error:`, error.response?.data || error.message);
-        res.status(500).json({ error: error.message || 'Product import mislukt' });
+        const errorMessage = error.response?.data?.error_description || 
+                            error.response?.data?.error || 
+                            error.message || 
+                            'Product import mislukt';
+        res.status(500).json({ error: errorMessage });
     }
 });
 
@@ -839,6 +1015,14 @@ app.post('/api/admin/import/by-category', async (req, res) => {
         
         if (!category) {
             return res.status(400).json({ error: 'Category is verplicht' });
+        }
+
+        // Check if Bol.com API is configured
+        if (!isBolConfigured) {
+            console.error(`[${timestamp}] [ADMIN] Bol.com API not configured`);
+            return res.status(503).json({ 
+                error: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID, BOL_CLIENT_SECRET en BOL_SITE_ID in.' 
+            });
         }
         
         // Get the optimized search term for this category

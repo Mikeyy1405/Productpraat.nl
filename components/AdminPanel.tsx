@@ -217,8 +217,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     };
 
     // ========================================================================
-    // 1B. BULK IMPORT BY CATEGORY HANDLER (Server-side with AI)
+    // 1B. BULK IMPORT BY CATEGORY HANDLER (Server-side with AI) - WITH STREAMING PROGRESS
     // ========================================================================
+    const abortControllerRef = useRef<(() => void) | null>(null);
+    
     const handleBulkCategoryImport = async () => {
         if (isProcessing) return;
         
@@ -228,16 +230,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         setLoadingMessage(`Producten zoeken in categorie ${CATEGORIES[bulkCategorySelected].name}...`);
         addLog(`📦 Start Bulk Category Import: ${CATEGORIES[bulkCategorySelected].name} (max ${bulkCategoryLimit} producten)`);
         showToast(`Bulk category import gestart: ${CATEGORIES[bulkCategorySelected].name}`, 'info');
+        
+        // Initialize progress tracking
+        setBulkProgress({ current: 0, total: 0, statuses: [] });
 
         try {
-            // Call the server-side bulk search and add endpoint
-            const candidates = await aiService.bulkSearchAndAdd(CATEGORIES[bulkCategorySelected].name, bulkCategoryLimit);
+            // Use the new streaming endpoint
+            const { promise, abort } = aiService.bulkSearchWithProgress(
+                CATEGORIES[bulkCategorySelected].name,
+                bulkCategoryLimit,
+                (progress) => {
+                    // Update progress in real-time
+                    setProgress(progress.percentage);
+                    setLoadingMessage(progress.message);
+                    
+                    if (progress.phase === 'searching') {
+                        addLog(`🔍 ${progress.message}`);
+                    } else if (progress.phase === 'processing') {
+                        setBulkProgress(prev => {
+                            const newStatuses = [...prev.statuses];
+                            // Ensure we have enough slots
+                            while (newStatuses.length < progress.total) {
+                                newStatuses.push('pending');
+                            }
+                            // Mark current as processing
+                            if (progress.current > 0) {
+                                newStatuses[progress.current - 1] = 'processing';
+                            }
+                            // Mark previous as success if we have a candidate
+                            if (progress.candidate && progress.current > 1) {
+                                newStatuses[progress.current - 2] = 'success';
+                            }
+                            return {
+                                current: progress.current,
+                                total: progress.total,
+                                statuses: newStatuses
+                            };
+                        });
+                    } else if (progress.error) {
+                        addLog(`❌ ${progress.message}`);
+                    }
+                }
+            );
             
-            addLog(`✅ ${candidates.length} producten gevonden en verwerkt door server`);
+            // Store abort function
+            abortControllerRef.current = abort;
             
-            setBulkProgress({ current: 0, total: candidates.length, statuses: candidates.map(() => 'pending') });
-
-            // Process each candidate and save to database
+            // Wait for all products to be processed
+            const candidates = await promise;
+            
+            addLog(`✅ ${candidates.length} producten ontvangen van server`);
+            
+            // Now save each candidate to the database
             for (const [index, candidate] of candidates.entries()) {
                 if (stopProcessRef.current) {
                     addLog(`⏹️ Import gestopt door gebruiker`);
@@ -247,7 +291,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
                 setBulkProgress(prev => ({
                     ...prev,
-                    current: index,
+                    current: index + 1,
                     statuses: prev.statuses.map((s, i) => i === index ? 'processing' : s)
                 }));
 
@@ -262,7 +306,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                             ...prev,
                             statuses: prev.statuses.map((s, i) => i === index ? 'success' : s)
                         }));
-                        setProgress(((index + 1) / candidates.length) * 100);
                         continue;
                     }
 
@@ -285,7 +328,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         longDescription: candidate.aiData.longDescription,
                         expertOpinion: candidate.aiData.expertOpinion,
                         userReviewsSummary: candidate.aiData.userReviewsSummary,
-                        affiliateUrl: candidate.bolData.url, // This contains the affiliate link from server
+                        affiliateUrl: candidate.bolData.url,
                         ean: candidate.bolData.ean,
                         scoreBreakdown: candidate.aiData.scoreBreakdown,
                         suitability: candidate.aiData.suitability,
@@ -310,8 +353,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         statuses: prev.statuses.map((s, i) => i === index ? 'error' : s)
                     }));
                 }
-
-                setProgress(((index + 1) / candidates.length) * 100);
             }
 
             addLog(`🎉 Bulk Category Import Voltooid: ${candidates.length} producten verwerkt`);
@@ -323,6 +364,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
         } finally {
             setIsProcessing(false);
             setLoadingMessage('');
+            abortControllerRef.current = null;
+        }
+    };
+    
+    const handleStopBulkImport = () => {
+        stopProcessRef.current = true;
+        if (abortControllerRef.current) {
+            abortControllerRef.current();
         }
     };
 
@@ -1367,7 +1416,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                         
                                                         {isProcessing && (
                                                             <button 
-                                                                onClick={() => stopProcessRef.current = true}
+                                                                onClick={handleStopBulkImport}
                                                                 className="bg-red-900/30 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl font-bold hover:bg-red-900/50 transition flex items-center gap-2"
                                                             >
                                                                 <i className="fas fa-stop"></i> Stop

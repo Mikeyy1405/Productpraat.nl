@@ -220,7 +220,7 @@ export const App: React.FC = () => {
             setView('about');
         } else if (path === '/contact') {
             setView('contact');
-        } else if (path === '/admin') {
+        } else if (path === '/admin' || path === '/dashboard') {
             setView(isAuthenticated ? 'admin' : 'login');
         }
     };
@@ -322,23 +322,27 @@ export const App: React.FC = () => {
          return [...relevantCustom].sort((a, b) => b.score - a.score).slice(0, 3);
     }, [activeCategory, customProducts]);
 
-    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact') => {
-        if (target === 'admin' && !isAuthenticated) {
+    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact' | 'dashboard') => {
+        if ((target === 'admin' || target === 'dashboard') && !isAuthenticated) {
             setView('login');
-            urlRouter.push('/admin');
+            urlRouter.push('/dashboard');
         } else {
-            setView(target);
-            // Update browser URL
-            if (target === 'home') urlRouter.push('/');
-            else if (target === 'about') urlRouter.push('/about');
-            else if (target === 'contact') urlRouter.push('/contact');
-            else if (target === 'admin') urlRouter.push('/admin');
+            if (target === 'admin' || target === 'dashboard') {
+                setView('admin');
+                urlRouter.push('/dashboard');
+            } else {
+                setView(target);
+                // Update browser URL
+                if (target === 'home') urlRouter.push('/');
+                else if (target === 'about') urlRouter.push('/about');
+                else if (target === 'contact') urlRouter.push('/contact');
+            }
         }
         window.scrollTo(0,0);
     };
 
-    const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/admin'); };
-    const handleLogout = () => { setIsAuthenticated(false); setView('login'); urlRouter.push('/admin'); };
+    const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/dashboard'); };
+    const handleLogout = () => { setIsAuthenticated(false); setView('login'); urlRouter.push('/dashboard'); };
     
     // ASYNC HANDLERS FOR SUPABASE INTERACTION
     const handleAddProduct = async (newProduct: Product) => {
