@@ -27,7 +27,6 @@
     <meta name="author" content="ProductPraat Redactie">
     <link rel="canonical" href="https://productpraat.nl">
     
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
@@ -37,61 +36,7 @@
             VITE_SUPABASE_URL: "",
             VITE_SUPABASE_ANON_KEY: ""
         };
-
-        // Configure Tailwind to match app theme
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    colors: {
-                        brand: {
-                            blue: '#1877F2',
-                            dark: '#0f172a',
-                            darker: '#020617',
-                            orange: '#f97316',
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.3s ease-out',
-                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'scale(0.95)' },
-                            '100%': { opacity: '1', transform: 'scale(1)' },
-                        }
-                    }
-                }
-            }
-        }
     </script>
-    <style>
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        .logo-icon:hover .logo-smile { d: path('M 12 28 Q 25 40 38 28'); transition: all 0.3s ease; }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "openai": "https://aistudiocdn.com/openai@^6.9.1",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "express": "https://aistudiocdn.com/express@^5.1.0",
-    "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
-    "axios": "https://aistudiocdn.com/axios@^1.13.2",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.84.0",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
-    "fs": "https://aistudiocdn.com/fs@^0.0.1-security"
-  }
-}
-</script>
 </head>
 <body class="bg-slate-950 text-slate-200 antialiased selection:bg-blue-500 selection:text-white">
     <div id="root"></div>

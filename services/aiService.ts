@@ -34,6 +34,18 @@ interface CategoryInfo {
     searchTerm: string;
 }
 
+interface BulkImportProgress {
+    phase: 'searching' | 'processing' | 'complete' | 'error';
+    current: number;
+    total: number;
+    percentage: number;
+    message: string;
+    candidate?: ProductCandidate;
+    error?: string;
+}
+
+type ProgressCallback = (progress: BulkImportProgress) => void;
+
 /**
  * AI Service - Server-side wrapper
  * All AI API calls are routed through the server to protect API keys
@@ -86,7 +98,7 @@ export const aiService = {
     },
 
     /**
-     * Bulk search and add products with AI enrichment
+     * Bulk search and add products with AI enrichment (legacy - no progress)
      */
     bulkSearchAndAdd: async (category: string, limit: number): Promise<ProductCandidate[]> => {
         try {
@@ -106,6 +118,136 @@ export const aiService = {
             console.error('Bulk Search Error:', error);
             throw error;
         }
+    },
+
+    /**
+     * Bulk search and add products with streaming progress updates (SSE)
+     */
+    bulkSearchWithProgress: (
+        category: string, 
+        limit: number, 
+        onProgress: ProgressCallback
+    ): { promise: Promise<ProductCandidate[]>; abort: () => void } => {
+        const abortController = new AbortController();
+        
+        const promise = new Promise<ProductCandidate[]>((resolve, reject) => {
+            const candidates: ProductCandidate[] = [];
+            const params = new URLSearchParams({
+                category,
+                limit: String(limit)
+            });
+            
+            const eventSource = new EventSource(`/api/admin/bulk/search-stream?${params}`);
+            let serverTotal = 0; // Track the total from server init event
+            
+            eventSource.addEventListener('init', (e) => {
+                const data = JSON.parse(e.data);
+                serverTotal = data.total;
+                onProgress({
+                    phase: 'searching',
+                    current: 0,
+                    total: data.total,
+                    percentage: 0,
+                    message: data.message
+                });
+            });
+            
+            eventSource.addEventListener('status', (e) => {
+                const data = JSON.parse(e.data);
+                onProgress({
+                    phase: data.phase,
+                    current: 0,
+                    total: serverTotal,
+                    percentage: 0,
+                    message: data.message
+                });
+            });
+            
+            eventSource.addEventListener('progress', (e) => {
+                const data = JSON.parse(e.data);
+                serverTotal = data.total; // Update total from server
+                onProgress({
+                    phase: 'processing',
+                    current: data.current,
+                    total: data.total,
+                    percentage: data.percentage,
+                    message: data.message
+                });
+            });
+            
+            eventSource.addEventListener('product', (e) => {
+                const data = JSON.parse(e.data);
+                candidates.push(data.candidate);
+                const percentage = serverTotal > 0 ? Math.round(((data.index + 1) / serverTotal) * 100) : 0;
+                onProgress({
+                    phase: 'processing',
+                    current: data.index + 1,
+                    total: serverTotal,
+                    percentage,
+                    message: data.message,
+                    candidate: data.candidate
+                });
+            });
+            
+            eventSource.addEventListener('product_error', (e) => {
+                const data = JSON.parse(e.data);
+                onProgress({
+                    phase: 'processing',
+                    current: data.index + 1,
+                    total: serverTotal,
+                    percentage: serverTotal > 0 ? Math.round(((data.index + 1) / serverTotal) * 100) : 0,
+                    message: data.message,
+                    error: data.message
+                });
+            });
+            
+            eventSource.addEventListener('complete', (e) => {
+                const data = JSON.parse(e.data);
+                onProgress({
+                    phase: 'complete',
+                    current: data.total,
+                    total: data.total,
+                    percentage: 100,
+                    message: data.message
+                });
+                eventSource.close();
+                resolve(candidates);
+            });
+            
+            eventSource.addEventListener('error', (e) => {
+                if (e instanceof MessageEvent) {
+                    const data = JSON.parse(e.data);
+                    onProgress({
+                        phase: 'error',
+                        current: 0,
+                        total: 0,
+                        percentage: 0,
+                        message: data.message,
+                        error: data.message
+                    });
+                    reject(new Error(data.message));
+                } else {
+                    reject(new Error('Connection lost'));
+                }
+                eventSource.close();
+            });
+            
+            eventSource.onerror = () => {
+                eventSource.close();
+                reject(new Error('SSE connection error'));
+            };
+            
+            // Handle abort
+            abortController.signal.addEventListener('abort', () => {
+                eventSource.close();
+                reject(new Error('Import cancelled'));
+            });
+        });
+        
+        return {
+            promise,
+            abort: () => abortController.abort()
+        };
     },
 
     /**
