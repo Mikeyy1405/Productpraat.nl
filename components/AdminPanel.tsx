@@ -1933,23 +1933,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                     )}
                                                     {generatedArticle.htmlContent && (
                                                         <div 
-                                                            className="prose prose-invert prose-lg max-w-none
-                                                                       prose-headings:font-bold prose-headings:text-white
-                                                                       prose-h1:text-3xl prose-h1:mb-4
-                                                                       prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 
-                                                                       prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3
-                                                                       prose-p:text-slate-300 prose-p:mb-4
-                                                                       prose-ul:list-disc prose-ul:ml-6 prose-ul:mb-4
-                                                                       prose-ol:list-decimal prose-ol:ml-6 prose-ol:mb-4
-                                                                       prose-li:text-slate-300 prose-li:mb-2
-                                                                       prose-strong:text-white prose-strong:font-semibold
-                                                                       prose-blockquote:border-l-4 prose-blockquote:border-blue-500 
-                                                                       prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-300
-                                                                       prose-table:w-full prose-table:border-collapse
-                                                                       prose-th:bg-slate-800 prose-th:border prose-th:border-slate-700 prose-th:px-4 prose-th:py-2
-                                                                       prose-td:border prose-td:border-slate-700 prose-td:px-4 prose-td:py-2
-                                                                       prose-img:rounded-lg prose-img:shadow-lg
-                                                                       prose-figcaption:text-sm prose-figcaption:text-slate-400 prose-figcaption:text-center"
+                                                            className="article-preview"
                                                             dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
                                                         />
                                                     )}
@@ -2038,6 +2022,121 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 .custom-scroll::-webkit-scrollbar-track { background: #1e293b; border-radius: 3px; }
                 .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
                 .custom-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
+                .animate-fade-in { animation: fadeIn 0.3s ease-in; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+                
+                /* Article Preview Styling */
+                .article-preview h1 {
+                    font-size: 2rem;
+                    font-weight: 800;
+                    color: white;
+                    margin-bottom: 1.5rem;
+                    line-height: 1.2;
+                }
+                
+                .article-preview h2 {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: white;
+                    margin-top: 2rem;
+                    margin-bottom: 1rem;
+                    border-bottom: 2px solid #1e40af;
+                    padding-bottom: 0.5rem;
+                }
+                
+                .article-preview h3 {
+                    font-size: 1.25rem;
+                    font-weight: 600;
+                    color: #e2e8f0;
+                    margin-top: 1.5rem;
+                    margin-bottom: 0.75rem;
+                }
+                
+                .article-preview p {
+                    color: #cbd5e1;
+                    line-height: 1.7;
+                    margin-bottom: 1rem;
+                }
+                
+                .article-preview strong {
+                    color: white;
+                    font-weight: 600;
+                }
+                
+                .article-preview ul, .article-preview ol {
+                    color: #cbd5e1;
+                    margin-left: 1.5rem;
+                    margin-bottom: 1rem;
+                }
+                
+                .article-preview ul {
+                    list-style-type: disc;
+                }
+                
+                .article-preview ol {
+                    list-style-type: decimal;
+                }
+                
+                .article-preview li {
+                    margin-bottom: 0.5rem;
+                    line-height: 1.6;
+                }
+                
+                .article-preview blockquote {
+                    border-left: 4px solid #3b82f6;
+                    font-style: italic;
+                    color: #94a3b8;
+                    margin: 1.5rem 0;
+                    background: rgba(59, 130, 246, 0.1);
+                    padding: 1rem 1rem 1rem 1.5rem;
+                    border-radius: 0.5rem;
+                }
+                
+                .article-preview table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 1.5rem 0;
+                    border: 1px solid #334155;
+                }
+                
+                .article-preview thead {
+                    background: #1e293b;
+                }
+                
+                .article-preview th {
+                    border: 1px solid #334155;
+                    padding: 0.75rem 1rem;
+                    text-align: left;
+                    font-weight: 600;
+                    color: white;
+                }
+                
+                .article-preview td {
+                    border: 1px solid #334155;
+                    padding: 0.75rem 1rem;
+                    color: #cbd5e1;
+                }
+                
+                .article-preview tbody tr:hover {
+                    background: rgba(59, 130, 246, 0.1);
+                }
+                
+                .article-preview figure {
+                    margin: 1.5rem 0;
+                }
+                
+                .article-preview figure img {
+                    width: 100%;
+                    border-radius: 0.5rem;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+                }
+                
+                .article-preview figcaption {
+                    font-size: 0.875rem;
+                    color: #94a3b8;
+                    text-align: center;
+                    margin-top: 0.5rem;
+                }
             `}</style>
         </div>
     );
