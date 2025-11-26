@@ -2084,12 +2084,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 
                 .article-preview blockquote {
                     border-left: 4px solid #3b82f6;
-                    padding-left: 1rem;
                     font-style: italic;
                     color: #94a3b8;
                     margin: 1.5rem 0;
                     background: rgba(59, 130, 246, 0.1);
-                    padding: 1rem;
+                    padding: 1rem 1rem 1rem 1.5rem;
                     border-radius: 0.5rem;
                 }
                 
