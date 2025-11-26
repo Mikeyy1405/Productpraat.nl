@@ -6,7 +6,7 @@
 -- Add the images column as JSONB to store an array of image URLs
 -- The column is nullable with a default empty array to support existing records
 ALTER TABLE products
-ADD COLUMN IF NOT EXISTS images JSONB DEFAULT '[]'::jsonb;
+ADD COLUMN IF NOT EXISTS images jsonb DEFAULT '[]'::jsonb;
 
 -- Add a comment to document the column's purpose and expected structure
 -- The field stores multiple product images retrieved from the Bol.com media API
