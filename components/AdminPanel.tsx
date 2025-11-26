@@ -6,6 +6,21 @@ import { Product, CATEGORIES, Article, ArticleType } from '../types';
 import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS } from '../services/urlService';
 
+// Helper function to remove the first H1 from HTML content to prevent duplicate titles
+const removeFirstH1 = (htmlContent: string): string => {
+    if (typeof document !== 'undefined') {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const firstH1 = tempDiv.querySelector('h1');
+        if (firstH1) {
+            firstH1.remove();
+        }
+        return tempDiv.innerHTML;
+    }
+    // Fallback: use regex to remove first H1 tag
+    return htmlContent.replace(/<h1[^>]*>[\s\S]*?<\/h1>/i, '');
+};
+
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
     onDeleteProduct: (id: string) => Promise<void>;
@@ -2027,7 +2042,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                                         {generatedArticle.htmlContent && (
                                                             <div 
                                                                 className="article-preview"
-                                                                dangerouslySetInnerHTML={{ __html: generatedArticle.htmlContent }}
+                                                                dangerouslySetInnerHTML={{ __html: removeFirstH1(generatedArticle.htmlContent) }}
                                                             />
                                                         )}
                                                     </div>
@@ -2336,8 +2351,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                 
                 /* Article Preview Styling */
                 .article-preview h1 {
-                    /* Hide H1 in article content since title is already displayed above the preview */
-                    display: none;
+                    /* Fallback styling in case H1 is not removed programmatically */
+                    font-size: 2rem;
+                    font-weight: 800;
+                    color: white;
+                    margin-bottom: 1.5rem;
+                    line-height: 1.2;
                 }
                 
                 .article-preview h2 {
