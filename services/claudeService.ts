@@ -1,10 +1,42 @@
 /**
  * Claude AI Service for Product Review Generation
- * Uses Anthropic SDK to analyze scraped content and generate product reviews
+ * 
+ * Uses AIML API (https://docs.aimlapi.com/) to access Claude models.
+ * AIML API uses an OpenAI-compatible endpoint format, not the Anthropic Messages API.
+ * 
+ * Benefits of using AIML API:
+ * - Access to 200+ AI models (Claude, GPT, Gemini, Llama, etc.)
+ * - OpenAI-compatible format for easy model switching
+ * - Uses native fetch (no SDK dependencies)
+ * 
+ * API Reference: https://docs.aimlapi.com/api-references/text-models-llm/anthropic/claude-sonnet-4-5
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { Product } from '../types';
+
+// AIML API Configuration
+const AIML_API_ENDPOINT = 'https://api.aimlapi.com/v1/chat/completions';
+const AIML_MODEL = 'anthropic/claude-sonnet-4.5';
+
+// Type for AIML API response (OpenAI-compatible format)
+interface AIMLChatResponse {
+  id: string;
+  object: string;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: string;
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
 
 // Type for window.__ENV__ in production
 interface WindowEnv {
@@ -102,12 +134,6 @@ export const generateProductReview = async (input: ProductReviewInput): Promise<
     console.error('VITE_ANTHROPIC_API_KEY is not configured');
     throw new Error('AI API key niet geconfigureerd. Stel VITE_ANTHROPIC_API_KEY in.');
   }
-
-  const anthropic = new Anthropic({
-    apiKey: apiKey,
-    baseURL: 'https://api.aimlapi.com',
-    dangerouslyAllowBrowser: true
-  });
 
   const systemPrompt = `Je bent de Hoofdredacteur van ProductPraat.nl, dé autoriteit op het gebied van product reviews in Nederland.
 Je ontvangt content van een productpagina (Bol.com, Amazon, Coolblue, etc.) en genereert een ZEER UITGEBREIDE en PROFESSIONELE review.
@@ -224,18 +250,38 @@ ${input.scrapedContent}
 
 Genereer een complete product review. Retourneer alleen de JSON.`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      system: systemPrompt,
-      messages: [{
-        role: 'user',
-        content: userPrompt
-      }]
+    // Call AIML API using OpenAI-compatible format
+    const response = await fetch(AIML_API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: AIML_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 8000,
+        temperature: 0.7
+      })
     });
 
-    const textContent = response.content[0];
-    if (textContent.type !== 'text') {
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AIML API error:', response.status, errorText);
+      throw new Error(`AI API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const responseData = await response.json() as AIMLChatResponse;
+    
+    if (!responseData.choices || responseData.choices.length === 0) {
+      throw new Error('No response from AI model');
+    }
+
+    const textContent = responseData.choices[0].message.content;
+    if (!textContent) {
       throw new Error('Unexpected response type from AI');
     }
 
@@ -275,7 +321,7 @@ Genereer een complete product review. Retourneer alleen de JSON.`;
         role: string;
         summary: string;
       };
-    }>(textContent.text);
+    }>(textContent);
 
     if (!data.title) {
       throw new Error('Incomplete product generation - missing title');
@@ -378,26 +424,43 @@ export const extractProductInfo = async (url: string, scrapedContent: string): P
     throw new Error('AI API key niet geconfigureerd');
   }
 
-  const anthropic = new Anthropic({
-    apiKey: apiKey,
-    baseURL: 'https://api.aimlapi.com',
-    dangerouslyAllowBrowser: true
+  const systemPrompt = 'Extraheer de basis productinformatie uit de gegeven content. Retourneer alleen JSON: {"title": "string", "brand": "string", "price": "string", "category": "string"}';
+  const userPrompt = `URL: ${url}\n\nContent: ${scrapedContent.substring(0, 5000)}`;
+
+  // Call AIML API using OpenAI-compatible format
+  const response = await fetch(AIML_API_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: AIML_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      max_tokens: 500,
+      temperature: 0.7
+    })
   });
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 500,
-    system: 'Extraheer de basis productinformatie uit de gegeven content. Retourneer alleen JSON: {"title": "string", "brand": "string", "price": "string", "category": "string"}',
-    messages: [{
-      role: 'user',
-      content: `URL: ${url}\n\nContent: ${scrapedContent.substring(0, 5000)}`
-    }]
-  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('AIML API error:', response.status, errorText);
+    throw new Error(`AI API request failed: ${response.status} ${response.statusText}`);
+  }
 
-  const textContent = response.content[0];
-  if (textContent.type !== 'text') {
+  const responseData = await response.json() as AIMLChatResponse;
+  
+  if (!responseData.choices || responseData.choices.length === 0) {
+    throw new Error('No response from AI model');
+  }
+
+  const textContent = responseData.choices[0].message.content;
+  if (!textContent) {
     throw new Error('Unexpected response type');
   }
 
-  return parseJsonResponse(textContent.text);
+  return parseJsonResponse(textContent);
 };
