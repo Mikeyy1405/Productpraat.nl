@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
 import { getProductUrl } from '../services/urlService';
+import { generateAffiliateLink, trackAffiliateClick, detectNetwork } from '../utils/affiliateUtils';
 
 interface ProductCardProps {
     product: Product;
@@ -44,11 +45,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
         onClick(product.id);
     };
 
+    /**
+     * Handle click on deal/buy button
+     * Generates affiliate link and tracks the click
+     */
     const handleDealClick = (e: React.MouseEvent) => {
-        const link = product.affiliateLink || product.affiliateUrl;
-        if (link && link !== '#') {
+        const baseLink = product.affiliateLink || product.affiliateUrl;
+        if (baseLink && baseLink !== '#') {
             e.stopPropagation();
-            window.open(link, '_blank', 'noopener,noreferrer');
+            
+            // Generate affiliate link with tracking
+            const affiliateLink = generateAffiliateLink(baseLink);
+            
+            // Track the click
+            const networkId = detectNetwork(baseLink);
+            if (networkId) {
+                trackAffiliateClick(networkId, product.id, `${product.brand} ${product.model}`);
+            }
+            
+            // Open the affiliate link
+            window.open(affiliateLink, '_blank', 'noopener,noreferrer');
         } else {
             e.stopPropagation();
             onClick(product.id);
