@@ -32,6 +32,17 @@ console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not se
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] AIML API Key: ${VITE_ANTHROPIC_API_KEY ? 'Configured' : 'Not set'}`);
 
+// Helper function to escape strings for safe JavaScript injection
+const escapeForJs = (str) => {
+    if (!str) return '';
+    return str
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/<\/script>/gi, '<\\/script>');
+};
+
 app.use(express.json());
 app.use(express.static('dist', { index: false }));
 
@@ -176,13 +187,13 @@ app.get('*', (req, res) => {
             return res.status(500).send('Server Error');
         }
 
-        // Inject env vars
+        // Inject env vars (escaped to prevent XSS)
         const envScript = `
             <script>
                 window.__ENV__ = {
-                    VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
-                    VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
-                    VITE_ANTHROPIC_API_KEY: "${VITE_ANTHROPIC_API_KEY}"
+                    VITE_SUPABASE_URL: "${escapeForJs(VITE_SUPABASE_URL)}",
+                    VITE_SUPABASE_ANON_KEY: "${escapeForJs(VITE_SUPABASE_ANON_KEY)}",
+                    VITE_ANTHROPIC_API_KEY: "${escapeForJs(VITE_ANTHROPIC_API_KEY)}"
                 };
             </script>
         `;
