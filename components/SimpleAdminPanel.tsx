@@ -18,6 +18,47 @@ export const SimpleAdminPanel: React.FC<SimpleAdminPanelProps> = ({
 }) => {
     const [showProductGenerator, setShowProductGenerator] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+    /** Duration in milliseconds before notification auto-hides */
+    const NOTIFICATION_TIMEOUT_MS = 5000;
+
+    /** Show notification and auto-hide after timeout */
+    const showNotification = (type: 'success' | 'error', message: string) => {
+        setNotification({ type, message });
+        setTimeout(() => setNotification(null), NOTIFICATION_TIMEOUT_MS);
+    };
+
+    /** Handle product add with error handling */
+    const handleAddProduct = async (product: Product) => {
+        try {
+            await onAddProduct(product);
+            setShowProductGenerator(false);
+            showNotification('success', `${product.brand} ${product.model} is succesvol toegevoegd!`);
+        } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : 'Er ging iets mis bij het toevoegen.';
+            showNotification('error', errorMessage);
+            // Re-throw so the ProductGenerator knows it failed
+            throw e;
+        }
+    };
+
+    /** Handle product delete with error handling */
+    const handleDeleteProduct = async (id: string) => {
+        if (!confirm('Weet je zeker dat je dit product wilt verwijderen?')) return;
+        
+        setIsDeleting(id);
+        try {
+            await onDeleteProduct(id);
+            showNotification('success', 'Product is succesvol verwijderd.');
+        } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : 'Er ging iets mis bij het verwijderen.';
+            showNotification('error', errorMessage);
+        } finally {
+            setIsDeleting(null);
+        }
+    };
 
     const filteredProducts = products.filter(p => {
         if (!searchTerm) return true;
@@ -33,6 +74,24 @@ export const SimpleAdminPanel: React.FC<SimpleAdminPanelProps> = ({
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
+            {/* Notification */}
+            {notification && (
+                <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 animate-fade-in ${
+                    notification.type === 'success' 
+                        ? 'bg-green-900/90 border border-green-500/30 text-green-300' 
+                        : 'bg-red-900/90 border border-red-500/30 text-red-300'
+                }`}>
+                    <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
+                    <span>{notification.message}</span>
+                    <button 
+                        onClick={() => setNotification(null)} 
+                        className="ml-2 hover:text-white transition"
+                    >
+                        <i className="fas fa-times"></i>
+                    </button>
+                </div>
+            )}
+            
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <div>
@@ -80,10 +139,7 @@ export const SimpleAdminPanel: React.FC<SimpleAdminPanelProps> = ({
                         </div>
                         <div className="p-4">
                             <ProductGenerator 
-                                onSave={async (product: Product) => {
-                                    await onAddProduct(product);
-                                    setShowProductGenerator(false);
-                                }}
+                                onSave={handleAddProduct}
                                 onCancel={() => setShowProductGenerator(false)}
                             />
                         </div>
@@ -119,19 +175,34 @@ export const SimpleAdminPanel: React.FC<SimpleAdminPanelProps> = ({
                     ) : (
                         filteredProducts.map(p => (
                             <div key={p.id} className="flex items-center gap-4 p-4 hover:bg-slate-800/50">
-                                <img src={p.image} className="w-12 h-12 object-contain bg-white rounded" referrerPolicy="no-referrer" />
+                                <img 
+                                    src={p.imageUrl || p.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.brand)}&background=0f172a&color=3b82f6`} 
+                                    className="w-12 h-12 object-contain bg-white rounded" 
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.brand)}&background=0f172a&color=3b82f6`;
+                                    }}
+                                />
                                 <div className="flex-1 min-w-0">
                                     <div className="font-medium text-white truncate">{p.brand} {p.model}</div>
-                                    <div className="text-sm text-slate-400">{CATEGORIES[p.category]?.name} • €{p.price}</div>
+                                    <div className="text-sm text-slate-400">
+                                        {CATEGORIES[p.category]?.name} • €{p.price}
+                                        {p.isAiGenerated && <span className="ml-2 text-xs text-blue-400"><i className="fas fa-robot"></i> AI</span>}
+                                    </div>
                                 </div>
                                 <span className={`px-2 py-1 rounded text-sm font-bold ${p.score >= 8 ? 'bg-green-600/20 text-green-400' : 'bg-yellow-600/20 text-yellow-400'}`}>
                                     {p.score.toFixed(1)}
                                 </span>
                                 <button
-                                    onClick={() => confirm('Product verwijderen?') && onDeleteProduct(p.id)}
-                                    className="text-red-400 hover:text-red-300 p-2"
+                                    onClick={() => handleDeleteProduct(p.id)}
+                                    disabled={isDeleting === p.id}
+                                    className="text-red-400 hover:text-red-300 p-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <i className="fas fa-trash"></i>
+                                    {isDeleting === p.id ? (
+                                        <i className="fas fa-spinner fa-spin"></i>
+                                    ) : (
+                                        <i className="fas fa-trash"></i>
+                                    )}
                                 </button>
                             </div>
                         ))

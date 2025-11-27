@@ -183,17 +183,37 @@ export const db = {
                 .order('created_at', { ascending: false });
             if (error) throw error;
             return data as UserReview[] || [];
-        } catch (e) { return []; }
+        } catch (e) { 
+            console.error("GetReviews Error:", formatError(e));
+            return []; 
+        }
     },
 
     addUserReview: async (review: UserReview): Promise<UserReview[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            throw new Error("Database niet beschikbaar. Controleer Supabase configuratie.");
+        }
         try {
-            const { error } = await supabase.from('reviews').insert([review]);
-            if (error) throw error;
+            // Add title field for database compatibility (default to first words of comment)
+            const reviewWithTitle = {
+                ...review,
+                title: review.comment.substring(0, 50) + (review.comment.length > 50 ? '...' : ''),
+            };
+            const { error } = await supabase.from('reviews').insert([reviewWithTitle]);
+            if (error) {
+                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
+                console.error("Supabase addUserReview error:", error);
+                throw new Error(`Database fout: ${errorMessage}`);
+            }
             return await db.getReviewsForProduct(review.productId);
-        } catch (e) { return []; }
+        } catch (e) { 
+            console.error("Add Review Error:", formatError(e));
+            if (e instanceof Error) {
+                throw e;
+            }
+            throw new Error(`Fout bij opslaan review: ${formatError(e)}`);
+        }
     },
 
     // --- ARTIKELEN ---
