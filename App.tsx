@@ -465,7 +465,10 @@ export const App: React.FC = () => {
 
     const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/dashboard'); };
     const handleLogout = async () => { 
-        await authService.logout(); 
+        const result = await authService.logout();
+        if (!result.success) {
+            console.error('Logout error:', result.error);
+        }
         setIsAuthenticated(false); 
         setView('login'); 
         urlRouter.push('/dashboard'); 

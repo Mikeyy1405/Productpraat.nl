@@ -25,7 +25,13 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 setError(result.error || 'Ongeldige inloggegevens. Probeer het opnieuw.');
             }
         } catch (err) {
-            setError('Er is een fout opgetreden. Probeer het later opnieuw.');
+            console.error('Login error:', err);
+            const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
+            if (isNetworkError) {
+                setError('Netwerkfout. Controleer je internetverbinding en probeer het opnieuw.');
+            } else {
+                setError('Er is een onverwachte fout opgetreden. Probeer het later opnieuw.');
+            }
         } finally {
             setIsLoading(false);
         }
