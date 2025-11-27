@@ -84,6 +84,10 @@ const SHOP_PATTERNS: Record<string, AffiliateNetworkId> = {
  * Get environment variable value
  * Works in both browser (Vite) and Node.js environments
  * 
+ * Note: This is intentionally separate from supabaseClient.ts as it handles
+ * additional Node.js/server-side cases that supabaseClient doesn't support.
+ * The affiliate service runs in both browser and server contexts.
+ * 
  * @param key - Environment variable key
  * @returns Environment variable value or empty string
  */
@@ -466,8 +470,8 @@ export const searchDigitalProducts = async (keyword: string): Promise<DigitalPro
         // NOTE: This is a stub implementation
         // The actual PayPro API endpoint and authentication method would need to be 
         // implemented based on their API documentation
-        console.log(`[AffiliateService] searchDigitalProducts called with keyword: "${keyword}"`);
-        console.log('[AffiliateService] PayPro API integration is a stub - returning empty results');
+        // Debug logging removed for production - uncomment for development:
+        // console.log(`[AffiliateService] searchDigitalProducts called with keyword: "${keyword}"`);
         
         // TODO: Implement actual PayPro API call when documentation is available
         // Example structure:

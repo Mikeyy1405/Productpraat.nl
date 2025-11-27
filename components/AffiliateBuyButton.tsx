@@ -58,6 +58,43 @@ const NETWORK_ICONS: Record<string, string> = {
 };
 
 /**
+ * Allowed URL patterns for affiliate networks
+ * Used to validate URLs before opening them
+ */
+const ALLOWED_URL_PATTERNS: RegExp[] = [
+    /^https?:\/\/(www\.)?bol\.com/i,
+    /^https?:\/\/(www\.)?coolblue\.(nl|be)/i,
+    /^https?:\/\/(www\.)?mediamarkt\.(nl|de)/i,
+    /^https?:\/\/(www\.)?zalando\.(nl|be|de)/i,
+    /^https?:\/\/(www\.)?amazon\.(nl|de|com|co\.uk)/i,
+    /^https?:\/\/(www\.)?wehkamp\.nl/i,
+    /^https?:\/\/(www\.)?tradetracker\./i,
+    /^https?:\/\/(www\.)?daisycon\./i,
+    /^https?:\/\/(www\.)?awin/i,
+    /^https?:\/\/(www\.)?paypro\.nl/i,
+    /^https?:\/\/(www\.)?plug(and)?pay\.nl/i,
+    /^https:\/\//i, // Allow any HTTPS URL as fallback
+];
+
+/**
+ * Validate if a URL is safe to open
+ * Must be HTTP/HTTPS and optionally match known patterns
+ */
+const isValidAffiliateUrl = (url: string): boolean => {
+    try {
+        const parsedUrl = new URL(url);
+        // Only allow http and https protocols
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            return false;
+        }
+        // Check against allowed patterns
+        return ALLOWED_URL_PATTERNS.some(pattern => pattern.test(url));
+    } catch {
+        return false;
+    }
+};
+
+/**
  * Get button styles based on variant and size
  */
 const getButtonStyles = (
@@ -66,12 +103,26 @@ const getButtonStyles = (
     fullWidth: boolean,
     isLoading: boolean
 ): string => {
-    const baseStyles = 'inline-flex items-center justify-center font-bold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900';
+    const baseStyles = [
+        'inline-flex items-center justify-center',
+        'font-bold rounded-xl',
+        'transition-all duration-200',
+        'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900',
+    ].join(' ');
     
     const variantStyles = {
-        primary: 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white shadow-lg shadow-green-600/20 focus:ring-green-500',
+        primary: [
+            'bg-gradient-to-r from-green-600 to-emerald-500',
+            'hover:from-green-500 hover:to-emerald-400',
+            'text-white shadow-lg shadow-green-600/20',
+            'focus:ring-green-500',
+        ].join(' '),
         secondary: 'bg-slate-700 hover:bg-slate-600 text-white focus:ring-slate-500',
-        outline: 'bg-transparent border-2 border-green-500 text-green-400 hover:bg-green-500/10 focus:ring-green-500',
+        outline: [
+            'bg-transparent border-2 border-green-500',
+            'text-green-400 hover:bg-green-500/10',
+            'focus:ring-green-500',
+        ].join(' '),
     };
     
     const sizeStyles = {
@@ -83,7 +134,9 @@ const getButtonStyles = (
     const widthStyle = fullWidth ? 'w-full' : '';
     const loadingStyle = isLoading ? 'opacity-75 cursor-wait' : '';
     
-    return `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthStyle} ${loadingStyle}`;
+    return [baseStyles, variantStyles[variant], sizeStyles[size], widthStyle, loadingStyle]
+        .filter(Boolean)
+        .join(' ');
 };
 
 /**
@@ -153,10 +206,19 @@ export const AffiliateBuyButton: React.FC<AffiliateBuyButtonProps> = ({
     
     /**
      * Handle button click
-     * Tracks the click and opens the affiliate URL
+     * Validates the URL, tracks the click, and opens the affiliate URL
      */
     const handleClick = useCallback(async () => {
         if (isTracking) return;
+        
+        // Validate the URL before opening
+        if (!isValidAffiliateUrl(affiliateUrl)) {
+            console.error('[AffiliateBuyButton] Invalid or unsafe affiliate URL:', affiliateUrl);
+            if (onTrackingComplete) {
+                onTrackingComplete(false);
+            }
+            return;
+        }
         
         setIsTracking(true);
         
@@ -165,6 +227,7 @@ export const AffiliateBuyButton: React.FC<AffiliateBuyButtonProps> = ({
             const trackingPromise = trackAffiliateClick(productId, affiliateUrl);
             
             // Open the URL immediately (don't wait for tracking)
+            // URL has been validated above as a safe HTTP/HTTPS URL
             window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
             
             // Wait for tracking to complete for the callback

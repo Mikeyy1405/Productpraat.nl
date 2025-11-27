@@ -206,6 +206,11 @@ const DEFAULT_AFFILIATE_NETWORKS = [
  * - success: boolean
  * - linkId: string (if successful)
  * - clickId: string (if successful)
+ * 
+ * Note: This is a simplified server-side implementation for tracking.
+ * When Supabase is properly configured, full database tracking is done 
+ * client-side via affiliateService.trackClick(). This endpoint provides
+ * a fallback for server-side tracking or environments without Supabase.
  */
 app.post('/api/affiliate/track', async (req, res) => {
     const timestamp = new Date().toISOString();
@@ -222,16 +227,32 @@ app.post('/api/affiliate/track', async (req, res) => {
             });
         }
         
-        // Log the click (in production, this would save to the database)
+        // Validate URL format
+        try {
+            const parsedUrl = new URL(url);
+            if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid URL protocol - must be http or https'
+                });
+            }
+        } catch {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid URL format'
+            });
+        }
+        
+        // Log the click for analytics
         console.log(`[AFFILIATE] Click tracked: product=${productId}, url=${url.substring(0, 50)}...`);
         
-        // Generate a simple click ID for tracking
+        // Generate unique IDs for the click and link
         const clickId = `click-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         const linkId = `link-${productId}-${Math.random().toString(36).substring(2, 9)}`;
         
-        // Note: Full database integration requires the affiliateService.ts to be 
-        // imported and used here. For now, we return a success response.
-        // The actual tracking is done client-side via the affiliateService.
+        // Note: Full database persistence is handled by the client-side 
+        // affiliateService.trackClick() when Supabase is configured.
+        // This endpoint logs clicks for server-side analytics.
         
         res.json({
             success: true,
