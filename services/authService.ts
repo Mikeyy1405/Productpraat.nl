@@ -1,25 +1,66 @@
+import { getSupabase } from './supabaseClient';
+import type { User } from '@supabase/supabase-js';
 
-const SESSION_KEY = 'productpraat_auth_session';
+export interface LoginResult {
+    success: boolean;
+    error?: string;
+}
 
-// In een echte productie-omgeving zou je dit valideren tegen een server-side database met hashed wachtwoorden.
-// Voor deze setup gebruiken we een directe check.
-const ADMIN_USER = 'info@writgo.nl';
-const ADMIN_PASS = 'Productpraat2025!';
+export interface LogoutResult {
+    success: boolean;
+    error?: string;
+}
 
 export const authService = {
-    login: (email: string, pass: string): boolean => {
-        if (email === ADMIN_USER && pass === ADMIN_PASS) {
-            localStorage.setItem(SESSION_KEY, 'true');
-            return true;
+    login: async (email: string, pass: string): Promise<LoginResult> => {
+        const supabase = getSupabase();
+        if (!supabase) {
+            return { success: false, error: 'Supabase is niet geconfigureerd.' };
         }
-        return false;
+
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: pass,
+        });
+
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
     },
 
-    logout: () => {
-        localStorage.removeItem(SESSION_KEY);
+    logout: async (): Promise<LogoutResult> => {
+        const supabase = getSupabase();
+        if (!supabase) {
+            return { success: false, error: 'Supabase is niet geconfigureerd.' };
+        }
+
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            return { success: false, error: error.message };
+        }
+
+        return { success: true };
     },
 
-    isAuthenticated: (): boolean => {
-        return localStorage.getItem(SESSION_KEY) === 'true';
+    isAuthenticated: async (): Promise<boolean> => {
+        const supabase = getSupabase();
+        if (!supabase) {
+            return false;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        return !!session;
+    },
+
+    getCurrentUser: async (): Promise<User | null> => {
+        const supabase = getSupabase();
+        if (!supabase) {
+            return null;
+        }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        return user;
     }
 };

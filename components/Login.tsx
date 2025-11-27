@@ -10,15 +10,30 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setIsLoading(true);
         
-        if (authService.login(email, password)) {
-            onLoginSuccess();
-        } else {
-            setError('Ongeldige inloggegevens. Probeer het opnieuw.');
+        try {
+            const result = await authService.login(email, password);
+            if (result.success) {
+                onLoginSuccess();
+            } else {
+                setError(result.error || 'Ongeldige inloggegevens. Probeer het opnieuw.');
+            }
+        } catch (err) {
+            console.error('Login error:', err);
+            const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
+            if (isNetworkError) {
+                setError('Netwerkfout. Controleer je internetverbinding en probeer het opnieuw.');
+            } else {
+                setError('Er is een onverwachte fout opgetreden. Probeer het later opnieuw.');
+            }
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -72,9 +87,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
                     <button 
                         type="submit" 
-                        className="w-full bg-[#1877F2] hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-900/20 transition transform hover:-translate-y-0.5"
+                        disabled={isLoading}
+                        className="w-full bg-[#1877F2] hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-900/20 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                     >
-                        Inloggen
+                        {isLoading ? 'Bezig met inloggen...' : 'Inloggen'}
                     </button>
                 </form>
                 

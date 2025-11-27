@@ -159,7 +159,7 @@ export const App: React.FC = () => {
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [compareList, setCompareList] = useState<Product[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(authService.isAuthenticated());
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
     const [currentTheme, setCurrentTheme] = useState<SeasonalTheme>(getSeasonalTheme());
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [currentSlug, setCurrentSlug] = useState<string>('');
@@ -266,6 +266,10 @@ export const App: React.FC = () => {
         const loadData = async () => {
             setIsLoadingData(true);
             try {
+                // Check authentication status
+                const isAuth = await authService.isAuthenticated();
+                setIsAuthenticated(isAuth);
+                
                 // Fetch from Supabase
                 const prods = await db.getAll();
                 setCustomProducts(prods);
@@ -460,7 +464,15 @@ export const App: React.FC = () => {
     };
 
     const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/dashboard'); };
-    const handleLogout = () => { setIsAuthenticated(false); setView('login'); urlRouter.push('/dashboard'); };
+    const handleLogout = async () => { 
+        const result = await authService.logout();
+        if (!result.success) {
+            console.error('Logout error:', result.error);
+        }
+        setIsAuthenticated(false); 
+        setView('login'); 
+        urlRouter.push('/dashboard'); 
+    };
     
     // ASYNC HANDLERS FOR SUPABASE INTERACTION
     const handleAddProduct = async (newProduct: Product) => {
