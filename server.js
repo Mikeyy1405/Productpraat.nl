@@ -4,11 +4,14 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'module';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const packageJson = require('./package.json');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -36,7 +39,7 @@ app.use(express.static('dist', { index: false }));
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
-        version: '5.0.0',
+        version: packageJson.version,
         services: {
             supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY)
         },
@@ -185,5 +188,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`ProductPraat Server running on port ${port} (v5.0.0 - Simplified)`);
+    console.log(`ProductPraat Server running on port ${port} (v${packageJson.version} - Simplified)`);
 });

@@ -96,12 +96,12 @@ export const useRouting = ({
         }
     }, [products, articles, isAuthenticated, setView, setActiveCategory, setSelectedProduct, setSelectedArticle]);
 
-    // Initial routing
+    // Initial routing - runs when products or articles are loaded
     useEffect(() => {
         if (products.length > 0 || articles.length > 0) {
             handleUrlRouting();
         }
-    }, [products.length > 0, articles.length > 0]);
+    }, [products, articles, handleUrlRouting]);
 
     // Browser back/forward
     useEffect(() => {
