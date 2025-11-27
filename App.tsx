@@ -10,6 +10,7 @@ import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
 import { parseProductUrl, isProductUrl, getProductUrl, urlRouter, generateSlug, getCanonicalUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from './services/urlService';
+import { CMSProvider, useCMS, SetupWizard } from './src/cms';
 
 // --- SEASONAL THEME ENGINE ---
 interface SeasonalTheme {
