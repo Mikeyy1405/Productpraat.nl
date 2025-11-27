@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { CMSProvider } from './src/cms';
+import { ToastProvider, ToastContainer } from './src/components/toast';
 import './src/index.css';
 
 const rootElement = document.getElementById('root');
@@ -12,8 +13,11 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <CMSProvider>
-      <App />
-    </CMSProvider>
+    <ToastProvider>
+      <CMSProvider>
+        <App />
+        <ToastContainer position="top-right" />
+      </CMSProvider>
+    </ToastProvider>
   </React.StrictMode>
 );

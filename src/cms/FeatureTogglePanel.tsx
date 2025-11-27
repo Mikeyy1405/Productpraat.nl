@@ -14,6 +14,7 @@ import {
     getFeaturesByCategory,
 } from './types';
 import { useCMS, useFeatureToggle } from './CMSContext';
+import { useToast } from '../components/toast';
 
 interface FeatureTogglePanelProps {
     showCategories?: boolean;
@@ -169,10 +170,28 @@ const FeatureToggleCard: React.FC<FeatureToggleCardProps> = ({
 }) => {
     const { enabled, toggle, settings, updateSettings } = useFeatureToggle(feature.id);
     const [localSettings, setLocalSettings] = useState(settings || {});
+    const [isToggling, setIsToggling] = useState(false);
+    const toast = useToast();
 
     const handleToggle = () => {
-        if (feature.isCore) return; // Can't disable core features
-        toggle(!enabled);
+        if (feature.isCore) {
+            toast.warning(`"${feature.name}" is een kernfunctie en kan niet worden uitgeschakeld`);
+            return;
+        }
+        
+        setIsToggling(true);
+        const newState = !enabled;
+        toggle(newState);
+        
+        // Visual feedback with toast
+        if (newState) {
+            toast.success(`✅ "${feature.name}" ingeschakeld`);
+        } else {
+            toast.info(`"${feature.name}" uitgeschakeld`);
+        }
+        
+        // Reset toggling state after animation
+        setTimeout(() => setIsToggling(false), 300);
     };
 
     const handleSettingChange = (key: string, value: string | boolean | number) => {
@@ -290,13 +309,15 @@ const FeatureToggleCard: React.FC<FeatureToggleCardProps> = ({
                     disabled={feature.isCore}
                     className={`
                         relative w-14 h-7 rounded-full transition-all duration-300 flex-shrink-0
-                        ${feature.isCore ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                        ${feature.isCore ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 active:scale-95'}
                         ${enabled ? categoryClasses.toggle : 'bg-slate-700'}
+                        ${isToggling ? 'ring-2 ring-white/30' : ''}
                     `}
                 >
                     <span className={`
                         absolute top-1 w-5 h-5 rounded-full bg-white shadow-md transition-all duration-300
                         ${enabled ? 'left-8' : 'left-1'}
+                        ${isToggling ? 'scale-90' : ''}
                     `}></span>
                 </button>
                 

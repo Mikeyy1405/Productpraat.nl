@@ -27,7 +27,10 @@ interface CMSContextValue {
     // Site configuration
     siteConfig: SiteConfig | null;
     isLoading: boolean;
+    isSaving: boolean;
     error: string | null;
+    lastSaved: Date | null;
+    hasUnsavedChanges: boolean;
     
     // Template management
     currentTemplate: TemplateType;
@@ -41,7 +44,7 @@ interface CMSContextValue {
     
     // Site config management
     updateSiteConfig: (config: Partial<SiteConfig>) => void;
-    saveSiteConfig: () => Promise<void>;
+    saveSiteConfig: () => Promise<boolean>;
     resetToDefaults: () => void;
     
     // Setup wizard
@@ -72,8 +75,26 @@ interface CMSProviderProps {
 export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
     const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSetupComplete, setIsSetupComplete] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [savedConfigHash, setSavedConfigHash] = useState<string | null>(null);
+
+    // Helper to create a hash of config for comparison
+    const getConfigHash = useCallback((config: SiteConfig | null): string => {
+        if (!config) return '';
+        return JSON.stringify(config);
+    }, []);
+
+    // Track unsaved changes
+    useEffect(() => {
+        if (siteConfig && savedConfigHash !== null) {
+            const currentHash = getConfigHash(siteConfig);
+            setHasUnsavedChanges(currentHash !== savedConfigHash);
+        }
+    }, [siteConfig, savedConfigHash, getConfigHash]);
 
     // Load configuration on mount
     useEffect(() => {
@@ -89,6 +110,8 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
                 if (savedConfig) {
                     const parsed = JSON.parse(savedConfig) as SiteConfig;
                     setSiteConfig(parsed);
+                    setSavedConfigHash(savedConfig);
+                    console.log('[CMS] Loaded existing config');
                 } else {
                     // Create default config based on existing Productpraat setup
                     const defaultConfig = createDefaultSiteConfig('WritgoCMS', 'shop');
@@ -100,9 +123,12 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
                         migratedFromProductpraat: false,
                     };
                     setSiteConfig(fullConfig);
+                    const configStr = JSON.stringify(fullConfig);
+                    setSavedConfigHash(configStr);
+                    console.log('[CMS] Created default config');
                 }
             } catch (e) {
-                console.error('Failed to load CMS config:', e);
+                console.error('[CMS] Failed to load config:', e);
                 setError('Kon CMS configuratie niet laden');
             } finally {
                 setIsLoading(false);
@@ -153,16 +179,18 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         return feature.enabled;
     }, [siteConfig]);
 
-    // Toggle feature
+    // Toggle feature with immediate save
     const toggleFeature = useCallback((featureId: FeatureId, enabled: boolean) => {
         if (!siteConfig) return;
         
         // Don't allow disabling core features
         const featureConfig = FEATURES[featureId];
         if (featureConfig?.isCore && !enabled) {
-            console.warn(`Cannot disable core feature: ${featureId}`);
+            console.warn(`[CMS] Cannot disable core feature: ${featureId}`);
             return;
         }
+        
+        console.log(`[CMS] Toggle feature: ${featureId} -> ${enabled ? 'ON' : 'OFF'}`);
         
         setSiteConfig(prev => {
             if (!prev) return prev;
@@ -176,11 +204,21 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
                 newFeatures.push({ featureId, enabled });
             }
             
-            return {
+            const newConfig = {
                 ...prev,
                 features: newFeatures,
                 updatedAt: new Date().toISOString(),
             };
+            
+            // Immediate save for feature toggles
+            try {
+                localStorage.setItem(CMS_CONFIG_KEY, JSON.stringify(newConfig));
+                console.log(`[CMS] Feature ${featureId} saved immediately`);
+            } catch (e) {
+                console.error('[CMS] Failed to save feature toggle:', e);
+            }
+            
+            return newConfig;
         });
     }, [siteConfig]);
 
@@ -218,16 +256,32 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         } : prev);
     }, []);
 
-    // Save site config to storage
-    const saveSiteConfig = useCallback(async () => {
-        if (!siteConfig) return;
+    // Save site config to storage with feedback
+    const saveSiteConfig = useCallback(async (): Promise<boolean> => {
+        if (!siteConfig) {
+            console.warn('[CMS] No config to save');
+            return false;
+        }
+        
+        setIsSaving(true);
+        setError(null);
+        console.log('[CMS] Saving config...');
         
         try {
-            localStorage.setItem(CMS_CONFIG_KEY, JSON.stringify(siteConfig));
-            console.log('CMS config saved successfully');
+            const configStr = JSON.stringify(siteConfig);
+            localStorage.setItem(CMS_CONFIG_KEY, configStr);
+            setSavedConfigHash(configStr);
+            setHasUnsavedChanges(false);
+            setLastSaved(new Date());
+            console.log('[CMS] Config saved successfully at', new Date().toISOString());
+            return true;
         } catch (e) {
-            console.error('Failed to save CMS config:', e);
-            throw new Error('Kon configuratie niet opslaan');
+            const errorMsg = e instanceof Error ? e.message : 'Onbekende fout';
+            console.error('[CMS] Failed to save config:', e);
+            setError(`Kon configuratie niet opslaan: ${errorMsg}`);
+            return false;
+        } finally {
+            setIsSaving(false);
         }
     }, [siteConfig]);
 
@@ -282,21 +336,32 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         setIsSetupComplete(true);
     }, [siteConfig]);
 
-    // Auto-save when config changes
+    // Auto-save when config changes (debounced)
     useEffect(() => {
-        if (siteConfig && isSetupComplete) {
+        if (siteConfig && isSetupComplete && !isLoading) {
             const timeoutId = setTimeout(() => {
-                localStorage.setItem(CMS_CONFIG_KEY, JSON.stringify(siteConfig));
-            }, 1000);
+                try {
+                    const configStr = JSON.stringify(siteConfig);
+                    localStorage.setItem(CMS_CONFIG_KEY, configStr);
+                    setSavedConfigHash(configStr);
+                    setHasUnsavedChanges(false);
+                    console.log('[CMS] Auto-saved config');
+                } catch (e) {
+                    console.error('[CMS] Auto-save failed:', e);
+                }
+            }, 1500); // Slightly longer debounce to avoid conflicts
             
             return () => clearTimeout(timeoutId);
         }
-    }, [siteConfig, isSetupComplete]);
+    }, [siteConfig, isSetupComplete, isLoading]);
 
     const value: CMSContextValue = {
         siteConfig,
         isLoading,
+        isSaving,
         error,
+        lastSaved,
+        hasUnsavedChanges,
         currentTemplate,
         setTemplate,
         updateTemplateSettings,
