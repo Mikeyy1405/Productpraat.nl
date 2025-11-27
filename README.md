@@ -1,18 +1,38 @@
 
 # ProductPraat.nl - AI Powered Affiliate Platform
 
-Dit is de source code voor ProductPraat.nl, een modern vergelijkingsplatform dat gebruik maakt van AIML (Claude) en de Bol.com API om volledig autonoom productreviews en content te genereren.
+Dit is de source code voor ProductPraat.nl, een modern vergelijkingsplatform dat gebruik maakt van AI (Claude) om volledig autonoom productreviews en content te genereren.
 
-**Laatste Update: Versie 1.9.5 - Force Deployment**
+**Laatste Update: Versie 2.0.0 - Universal URL Import**
 
 ## Features
 
 - **Frontend:** React, TailwindCSS, Vite.
-- **Backend:** Node.js (Express) voor Bol.com authenticatie en API proxy.
-- **AI:** AIML API (Claude 4.5 Sonnet) integratie voor reviews, koopadvies en content strategie.
-- **Auto-Pilot:** Een autonome agent die zelfstandig Bol.com bestsellers zoekt en toevoegt.
+- **Backend:** Node.js (Express) voor API proxy.
+- **AI:** Claude (Anthropic) integratie voor reviews, koopadvies en content strategie.
+- **URL Import:** Importeer producten van elke webshop via URL (Bol.com, Amazon, Coolblue, etc.).
 - **Content Studio:** Genereer blogs, vergelijkingen en toplijstjes met één klik.
 - **Database:** Supabase integratie voor persistente opslag.
+
+## Product Toevoegen via URL
+
+De nieuwe, aanbevolen manier om producten toe te voegen:
+
+1. Ga naar het Admin Dashboard
+2. Klik op "Via URL" in de Producten sectie
+3. Plak de URL van het product (Bol.com, Amazon, Coolblue, etc.)
+4. Klik op "Analyseer Product"
+5. Review de gegenereerde content
+6. Pas eventueel aan en sla op
+
+### Ondersteunde Webshops
+
+- ✅ Bol.com
+- ✅ Amazon
+- ✅ Coolblue
+- ✅ MediaMarkt
+- ✅ Wehkamp
+- ✅ Elke andere webshop met productpagina's
 
 ## Installatie
 
@@ -29,10 +49,24 @@ Voor de productie-omgeving op Render.com moeten de volgende variabelen worden in
 | :--- | :--- |
 | `VITE_SUPABASE_URL` | Jouw Supabase URL |
 | `VITE_SUPABASE_ANON_KEY` | Jouw Supabase Key |
-| `VITE_API_KEY` | Jouw AIML/OpenAI API Key |
-| `BOL_CLIENT_ID` | Client ID van Bol.com Retailer API |
-| `BOL_CLIENT_SECRET` | Client Secret van Bol.com Retailer API |
-| `BOL_SITE_ID` | Jouw Affiliate Site ID (bijv. 1296565) |
+| `VITE_ANTHROPIC_API_KEY` | Jouw Anthropic/Claude API Key (voor URL import) |
+| `VITE_API_KEY` | Jouw AIML/OpenAI API Key (voor legacy features) |
+
+### Optionele variabelen
+
+| Key | Waarde (Voorbeeld/Beschrijving) |
+| :--- | :--- |
+| `VITE_CORS_PROXY` | Custom CORS proxy (bijv. `https://corsproxy.io/?`) |
+
+### Legacy/Deprecated variabelen
+
+De volgende variabelen worden niet meer actief gebruikt door de nieuwe URL-import functionaliteit:
+
+| Key | Status |
+| :--- | :--- |
+| `BOL_CLIENT_ID` | ⚠️ Deprecated - gebruik URL import |
+| `BOL_CLIENT_SECRET` | ⚠️ Deprecated - gebruik URL import |
+| `BOL_SITE_ID` | ⚠️ Deprecated - gebruik URL import |
 
 ## Database Migrations
 
