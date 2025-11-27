@@ -45,9 +45,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
     };
 
     const handleDealClick = (e: React.MouseEvent) => {
-        if (product.affiliateUrl && product.affiliateUrl !== '#') {
+        const link = product.affiliateLink || product.affiliateUrl;
+        if (link && link !== '#') {
             e.stopPropagation();
-            window.open(product.affiliateUrl, '_blank');
+            window.open(link, '_blank', 'noopener,noreferrer');
         } else {
             e.stopPropagation();
             onClick(product.id);

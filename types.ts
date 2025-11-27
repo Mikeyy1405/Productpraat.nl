@@ -85,6 +85,26 @@ export interface UserReview {
     date: string;
 }
 
+/**
+ * Result of a bulk import operation
+ * Tracks successful and failed imports for display to user
+ */
+export interface BulkImportResult {
+    successful: Product[];
+    failed: Array<{ url: string; error: string }>;
+}
+
+/**
+ * Progress tracking for bulk import
+ */
+export interface BulkImportProgress {
+    current: number;
+    total: number;
+    status: 'idle' | 'scraping' | 'analyzing' | 'saving' | 'complete' | 'error';
+    currentUrl?: string;
+    message?: string;
+}
+
 export type ArticleType = 'comparison' | 'list' | 'guide' | 'informational';
 
 export interface Article {

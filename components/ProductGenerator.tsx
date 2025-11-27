@@ -1,11 +1,12 @@
 /**
  * ProductGenerator Component
  * UI for adding products via URL - scrapes product pages and generates AI reviews
+ * Supports both single URL and bulk import modes
  * Based on Writgo.nl-nieuw ToolGenerator, adapted for ProductPraat
  */
 
-import React, { useState } from 'react';
-import { Product, CATEGORIES } from '../types';
+import React, { useState, useRef } from 'react';
+import { Product, CATEGORIES, BulkImportResult, BulkImportProgress } from '../types';
 import { scrapeURL, detectShop } from '../services/scraper';
 import { generateProductReview } from '../services/claudeService';
 
@@ -15,8 +16,36 @@ interface ProductGeneratorProps {
 }
 
 type ProcessingStep = 'idle' | 'scraping' | 'analyzing' | 'complete';
+type ImportMode = 'single' | 'bulk';
+
+/**
+ * Helper function to get store name from URL for display
+ */
+export const getStoreName = (url: string): string => {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes('bol.com')) return 'Bol.com';
+    if (hostname.includes('amazon.')) return 'Amazon';
+    if (hostname.includes('coolblue.')) return 'Coolblue';
+    if (hostname.includes('mediamarkt.')) return 'MediaMarkt';
+    if (hostname.includes('wehkamp.')) return 'Wehkamp';
+    if (hostname.includes('zalando.')) return 'Zalando';
+    if (hostname.includes('fonq.')) return 'Fonq';
+    if (hostname.includes('blokker.')) return 'Blokker';
+    if (hostname.includes('aliexpress.')) return 'AliExpress';
+    // Return formatted domain name if not recognized
+    return hostname.replace('www.', '').split('.')[0].charAt(0).toUpperCase() + 
+           hostname.replace('www.', '').split('.')[0].slice(1);
+  } catch {
+    return 'de webshop';
+  }
+};
+
+// Rate limiting delay between bulk imports (in ms)
+const BULK_IMPORT_DELAY_MS = 2000;
 
 export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCancel }) => {
+  // Single URL mode state
   const [url, setUrl] = useState('');
   const [rawText, setRawText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -25,6 +54,18 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
   const [error, setError] = useState<string | null>(null);
   const [showManualInput, setShowManualInput] = useState(false);
   const [detectedShop, setDetectedShop] = useState<string>('');
+  
+  // Import mode toggle
+  const [importMode, setImportMode] = useState<ImportMode>('single');
+  
+  // Bulk import state
+  const [bulkUrls, setBulkUrls] = useState('');
+  const [bulkProgress, setBulkProgress] = useState<BulkImportProgress>({ current: 0, total: 0, status: 'idle' });
+  const [bulkResults, setBulkResults] = useState<BulkImportResult | null>(null);
+  const stopBulkRef = useRef(false);
+  
+  // Affiliate link editing
+  const [editingAffiliateLink, setEditingAffiliateLink] = useState(false);
 
   const handleAutomaticGenerate = async () => {
     if (!url.trim()) {
@@ -123,6 +164,116 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
     }
   };
 
+  /**
+   * Handle bulk import of multiple URLs
+   * Processes URLs one by one with rate limiting
+   */
+  const handleBulkImport = async () => {
+    const urls = bulkUrls
+      .split('\n')
+      .map(u => u.trim())
+      .filter(u => u.length > 0 && (u.startsWith('http://') || u.startsWith('https://')));
+    
+    if (urls.length === 0) {
+      setError('Voer minimaal één geldige URL in (beginnend met http:// of https://)');
+      return;
+    }
+    
+    setIsGenerating(true);
+    stopBulkRef.current = false;
+    setBulkProgress({ current: 0, total: urls.length, status: 'idle' });
+    setBulkResults({ successful: [], failed: [] });
+    setError(null);
+    
+    const results: BulkImportResult = {
+      successful: [],
+      failed: []
+    };
+    
+    for (let i = 0; i < urls.length; i++) {
+      // Check if stopped
+      if (stopBulkRef.current) {
+        break;
+      }
+      
+      const currentUrl = urls[i];
+      setBulkProgress({ 
+        current: i + 1, 
+        total: urls.length, 
+        status: 'scraping',
+        currentUrl,
+        message: `URL aan het ophalen...`
+      });
+      
+      try {
+        // Step 1: Scrape
+        const scrapedContent = await scrapeURL(currentUrl);
+        
+        setBulkProgress(prev => ({
+          ...prev,
+          status: 'analyzing',
+          message: `Product analyseren met AI...`
+        }));
+        
+        // Step 2: Generate review
+        const contentToAnalyze = scrapedContent.text.trim() ? scrapedContent.text : scrapedContent.html;
+        const product = await generateProductReview({
+          url: currentUrl,
+          scrapedContent: contentToAnalyze,
+          title: scrapedContent.title,
+          description: scrapedContent.description,
+          images: scrapedContent.images,
+          price: scrapedContent.price
+        });
+        
+        if (!product) {
+          throw new Error('AI kon geen review genereren');
+        }
+        
+        // Step 3: Save immediately
+        setBulkProgress(prev => ({
+          ...prev,
+          status: 'saving',
+          message: `Product opslaan...`
+        }));
+        
+        await onSave(product);
+        results.successful.push(product);
+        
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
+        results.failed.push({ url: currentUrl, error: errorMessage });
+      }
+      
+      // Rate limiting: wait between requests (but not after the last one)
+      if (i < urls.length - 1 && !stopBulkRef.current) {
+        setBulkProgress(prev => ({
+          ...prev,
+          status: 'idle',
+          message: `Even wachten... (rate limiting)`
+        }));
+        await new Promise(resolve => setTimeout(resolve, BULK_IMPORT_DELAY_MS));
+      }
+    }
+    
+    setBulkProgress({ current: urls.length, total: urls.length, status: 'complete' });
+    setBulkResults(results);
+    setIsGenerating(false);
+  };
+  
+  const handleStopBulkImport = () => {
+    stopBulkRef.current = true;
+    setBulkProgress(prev => ({ ...prev, status: 'idle', message: 'Gestopt door gebruiker' }));
+  };
+  
+  const handleRetryFailed = () => {
+    if (!bulkResults?.failed.length) return;
+    const failedUrls = bulkResults.failed.map(f => f.url).join('\n');
+    setBulkUrls(failedUrls);
+    setBulkResults(null);
+    setBulkProgress({ current: 0, total: 0, status: 'idle' });
+  };
+
   const handleEditField = (field: keyof Product, value: string | number) => {
     if (!generatedProduct) return;
     setGeneratedProduct({
@@ -155,8 +306,37 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
       </div>
 
       <div className="p-6">
-        {!generatedProduct ? (
+        {!generatedProduct && !bulkResults ? (
           <div className="space-y-6">
+            {/* Import Mode Toggle */}
+            <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+              <button
+                onClick={() => setImportMode('single')}
+                disabled={isGenerating}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                  importMode === 'single'
+                    ? 'bg-green-600 text-white shadow-lg'
+                    : 'bg-transparent text-slate-400 hover:bg-slate-700 hover:text-white'
+                } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <i className="fas fa-link"></i>
+                <span>Enkele URL</span>
+              </button>
+              <button
+                onClick={() => setImportMode('bulk')}
+                disabled={isGenerating}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                  importMode === 'bulk'
+                    ? 'bg-purple-600 text-white shadow-lg'
+                    : 'bg-transparent text-slate-400 hover:bg-slate-700 hover:text-white'
+                } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <i className="fas fa-layer-group"></i>
+                <span>Bulk Import</span>
+                <span className="text-xs bg-purple-500/30 px-1.5 py-0.5 rounded">Nieuw</span>
+              </button>
+            </div>
+            
             {/* Supported shops info */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -164,19 +344,26 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
                 <span className="text-sm font-medium text-slate-300">Ondersteunde Webshops</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {['Bol.com', 'Amazon', 'Coolblue', 'MediaMarkt', 'Wehkamp', 'Andere webshops'].map(shop => (
+                {['Bol.com', 'Amazon', 'Coolblue', 'MediaMarkt', 'Wehkamp', 'AliExpress', 'Andere webshops'].map(shop => (
                   <span key={shop} className="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded">
                     ✅ {shop}
                   </span>
                 ))}
               </div>
+              <p className="text-xs text-slate-500 mt-3">
+                <i className="fas fa-info-circle mr-1"></i>
+                De ingevoerde URL wordt als affiliate link gebruikt voor alle "Bekijk product" knoppen.
+              </p>
             </div>
 
-            {/* URL Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Product URL <span className="text-green-400">*</span>
-              </label>
+            {/* === SINGLE URL MODE === */}
+            {importMode === 'single' && (
+              <>
+                {/* URL Input */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Product URL <span className="text-green-400">*</span>
+                  </label>
               <div className="relative">
                 <input
                   type="url"
@@ -317,8 +504,190 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
                 </button>
               </div>
             )}
+              </>
+            )}
+
+            {/* === BULK IMPORT MODE === */}
+            {importMode === 'bulk' && (
+              <>
+                <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <i className="fas fa-info-circle text-purple-400"></i>
+                    <span className="text-sm font-medium text-purple-300">Bulk Import</span>
+                  </div>
+                  <p className="text-xs text-purple-200/70">
+                    Importeer meerdere producten tegelijk. Plak één URL per regel. Elk product wordt automatisch geanalyseerd en opgeslagen.
+                    Er wordt 2 seconden gewacht tussen elk product om API-limits te respecteren.
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Product URLs (één per regel) <span className="text-purple-400">*</span>
+                  </label>
+                  <textarea
+                    value={bulkUrls}
+                    onChange={(e) => {
+                      setBulkUrls(e.target.value);
+                      setError(null);
+                    }}
+                    disabled={isGenerating}
+                    placeholder="https://www.bol.com/nl/p/product-1/...&#10;https://www.amazon.nl/dp/...&#10;https://www.coolblue.nl/product/..."
+                    className="w-full h-48 bg-slate-950 border border-slate-700 rounded-xl p-4 text-white focus:border-purple-500 focus:outline-none transition placeholder-slate-600 font-mono text-sm disabled:opacity-50"
+                  />
+                  <div className="mt-2 text-xs text-slate-500">
+                    {bulkUrls.split('\n').filter(u => u.trim() && (u.startsWith('http://') || u.startsWith('https://'))).length} geldige URLs gevonden
+                  </div>
+                </div>
+                
+                {/* Error message */}
+                {error && (
+                  <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">
+                    <div className="flex items-start gap-2">
+                      <i className="fas fa-exclamation-circle mt-0.5"></i>
+                      <div><strong>Fout:</strong> {error}</div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Bulk Progress */}
+                {isGenerating && bulkProgress.total > 0 && (
+                  <div className="bg-purple-900/10 border border-purple-500/20 rounded-xl p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300 font-medium">
+                        Product {bulkProgress.current} van {bulkProgress.total}
+                      </span>
+                      <span className="text-purple-400 font-bold">
+                        {Math.round((bulkProgress.current / bulkProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-purple-600 to-pink-500 rounded-full transition-all duration-500"
+                        style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
+                    
+                    {bulkProgress.currentUrl && (
+                      <div className="text-xs text-slate-500 truncate">
+                        <i className="fas fa-link mr-1"></i> {bulkProgress.currentUrl}
+                      </div>
+                    )}
+                    
+                    {bulkProgress.message && (
+                      <div className="flex items-center gap-2 text-sm text-purple-300">
+                        {bulkProgress.status !== 'complete' && bulkProgress.status !== 'idle' && (
+                          <i className="fas fa-circle-notch fa-spin"></i>
+                        )}
+                        {bulkProgress.message}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-3">
+                  {!isGenerating ? (
+                    <button
+                      onClick={handleBulkImport}
+                      disabled={!bulkUrls.trim()}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center"
+                    >
+                      <i className="fas fa-layer-group mr-2"></i>
+                      Importeer Alle Producten
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleStopBulkImport}
+                      className="w-full bg-red-900/30 border border-red-500/50 text-red-400 font-bold py-4 rounded-xl hover:bg-red-900/50 transition flex items-center justify-center"
+                    >
+                      <i className="fas fa-stop mr-2"></i>
+                      Stop Import
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        ) : (
+        ) : bulkResults ? (
+          /* Bulk Import Results */
+          <div className="animate-fade-in space-y-6">
+            <div className={`rounded-xl p-4 flex items-center text-sm ${
+              bulkResults.failed.length === 0 
+                ? 'bg-green-900/20 border border-green-500/30 text-green-400' 
+                : bulkResults.successful.length === 0 
+                  ? 'bg-red-900/20 border border-red-500/30 text-red-400'
+                  : 'bg-yellow-900/20 border border-yellow-500/30 text-yellow-400'
+            }`}>
+              <i className={`fas ${bulkResults.failed.length === 0 ? 'fa-check-circle' : bulkResults.successful.length === 0 ? 'fa-times-circle' : 'fa-exclamation-triangle'} mr-2`}></i>
+              Bulk import voltooid: {bulkResults.successful.length} succesvol, {bulkResults.failed.length} mislukt
+            </div>
+            
+            {/* Successful imports */}
+            {bulkResults.successful.length > 0 && (
+              <div className="bg-green-900/10 border border-green-500/20 rounded-xl p-4">
+                <h4 className="font-bold text-green-400 mb-3 flex items-center gap-2">
+                  <i className="fas fa-check-circle"></i> Succesvol geïmporteerd ({bulkResults.successful.length})
+                </h4>
+                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                  {bulkResults.successful.map((product, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-sm text-green-300">
+                      <i className="fas fa-check text-xs"></i>
+                      <span>{product.brand} {product.model}</span>
+                      <span className="text-xs text-green-500/60">({getStoreName(product.affiliateLink || '')})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {/* Failed imports */}
+            {bulkResults.failed.length > 0 && (
+              <div className="bg-red-900/10 border border-red-500/20 rounded-xl p-4">
+                <h4 className="font-bold text-red-400 mb-3 flex items-center gap-2">
+                  <i className="fas fa-times-circle"></i> Mislukt ({bulkResults.failed.length})
+                </h4>
+                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                  {bulkResults.failed.map((fail, idx) => (
+                    <li key={idx} className="text-sm">
+                      <div className="text-red-300 truncate">{fail.url}</div>
+                      <div className="text-xs text-red-500/70">{fail.error}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4 border-t border-slate-800">
+              {bulkResults.failed.length > 0 && (
+                <button 
+                  onClick={handleRetryFailed}
+                  className="flex-1 bg-yellow-600/20 border border-yellow-500/50 text-yellow-400 py-3 rounded-xl font-bold hover:bg-yellow-600/30 transition flex items-center justify-center gap-2"
+                >
+                  <i className="fas fa-redo"></i> Mislukte Opnieuw Proberen
+                </button>
+              )}
+              <button 
+                onClick={() => {
+                  setBulkResults(null);
+                  setBulkUrls('');
+                  setBulkProgress({ current: 0, total: 0, status: 'idle' });
+                }}
+                className={`${bulkResults.failed.length > 0 ? '' : 'flex-1'} px-6 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition py-3`}
+              >
+                Nieuwe Import
+              </button>
+              <button 
+                onClick={onCancel}
+                className="px-6 bg-green-600 hover:bg-green-500 text-white rounded-xl font-medium transition py-3"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        ) : generatedProduct ? (
           /* Product Preview and Edit */
           <div className="animate-fade-in space-y-6">
             <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4 flex items-center text-green-400 text-sm">
@@ -430,6 +799,48 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
                   />
                 </div>
 
+                {/* Affiliate Link - Editable */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-400 uppercase">
+                      Affiliate Link <span className="text-green-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingAffiliateLink(!editingAffiliateLink)}
+                      className="text-xs text-blue-400 hover:text-blue-300 transition"
+                    >
+                      <i className={`fas ${editingAffiliateLink ? 'fa-check' : 'fa-edit'} mr-1`}></i>
+                      {editingAffiliateLink ? 'Klaar' : 'Bewerken'}
+                    </button>
+                  </div>
+                  {editingAffiliateLink ? (
+                    <input 
+                      type="url"
+                      className="w-full bg-slate-950 border border-blue-500 rounded-xl px-4 py-3 text-white outline-none focus:border-green-500 transition font-mono text-sm" 
+                      value={generatedProduct.affiliateLink || generatedProduct.affiliateUrl || ''} 
+                      onChange={e => {
+                        handleEditField('affiliateLink', e.target.value);
+                        handleEditField('affiliateUrl', e.target.value);
+                      }}
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    <div className="bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-400 text-sm font-mono truncate">
+                      {generatedProduct.affiliateLink || generatedProduct.affiliateUrl || 'Geen link'}
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500 mt-1">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Deze link wordt gebruikt voor alle "Bekijk product" en "Koop nu" knoppen.
+                    {getStoreName(generatedProduct.affiliateLink || generatedProduct.affiliateUrl || '') !== 'de webshop' && (
+                      <span className="ml-2 text-green-400">
+                        Gedetecteerd: {getStoreName(generatedProduct.affiliateLink || generatedProduct.affiliateUrl || '')}
+                      </span>
+                    )}
+                  </p>
+                </div>
+
                 {/* Pros & Cons Preview */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-green-900/20 border border-green-500/30 rounded-xl p-4">
@@ -487,7 +898,7 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
