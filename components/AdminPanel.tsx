@@ -7,6 +7,7 @@ import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
 import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResult } from '../utils/validation';
 import { AnalyticsWidget } from './AnalyticsWidget';
+import { ProductGenerator } from './ProductGenerator';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -35,9 +36,12 @@ interface ImportError {
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, articles, setArticles, onLogout }) => {
     // --- MAIN NAVIGATION ---
     const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles'>('dashboard');
-    const [productSubTab, setProductSubTab] = useState<'import' | 'bulk' | 'autopilot' | 'list'>('import');
+    const [productSubTab, setProductSubTab] = useState<'import' | 'bulk' | 'autopilot' | 'list' | 'url-import'>('import');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    
+    // --- STATE: URL-BASED PRODUCT GENERATOR ---
+    const [showProductGenerator, setShowProductGenerator] = useState(false);
 
     // --- LOGGING & PROCESSING ---
     const [pilotLogs, setPilotLogs] = useState<string[]>([]);
@@ -1347,7 +1351,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                             className="p-4 bg-slate-800 hover:bg-blue-600/20 rounded-xl border border-slate-700 hover:border-blue-500/50 transition-all group"
                                         >
                                             <i className="fas fa-plus-circle text-2xl text-blue-400 mb-2 group-hover:scale-110 transition-transform"></i>
-                                            <div className="font-medium text-white text-sm">Nieuw Product</div>
+                                            <div className="font-medium text-white text-sm">Bol.com Import</div>
+                                        </button>
+                                        <button 
+                                            onClick={() => { setActiveTab('products'); setProductSubTab('url-import'); }}
+                                            className="p-4 bg-slate-800 hover:bg-emerald-600/20 rounded-xl border border-slate-700 hover:border-emerald-500/50 transition-all group"
+                                        >
+                                            <i className="fas fa-link text-2xl text-emerald-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                                            <div className="font-medium text-white text-sm">Via URL</div>
                                         </button>
                                         <button 
                                             onClick={() => { setActiveTab('products'); setProductSubTab('bulk'); }}
@@ -1480,7 +1491,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                 {/* Product Sub-Navigation */}
                                 <div className="flex flex-wrap gap-2 mb-6 bg-slate-900 p-2 rounded-xl border border-slate-800">
                                     {[
-                                        { id: 'import', icon: 'fa-magic', label: 'Single Import', color: 'blue' },
+                                        { id: 'url-import', icon: 'fa-link', label: 'Via URL', color: 'emerald' },
+                                        { id: 'import', icon: 'fa-magic', label: 'Bol.com Import', color: 'blue' },
                                         { id: 'bulk', icon: 'fa-layer-group', label: 'Bulk Import', color: 'purple' },
                                         { id: 'autopilot', icon: 'fa-rocket', label: 'Auto-Pilot', color: 'orange' },
                                         { id: 'list', icon: 'fa-list', label: `Producten (${customProducts.length})`, color: 'slate' }
@@ -1501,6 +1513,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                         </button>
                                     ))}
                                 </div>
+                                
+                                {/* 0. URL-BASED IMPORT (New Universal Method) */}
+                                {productSubTab === 'url-import' && (
+                                    <ProductGenerator 
+                                        onSave={async (product) => {
+                                            await onAddProduct(product);
+                                            showToast('✅ Product succesvol toegevoegd!', 'success');
+                                            addLog(`✅ Product toegevoegd via URL: ${product.brand} ${product.model}`);
+                                            setProductSubTab('list');
+                                        }}
+                                        onCancel={() => setProductSubTab('list')}
+                                    />
+                                )}
 
                                 {/* 1. SINGLE IMPORT with Search */}
                                 {productSubTab === 'import' && (

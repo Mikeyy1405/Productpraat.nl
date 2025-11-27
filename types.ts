@@ -1,9 +1,8 @@
-
 export interface Product {
     id: string;
     brand: string;
     model: string;
-    price: number;
+    price: number; // Keep as number for backward compatibility
     score: number;
     category: string;
     image: string;
@@ -40,6 +39,41 @@ export interface Product {
     images?: string[]; // Multiple images from Bol.com media endpoint
     metaDescription?: string; // SEO meta description
     keywords?: string[]; // SEO keywords
+    
+    // === NEW FIELDS FOR URL-BASED IMPORT ===
+    title?: string; // Full product title (for URL imports)
+    seoDescription?: string; // SEO-optimized description (155-160 chars)
+    priceLabel?: string; // Price display label (e.g., "€299,-" or "Vanaf €249,-")
+    rating?: number; // Overall rating (0-10)
+    imageUrl?: string; // Primary product image URL
+    galleryImages?: string[]; // Array of gallery image URLs
+    affiliateLink?: string; // Affiliate/tracking link to shop
+    tags?: string[]; // Product tags/keywords
+    features?: string[]; // Key product features
+    reviewContent?: {
+        whatIsIt: string;
+        forWho: string;
+        keyFeatures: string;
+        whatToConsider: string;
+        verdict: string;
+    };
+    specifications?: Array<{ label: string; value: string }>; // Structured specifications
+    scores?: {
+        quality: number;
+        priceValue: number;
+        usability: number;
+        design: number;
+    };
+    targetAudience?: string[]; // Who this product is for
+    alternatives?: string[]; // Alternative products to consider
+    reviewAuthor?: {
+        name: string;
+        role: string;
+        summary: string;
+        avatarUrl?: string;
+    };
+    updatedAt?: string; // ISO timestamp of last update
+    isAiGenerated?: boolean; // Whether this was generated via URL import
 }
 
 export interface UserReview {
