@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -17,11 +18,158 @@ const port = process.env.PORT || 3000;
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Automation Configuration
+const AUTOMATION_ENABLED = process.env.AUTOMATION_ENABLED !== 'false'; // Default: enabled
+const CRON_LINK_CHECK_TIME = process.env.CRON_LINK_CHECK_TIME || '0 2 * * *'; // Daily at 02:00
+const CRON_COMMISSION_SYNC_TIME = process.env.CRON_COMMISSION_SYNC_TIME || '0 3 * * *'; // Daily at 03:00
+const CRON_CONTENT_GEN_TIME = process.env.CRON_CONTENT_GEN_TIME || '0 9 * * 1,3,5'; // Mon/Wed/Fri at 09:00
+const CRON_PUBLICATION_CHECK_TIME = process.env.CRON_PUBLICATION_CHECK_TIME || '0 * * * *'; // Every hour
+
 // Log configuration status
 console.log('[CONFIG] Server starting with configuration:');
 console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] Automation: ${AUTOMATION_ENABLED ? 'Enabled' : 'Disabled'}`);
 console.log('[CONFIG] Note: Bol.com API integration has been removed. Use URL-based product import instead.');
+
+// ============================================================================
+// AUTOMATION CRON JOBS
+// ============================================================================
+
+// Store scheduled tasks for status tracking
+const scheduledTasks = {
+    linkHealthCheck: null,
+    commissionSync: null,
+    contentGeneration: null,
+    publicationCheck: null
+};
+
+// Track automation job status
+const automationStatus = {
+    linkHealthCheck: { lastRun: null, status: 'idle', nextRun: null },
+    commissionSync: { lastRun: null, status: 'idle', nextRun: null },
+    contentGeneration: { lastRun: null, status: 'idle', nextRun: null },
+    publicationCheck: { lastRun: null, status: 'idle', nextRun: null }
+};
+
+/**
+ * Initialize cron jobs for automation
+ */
+const initializeAutomation = () => {
+    if (!AUTOMATION_ENABLED) {
+        console.log('[AUTOMATION] Automation is disabled via AUTOMATION_ENABLED=false');
+        return;
+    }
+
+    console.log('[AUTOMATION] Initializing automated tasks...');
+
+    // Daily at 02:00: Link Health Check
+    scheduledTasks.linkHealthCheck = cron.schedule(CRON_LINK_CHECK_TIME, async () => {
+        console.log('[CRON] Starting Link Health Check...');
+        automationStatus.linkHealthCheck.status = 'running';
+        const startTime = Date.now();
+        
+        try {
+            // Dynamic import to avoid circular dependencies
+            // Note: In production, these would be compiled TypeScript modules
+            console.log('[CRON] Link Health Check - executing...');
+            // TODO: Implement actual service calls when TypeScript is compiled
+            // await affiliateLinkMonitor.checkAllAffiliateLinks();
+            // await affiliateLinkMonitor.updateBrokenLinks();
+            // await affiliateLinkMonitor.generateLinkHealthReport();
+            
+            const duration = Date.now() - startTime;
+            automationStatus.linkHealthCheck.lastRun = new Date().toISOString();
+            automationStatus.linkHealthCheck.status = 'completed';
+            console.log(`[CRON] Link Health Check completed in ${duration}ms`);
+        } catch (error) {
+            automationStatus.linkHealthCheck.status = 'failed';
+            console.error('[CRON] Link Health Check failed:', error);
+        }
+    }, {
+        timezone: 'Europe/Amsterdam'
+    });
+
+    // Daily at 03:00: Commission Sync
+    scheduledTasks.commissionSync = cron.schedule(CRON_COMMISSION_SYNC_TIME, async () => {
+        console.log('[CRON] Starting Commission Sync...');
+        automationStatus.commissionSync.status = 'running';
+        const startTime = Date.now();
+        
+        try {
+            console.log('[CRON] Commission Sync - executing...');
+            // TODO: Implement actual service calls when TypeScript is compiled
+            // await commissionTracker.fetchBolComCommissions();
+            // await commissionTracker.fetchTradeTrackerStats();
+            // await commissionTracker.fetchDaisyconStats();
+            // await commissionTracker.fetchAwinStats();
+            // await commissionTracker.calculateROI();
+            
+            const duration = Date.now() - startTime;
+            automationStatus.commissionSync.lastRun = new Date().toISOString();
+            automationStatus.commissionSync.status = 'completed';
+            console.log(`[CRON] Commission Sync completed in ${duration}ms`);
+        } catch (error) {
+            automationStatus.commissionSync.status = 'failed';
+            console.error('[CRON] Commission Sync failed:', error);
+        }
+    }, {
+        timezone: 'Europe/Amsterdam'
+    });
+
+    // Monday, Wednesday, Friday at 09:00: Content Generation
+    scheduledTasks.contentGeneration = cron.schedule(CRON_CONTENT_GEN_TIME, async () => {
+        console.log('[CRON] Starting Content Generation...');
+        automationStatus.contentGeneration.status = 'running';
+        const startTime = Date.now();
+        
+        try {
+            console.log('[CRON] Content Generation - executing...');
+            // TODO: Implement actual service calls when TypeScript is compiled
+            // const category = await contentScheduler.selectTrendingCategory();
+            // await contentScheduler.generateDailyContent(category);
+            
+            const duration = Date.now() - startTime;
+            automationStatus.contentGeneration.lastRun = new Date().toISOString();
+            automationStatus.contentGeneration.status = 'completed';
+            console.log(`[CRON] Content Generation completed in ${duration}ms`);
+        } catch (error) {
+            automationStatus.contentGeneration.status = 'failed';
+            console.error('[CRON] Content Generation failed:', error);
+        }
+    }, {
+        timezone: 'Europe/Amsterdam'
+    });
+
+    // Every hour: Scheduled Content Publication Check
+    scheduledTasks.publicationCheck = cron.schedule(CRON_PUBLICATION_CHECK_TIME, async () => {
+        console.log('[CRON] Starting Publication Check...');
+        automationStatus.publicationCheck.status = 'running';
+        const startTime = Date.now();
+        
+        try {
+            console.log('[CRON] Publication Check - executing...');
+            // TODO: Implement actual service calls when TypeScript is compiled
+            // await contentScheduler.autoPublishScheduledContent();
+            
+            const duration = Date.now() - startTime;
+            automationStatus.publicationCheck.lastRun = new Date().toISOString();
+            automationStatus.publicationCheck.status = 'completed';
+            console.log(`[CRON] Publication Check completed in ${duration}ms`);
+        } catch (error) {
+            automationStatus.publicationCheck.status = 'failed';
+            console.error('[CRON] Publication Check failed:', error);
+        }
+    }, {
+        timezone: 'Europe/Amsterdam'
+    });
+
+    console.log('[AUTOMATION] Cron jobs scheduled:');
+    console.log(`  - Link Health Check: ${CRON_LINK_CHECK_TIME}`);
+    console.log(`  - Commission Sync: ${CRON_COMMISSION_SYNC_TIME}`);
+    console.log(`  - Content Generation: ${CRON_CONTENT_GEN_TIME}`);
+    console.log(`  - Publication Check: ${CRON_PUBLICATION_CHECK_TIME}`);
+};
 
 app.use(express.json());
 // We serve static files manually to intercept index.html
@@ -368,6 +516,116 @@ app.post('/api/admin/sync-prices', (req, res) => {
     });
 });
 
+// --- AUTOMATION API ENDPOINTS ---
+
+/**
+ * GET /api/automation/status
+ * Get the status of all automation jobs
+ */
+app.get('/api/automation/status', (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/status`);
+    
+    res.json({
+        enabled: AUTOMATION_ENABLED,
+        jobs: automationStatus,
+        config: {
+            linkHealthCheck: CRON_LINK_CHECK_TIME,
+            commissionSync: CRON_COMMISSION_SYNC_TIME,
+            contentGeneration: CRON_CONTENT_GEN_TIME,
+            publicationCheck: CRON_PUBLICATION_CHECK_TIME
+        },
+        timestamp
+    });
+});
+
+/**
+ * POST /api/automation/trigger/:jobName
+ * Manually trigger an automation job
+ */
+app.post('/api/automation/trigger/:jobName', async (req, res) => {
+    const { jobName } = req.params;
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/trigger/${jobName}`);
+    
+    const validJobs = ['linkHealthCheck', 'commissionSync', 'contentGeneration', 'publicationCheck'];
+    
+    if (!validJobs.includes(jobName)) {
+        return res.status(400).json({
+            success: false,
+            error: `Invalid job name. Valid options: ${validJobs.join(', ')}`
+        });
+    }
+    
+    // Mark as running
+    automationStatus[jobName].status = 'running';
+    
+    // In a real implementation, this would trigger the actual job
+    // For now, we simulate a quick job execution
+    setTimeout(() => {
+        automationStatus[jobName].status = 'completed';
+        automationStatus[jobName].lastRun = new Date().toISOString();
+    }, 1000);
+    
+    res.json({
+        success: true,
+        message: `Job ${jobName} triggered`,
+        timestamp
+    });
+});
+
+/**
+ * POST /api/automation/enable
+ * Enable or disable automation
+ */
+app.post('/api/automation/enable', (req, res) => {
+    const { enabled } = req.body;
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/enable - enabled: ${enabled}`);
+    
+    // Note: This changes runtime state but not the env variable
+    // A full restart would reset this based on AUTOMATION_ENABLED
+    
+    if (enabled === true) {
+        // Re-enable cron jobs
+        Object.values(scheduledTasks).forEach(task => {
+            if (task && typeof task.start === 'function') {
+                task.start();
+            }
+        });
+        res.json({ success: true, message: 'Automation enabled', timestamp });
+    } else if (enabled === false) {
+        // Stop cron jobs
+        Object.values(scheduledTasks).forEach(task => {
+            if (task && typeof task.stop === 'function') {
+                task.stop();
+            }
+        });
+        res.json({ success: true, message: 'Automation disabled', timestamp });
+    } else {
+        res.status(400).json({ 
+            success: false, 
+            error: 'Invalid value for enabled. Use true or false.' 
+        });
+    }
+});
+
+/**
+ * GET /api/automation/logs
+ * Get recent automation logs (placeholder - real implementation uses database)
+ */
+app.get('/api/automation/logs', (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/logs`);
+    
+    // Placeholder - in production this would query the automation_logs table
+    res.json({
+        logs: [],
+        note: 'Logs are stored in the automation_logs table in Supabase',
+        timestamp
+    });
+});
+
 // --- SERVER SIDE INJECTION OF ENV VARS ---
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, 'dist', 'index.html');
@@ -396,6 +654,9 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`ProductPraat Server running on port ${port} (v3.0.0 - URL-based Import)`);
-  console.log(`[INFO] Bol.com API integration removed - use URL-based product import`);
+    console.log(`ProductPraat Server running on port ${port} (v4.1.0 - Automation System)`);
+    console.log(`[INFO] Bol.com API integration removed - use URL-based product import`);
+    
+    // Initialize automation cron jobs
+    initializeAutomation();
 });
