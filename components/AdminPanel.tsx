@@ -2,13 +2,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { aiService } from '../services/aiService';
 import { fetchBolProduct, searchBolProducts, searchBolProductsDetailed, importProductByEan, BolSearchProduct } from '../services/bolService';
-import { Product, CATEGORIES, Article, ArticleType } from '../types';
+import { Product, CATEGORIES, Article, ArticleType, AffiliateNetworkId } from '../types';
 import { db } from '../services/storage';
 import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml } from '../services/urlService';
 import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResult } from '../utils/validation';
 import { AnalyticsWidget } from './AnalyticsWidget';
 import { ProductGenerator } from './ProductGenerator';
 import { CMSDashboard } from '../src/cms';
+import { AutomationTab } from './AutomationTab';
 import { 
     loadAffiliateConfig, 
     saveAffiliateConfig, 
@@ -23,7 +24,7 @@ import {
     exportAllData,
     AffiliateNetworkConfig,
     AffiliateConfig,
-    AffiliateNetworkId
+    AffiliateNetworkId as AffiliateUtilsNetworkId
 } from '../utils/affiliateUtils';
 
 interface AdminPanelProps {
@@ -63,14 +64,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     // --- STATE: AFFILIATE MANAGEMENT ---
     const [affiliateConfig, setAffiliateConfig] = useState<AffiliateConfig>(() => loadAffiliateConfig());
     const [affiliateSubTab, setAffiliateSubTab] = useState<'networks' | 'stats' | 'analytics'>('networks');
-
-    // --- STATE: AUTOMATION ---
-    const [automationStatus, setAutomationStatus] = useState<{
-        enabled: boolean;
-        jobs: Record<string, { lastRun: string | null; status: string; nextRun: string | null }>;
-        config: Record<string, string>;
-    }>({ enabled: true, jobs: {}, config: {} });
-    const [automationLoading, setAutomationLoading] = useState(false);
 
     // --- LOGGING & PROCESSING ---
     const [pilotLogs, setPilotLogs] = useState<string[]>([]);
@@ -136,27 +129,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const removeToast = useCallback((id: string) => {
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
-
-    // Load automation status when tab is activated
-    useEffect(() => {
-        if (activeTab === 'automation') {
-            const fetchAutomationStatus = async () => {
-                try {
-                    const response = await fetch('/api/automation/status');
-                    if (response.ok) {
-                        const data = await response.json();
-                        setAutomationStatus(data);
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch automation status:', error);
-                }
-            };
-            fetchAutomationStatus();
-            // Refresh every 30 seconds
-            const interval = setInterval(fetchAutomationStatus, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [activeTab]);
 
     const addLog = (msg: string) => { 
         setPilotLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]); 
@@ -3436,235 +3408,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
                         {/* === AUTOMATION TAB === */}
                         {activeTab === 'automation' && (
-                            <div className="animate-fade-in space-y-6">
-                                {/* Automation Header */}
-                                <div className="bg-gradient-to-r from-cyan-900/30 to-slate-900 p-6 rounded-2xl border border-cyan-500/30">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                                                <i className="fas fa-robot text-cyan-400"></i>
-                                                Automation Dashboard
-                                            </h2>
-                                            <p className="text-slate-400 mt-1">Beheer automatische taken voor affiliate optimalisatie</p>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                                                automationStatus.enabled 
-                                                    ? 'bg-green-600/20 border border-green-500/30 text-green-400'
-                                                    : 'bg-red-600/20 border border-red-500/30 text-red-400'
-                                            }`}>
-                                                <span className={`w-2 h-2 rounded-full ${
-                                                    automationStatus.enabled ? 'bg-green-400 animate-pulse' : 'bg-red-400'
-                                                }`}></span>
-                                                <span className="text-sm font-medium">
-                                                    {automationStatus.enabled ? 'Actief' : 'Uitgeschakeld'}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        const response = await fetch('/api/automation/enable', {
-                                                            method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({ enabled: !automationStatus.enabled })
-                                                        });
-                                                        if (response.ok) {
-                                                            setAutomationStatus(prev => ({ ...prev, enabled: !prev.enabled }));
-                                                            showToast(
-                                                                automationStatus.enabled ? 'Automation uitgeschakeld' : 'Automation ingeschakeld',
-                                                                'success'
-                                                            );
-                                                        }
-                                                    } catch (error) {
-                                                        showToast('Kon automation status niet wijzigen', 'error');
-                                                    }
-                                                }}
-                                                className={`px-4 py-2 rounded-lg font-medium transition ${
-                                                    automationStatus.enabled
-                                                        ? 'bg-red-600 hover:bg-red-500 text-white'
-                                                        : 'bg-green-600 hover:bg-green-500 text-white'
-                                                }`}
-                                            >
-                                                {automationStatus.enabled ? 'Uitschakelen' : 'Inschakelen'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Scheduled Jobs Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {[
-                                        { 
-                                            id: 'linkHealthCheck', 
-                                            name: 'Link Health Check', 
-                                            icon: 'fa-heartbeat',
-                                            schedule: '02:00 (dagelijks)',
-                                            description: 'Controleert alle affiliate links op geldigheid en repareert broken links',
-                                            color: 'blue'
-                                        },
-                                        { 
-                                            id: 'commissionSync', 
-                                            name: 'Commission Sync', 
-                                            icon: 'fa-sync-alt',
-                                            schedule: '03:00 (dagelijks)',
-                                            description: 'Synchroniseert commissie data van alle affiliate netwerken',
-                                            color: 'green'
-                                        },
-                                        { 
-                                            id: 'contentGeneration', 
-                                            name: 'Content Generatie', 
-                                            icon: 'fa-file-alt',
-                                            schedule: '09:00 (ma/wo/vr)',
-                                            description: 'Genereert automatisch nieuwe content voor trending categorieën',
-                                            color: 'purple'
-                                        },
-                                        { 
-                                            id: 'publicationCheck', 
-                                            name: 'Publicatie Check', 
-                                            icon: 'fa-clock',
-                                            schedule: 'Elk uur',
-                                            description: 'Controleert en publiceert geplande content automatisch',
-                                            color: 'yellow'
-                                        }
-                                    ].map(job => {
-                                        const jobStatus = automationStatus.jobs[job.id] || { status: 'idle', lastRun: null };
-                                        return (
-                                            <div key={job.id} className={`bg-slate-900 border border-slate-800 rounded-xl overflow-hidden`}>
-                                                <div className={`bg-${job.color}-900/20 p-4 border-b border-slate-800`}>
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-lg bg-${job.color}-600/30 flex items-center justify-center`}>
-                                                                <i className={`fas ${job.icon} text-${job.color}-400`}></i>
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="font-bold text-white">{job.name}</h3>
-                                                                <div className="text-xs text-slate-500">{job.schedule}</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className={`px-2 py-1 rounded text-xs font-medium ${
-                                                            jobStatus.status === 'running' ? 'bg-blue-600/20 text-blue-400' :
-                                                            jobStatus.status === 'completed' ? 'bg-green-600/20 text-green-400' :
-                                                            jobStatus.status === 'failed' ? 'bg-red-600/20 text-red-400' :
-                                                            'bg-slate-700 text-slate-400'
-                                                        }`}>
-                                                            {jobStatus.status === 'running' && <i className="fas fa-spinner fa-spin mr-1"></i>}
-                                                            {jobStatus.status === 'running' ? 'Bezig...' :
-                                                             jobStatus.status === 'completed' ? 'Voltooid' :
-                                                             jobStatus.status === 'failed' ? 'Mislukt' : 'Idle'}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="p-4">
-                                                    <p className="text-sm text-slate-400 mb-4">{job.description}</p>
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="text-xs text-slate-500">
-                                                            {jobStatus.lastRun ? (
-                                                                <>Laatst: {new Date(jobStatus.lastRun).toLocaleString('nl-NL')}</>
-                                                            ) : (
-                                                                'Nog niet uitgevoerd'
-                                                            )}
-                                                        </div>
-                                                        <button
-                                                            onClick={async () => {
-                                                                try {
-                                                                    setAutomationLoading(true);
-                                                                    const response = await fetch(`/api/automation/trigger/${job.id}`, {
-                                                                        method: 'POST'
-                                                                    });
-                                                                    if (response.ok) {
-                                                                        showToast(`${job.name} gestart`, 'success');
-                                                                        // Refresh status
-                                                                        const statusResponse = await fetch('/api/automation/status');
-                                                                        if (statusResponse.ok) {
-                                                                            const data = await statusResponse.json();
-                                                                            setAutomationStatus(data);
-                                                                        }
-                                                                    }
-                                                                } catch (error) {
-                                                                    showToast(`Kon ${job.name} niet starten`, 'error');
-                                                                } finally {
-                                                                    setAutomationLoading(false);
-                                                                }
-                                                            }}
-                                                            disabled={automationLoading || jobStatus.status === 'running'}
-                                                            className={`bg-${job.color}-600 hover:bg-${job.color}-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1`}
-                                                        >
-                                                            <i className="fas fa-play text-xs"></i> Start Nu
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Configuration Section */}
-                                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                                    <div className="bg-slate-950 p-4 border-b border-slate-800">
-                                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                            <i className="fas fa-cog text-slate-400"></i> Configuratie
-                                        </h2>
-                                    </div>
-                                    <div className="p-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div>
-                                                <h3 className="font-medium text-white mb-3">Cron Schedules</h3>
-                                                <div className="space-y-3 text-sm">
-                                                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-lg">
-                                                        <span className="text-slate-400">Link Health Check</span>
-                                                        <code className="text-cyan-400 bg-cyan-900/20 px-2 py-1 rounded">0 2 * * *</code>
-                                                    </div>
-                                                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-lg">
-                                                        <span className="text-slate-400">Commission Sync</span>
-                                                        <code className="text-cyan-400 bg-cyan-900/20 px-2 py-1 rounded">0 3 * * *</code>
-                                                    </div>
-                                                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-lg">
-                                                        <span className="text-slate-400">Content Generatie</span>
-                                                        <code className="text-cyan-400 bg-cyan-900/20 px-2 py-1 rounded">0 9 * * 1,3,5</code>
-                                                    </div>
-                                                    <div className="flex justify-between items-center bg-slate-950 p-3 rounded-lg">
-                                                        <span className="text-slate-400">Publicatie Check</span>
-                                                        <code className="text-cyan-400 bg-cyan-900/20 px-2 py-1 rounded">0 * * * *</code>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h3 className="font-medium text-white mb-3">API Endpoints</h3>
-                                                <div className="space-y-3 text-sm">
-                                                    <div className="bg-slate-950 p-3 rounded-lg">
-                                                        <div className="text-slate-400 mb-1">Status ophalen</div>
-                                                        <code className="text-green-400">GET /api/automation/status</code>
-                                                    </div>
-                                                    <div className="bg-slate-950 p-3 rounded-lg">
-                                                        <div className="text-slate-400 mb-1">Job triggeren</div>
-                                                        <code className="text-green-400">POST /api/automation/trigger/:job</code>
-                                                    </div>
-                                                    <div className="bg-slate-950 p-3 rounded-lg">
-                                                        <div className="text-slate-400 mb-1">Enable/Disable</div>
-                                                        <code className="text-green-400">POST /api/automation/enable</code>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Info Box */}
-                                <div className="bg-cyan-900/20 border border-cyan-500/30 rounded-xl p-4">
-                                    <div className="flex items-start gap-3">
-                                        <i className="fas fa-info-circle text-cyan-400 mt-0.5"></i>
-                                        <div>
-                                            <h4 className="font-medium text-cyan-300 mb-1">Hoe werkt het Automation Systeem?</h4>
-                                            <p className="text-sm text-cyan-200/70">
-                                                Het automation systeem draait op de server en voert taken uit volgens een vast schema.
-                                                De Link Health Check controleert dagelijks alle affiliate links en vervangt kapotte links automatisch.
-                                                Commission Sync haalt verdiensten op van alle geconfigureerde netwerken.
-                                                Content Generatie maakt automatisch nieuwe artikelen voor trending categorieën.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <AutomationTab showToast={showToast} />
                         )}
                     </div>
                 </main>
