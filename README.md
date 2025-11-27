@@ -247,6 +247,69 @@ Dit project is geoptimaliseerd voor deployment op **Render.com** als een **Web S
 
 ProductPraat beschikt over een volledig geautomatiseerd systeem dat 24/7 werkt aan het optimaliseren van affiliate commissies.
 
+### Automation Control Center
+
+Het Automation Control Center is een configureerbaar dashboard in het Admin Panel waar alle autonome functies kunnen worden beheerd. Gebruikers kunnen instellen hoeveel producten per dag gegenereerd worden, welke categorieën, en hoe vaak nieuwe content wordt geschreven.
+
+#### Master Switch
+
+- Grote toggle om alle automation in/uit te schakelen
+- Visual status indicator toont de huidige staat
+
+#### Product Generatie
+
+| Instelling | Beschrijving | Bereik |
+|------------|--------------|--------|
+| Enable/Disable | Zet product generatie aan/uit | Toggle |
+| Producten per dag | Aantal producten om te genereren | 0-10 (slider) |
+| Categorieën | Selecteer categorieën voor generatie | Checkboxes |
+| Uitvoer tijd | Voorkeur tijd voor generatie | Time picker (HH:MM) |
+
+#### Content Generatie
+
+| Instelling | Beschrijving | Opties |
+|------------|--------------|--------|
+| Enable/Disable | Zet content generatie aan/uit | Toggle |
+| Frequentie | Hoe vaak content genereren | daily/weekly/biweekly/monthly |
+| Content types | Welke types te genereren | guides, comparisons, toplists, blogs |
+| Posts per week | Aantal posts per week | 1-7 (slider) |
+| Voorkeur dagen | Dagen voor publicatie | Zon-Za selectie |
+
+#### Link Monitoring
+
+| Instelling | Beschrijving | Opties |
+|------------|--------------|--------|
+| Enable/Disable | Zet monitoring aan/uit | Toggle |
+| Check frequentie | Hoe vaak te controleren | hourly/daily/weekly |
+| Auto-fix | Automatisch broken links fixen | Checkbox |
+| Notificaties | Meldingen bij problemen | Checkbox |
+
+#### Commissie Tracking
+
+| Instelling | Beschrijving | Opties |
+|------------|--------------|--------|
+| Enable/Disable | Zet tracking aan/uit | Toggle |
+| Sync frequentie | Hoe vaak te synchroniseren | hourly/daily/weekly |
+| Netwerken | Welke netwerken te tracken | bol, tradetracker, daisycon, awin, paypro, plugpay |
+
+#### Notificatie Instellingen
+
+| Instelling | Beschrijving |
+|------------|--------------|
+| E-mail | E-mailadres voor notificaties |
+| E-mail ingeschakeld | Toggle voor e-mail notificaties |
+| Alert types | Selecteer welke alerts te ontvangen (broken_links, low_conversion, high_earnings, content_published, product_generated, error_occurred) |
+
+#### Performance Instellingen
+
+| Instelling | Beschrijving |
+|------------|--------------|
+| Caching | Schakel caching in voor betere prestaties |
+| Lazy loading | Lazy loading voor afbeeldingen |
+| Image optimization | Automatische afbeelding optimalisatie |
+| Min conversie rate | Minimum conversie rate drempel (0-10%) |
+| Auto-remove | Automatisch slecht presterende producten verwijderen |
+
 ### Geautomatiseerde Taken
 
 | Taak | Schema | Beschrijving |
@@ -254,10 +317,14 @@ ProductPraat beschikt over een volledig geautomatiseerd systeem dat 24/7 werkt a
 | Link Health Check | Dagelijks 02:00 | Controleert alle affiliate links op geldigheid |
 | Commission Sync | Dagelijks 03:00 | Haalt commissie data op van alle netwerken |
 | Content Generatie | Ma/Wo/Vr 09:00 | Genereert automatisch nieuwe content |
+| Product Generatie | Configureerbaar | Genereert automatisch nieuwe producten |
 | Publicatie Check | Elk uur | Publiceert geplande content |
 
 ### Automation Services
 
+- **automationConfigService.ts** - Laad, opslaan en valideren van configuratie
+- **autonomousProductGenerator.ts** - Automatische product generatie
+- **autonomousContentGenerator.ts** - Automatische content generatie
 - **affiliateLinkMonitor.ts** - Monitort link gezondheid en vervangt broken links
 - **commissionTracker.ts** - Integreert met affiliate netwerk APIs
 - **contentScheduler.ts** - Plant en publiceert content automatisch
@@ -287,7 +354,7 @@ GET /api/automation/logs
 
 ### Configuratie
 
-Automation wordt geconfigureerd via environment variabelen:
+Automation wordt geconfigureerd via het Admin Panel of via environment variabelen:
 
 ```bash
 AUTOMATION_ENABLED=true
@@ -297,9 +364,13 @@ CRON_CONTENT_GEN_TIME="0 9 * * 1,3,5"
 CRON_PUBLICATION_CHECK_TIME="0 * * * *"
 ```
 
+De volledige configuratie wordt opgeslagen in zowel localStorage (voor snelle toegang) als de Supabase database (voor persistentie).
+
 ### Database Migraties
 
-Run `supabase/migrations/20241127_automation_infrastructure.sql` in Supabase SQL Editor voor:
+Run de volgende migraties in Supabase SQL Editor:
+
+**20241127_automation_infrastructure.sql:**
 - `link_health_checks` - Link gezondheid historie
 - `commission_records` - Commissie data
 - `performance_metrics` - Performance metrics
@@ -308,7 +379,25 @@ Run `supabase/migrations/20241127_automation_infrastructure.sql` in Supabase SQL
 - `automation_alerts` - Notificaties
 - `retry_tasks` - Retry queue
 
+**20241129_automation_config.sql:**
+- `automation_config` - Centrale configuratie tabel met JSONB voor alle instellingen
+
 ## Changelog
+
+### v4.3.0 - Automation Control Dashboard
+- ✅ **NIEUW**: Automation Control Center UI in Admin Panel
+- ✅ **NIEUW**: Master switch om alle automation in/uit te schakelen
+- ✅ **NIEUW**: Product generatie instellingen (producten per dag, categorieën, tijd)
+- ✅ **NIEUW**: Content generatie instellingen (frequentie, types, posts per week)
+- ✅ **NIEUW**: Link monitoring instellingen (check frequentie, auto-fix, notificaties)
+- ✅ **NIEUW**: Commissie tracking instellingen (sync frequentie, netwerken)
+- ✅ **NIEUW**: Notificatie voorkeuren (email, alert types)
+- ✅ **NIEUW**: Performance optimization instellingen
+- ✅ **NIEUW**: AutomationConfig type definitions
+- ✅ **NIEUW**: automationConfigService voor laden/opslaan/valideren van config
+- ✅ **NIEUW**: autonomousProductGenerator service
+- ✅ **NIEUW**: autonomousContentGenerator service
+- ✅ **NIEUW**: Database migratie 20241129_automation_config.sql
 
 ### v4.2.0 - Automation Infrastructure
 - ✅ **NIEUW**: node-cron voor scheduled tasks

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import cron from 'node-cron';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
@@ -18,12 +19,100 @@ const port = process.env.PORT || 3000;
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Initialize Supabase client for server-side operations
+let supabase = null;
+if (VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY) {
+    supabase = createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY);
+}
+
 // Automation Configuration
 const AUTOMATION_ENABLED = process.env.AUTOMATION_ENABLED !== 'false'; // Default: enabled
 const CRON_LINK_CHECK_TIME = process.env.CRON_LINK_CHECK_TIME || '0 2 * * *'; // Daily at 02:00
 const CRON_COMMISSION_SYNC_TIME = process.env.CRON_COMMISSION_SYNC_TIME || '0 3 * * *'; // Daily at 03:00
 const CRON_CONTENT_GEN_TIME = process.env.CRON_CONTENT_GEN_TIME || '0 9 * * 1,3,5'; // Mon/Wed/Fri at 09:00
 const CRON_PUBLICATION_CHECK_TIME = process.env.CRON_PUBLICATION_CHECK_TIME || '0 * * * *'; // Every hour
+const CRON_PRODUCT_GEN_TIME = process.env.CRON_PRODUCT_GEN_TIME || '0 10 * * *'; // Daily at 10:00
+
+// Default automation config (synced with types/automationTypes.ts)
+const DEFAULT_AUTOMATION_CONFIG = {
+    masterEnabled: false,
+    productGeneration: {
+        enabled: false,
+        productsPerDay: 3,
+        categories: ['televisies', 'audio', 'laptops', 'smartphones'],
+        preferredTime: '09:00'
+    },
+    contentGeneration: {
+        enabled: false,
+        frequency: 'weekly',
+        contentTypes: ['guides', 'comparisons', 'toplists'],
+        postsPerWeek: 3,
+        preferredDays: [1, 3, 5]
+    },
+    linkMonitoring: {
+        enabled: true,
+        checkFrequency: 'daily',
+        autoFix: true,
+        notifications: true
+    },
+    commissionTracking: {
+        enabled: true,
+        syncFrequency: 'daily',
+        networks: ['bol', 'tradetracker', 'daisycon']
+    },
+    notifications: {
+        email: '',
+        alertTypes: ['broken_links', 'error_occurred', 'high_earnings'],
+        emailEnabled: false
+    },
+    performance: {
+        enableCaching: true,
+        enableLazyLoading: true,
+        enableImageOptimization: true,
+        minConversionRate: 1.0,
+        autoRemoveLowPerformers: false
+    }
+};
+
+// Cached automation config (loaded from database)
+let cachedAutomationConfig = { ...DEFAULT_AUTOMATION_CONFIG };
+
+/**
+ * Load automation configuration from Supabase database
+ */
+const loadAutomationConfigFromDB = async () => {
+    if (!supabase) {
+        console.log('[CONFIG] Supabase not configured, using default automation config');
+        return cachedAutomationConfig;
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('automation_config')
+            .select('config')
+            .eq('id', 'default')
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No config found, use defaults
+                console.log('[CONFIG] No automation config in database, using defaults');
+            } else {
+                console.error('[CONFIG] Error loading automation config:', error);
+            }
+            return cachedAutomationConfig;
+        }
+
+        if (data && data.config) {
+            cachedAutomationConfig = { ...DEFAULT_AUTOMATION_CONFIG, ...data.config };
+            console.log('[CONFIG] Loaded automation config from database');
+        }
+    } catch (error) {
+        console.error('[CONFIG] Exception loading automation config:', error);
+    }
+
+    return cachedAutomationConfig;
+};
 
 // Log configuration status
 console.log('[CONFIG] Server starting with configuration:');
@@ -41,7 +130,8 @@ const scheduledTasks = {
     linkHealthCheck: null,
     commissionSync: null,
     contentGeneration: null,
-    publicationCheck: null
+    publicationCheck: null,
+    productGeneration: null
 };
 
 // Track automation job status
@@ -49,33 +139,49 @@ const automationStatus = {
     linkHealthCheck: { lastRun: null, status: 'idle', nextRun: null },
     commissionSync: { lastRun: null, status: 'idle', nextRun: null },
     contentGeneration: { lastRun: null, status: 'idle', nextRun: null },
+    productGeneration: { lastRun: null, status: 'idle', nextRun: null },
     publicationCheck: { lastRun: null, status: 'idle', nextRun: null }
 };
 
 /**
  * Initialize cron jobs for automation
  */
-const initializeAutomation = () => {
+const initializeAutomation = async () => {
     if (!AUTOMATION_ENABLED) {
         console.log('[AUTOMATION] Automation is disabled via AUTOMATION_ENABLED=false');
         return;
     }
 
+    // Load initial config from database
+    await loadAutomationConfigFromDB();
+
     console.log('[AUTOMATION] Initializing automated tasks...');
+    console.log(`[AUTOMATION] Master enabled: ${cachedAutomationConfig.masterEnabled}`);
 
     // Daily at 02:00: Link Health Check
     scheduledTasks.linkHealthCheck = cron.schedule(CRON_LINK_CHECK_TIME, async () => {
+        // Reload config to get latest settings
+        await loadAutomationConfigFromDB();
+        
+        // Check if automation is enabled
+        if (!cachedAutomationConfig.masterEnabled || !cachedAutomationConfig.linkMonitoring.enabled) {
+            console.log('[CRON] Link Health Check skipped - disabled in config');
+            return;
+        }
+
         console.log('[CRON] Starting Link Health Check...');
         automationStatus.linkHealthCheck.status = 'running';
         const startTime = Date.now();
         
         try {
-            // Dynamic import to avoid circular dependencies
             // Note: In production, these would be compiled TypeScript modules
             console.log('[CRON] Link Health Check - executing...');
+            console.log(`[CRON] Config: checkFrequency=${cachedAutomationConfig.linkMonitoring.checkFrequency}, autoFix=${cachedAutomationConfig.linkMonitoring.autoFix}`);
             // TODO: Implement actual service calls when TypeScript is compiled
             // await affiliateLinkMonitor.checkAllAffiliateLinks();
-            // await affiliateLinkMonitor.updateBrokenLinks();
+            // if (cachedAutomationConfig.linkMonitoring.autoFix) {
+            //     await affiliateLinkMonitor.updateBrokenLinks();
+            // }
             // await affiliateLinkMonitor.generateLinkHealthReport();
             
             const duration = Date.now() - startTime;
@@ -92,17 +198,31 @@ const initializeAutomation = () => {
 
     // Daily at 03:00: Commission Sync
     scheduledTasks.commissionSync = cron.schedule(CRON_COMMISSION_SYNC_TIME, async () => {
+        // Reload config to get latest settings
+        await loadAutomationConfigFromDB();
+        
+        // Check if automation is enabled
+        if (!cachedAutomationConfig.masterEnabled || !cachedAutomationConfig.commissionTracking.enabled) {
+            console.log('[CRON] Commission Sync skipped - disabled in config');
+            return;
+        }
+
         console.log('[CRON] Starting Commission Sync...');
         automationStatus.commissionSync.status = 'running';
         const startTime = Date.now();
         
         try {
-            console.log('[CRON] Commission Sync - executing...');
+            const networks = cachedAutomationConfig.commissionTracking.networks || [];
+            console.log(`[CRON] Commission Sync - executing for networks: ${networks.join(', ')}`);
             // TODO: Implement actual service calls when TypeScript is compiled
-            // await commissionTracker.fetchBolComCommissions();
-            // await commissionTracker.fetchTradeTrackerStats();
-            // await commissionTracker.fetchDaisyconStats();
-            // await commissionTracker.fetchAwinStats();
+            // for (const network of networks) {
+            //     switch(network) {
+            //         case 'bol': await commissionTracker.fetchBolComCommissions(); break;
+            //         case 'tradetracker': await commissionTracker.fetchTradeTrackerStats(); break;
+            //         case 'daisycon': await commissionTracker.fetchDaisyconStats(); break;
+            //         case 'awin': await commissionTracker.fetchAwinStats(); break;
+            //     }
+            // }
             // await commissionTracker.calculateROI();
             
             const duration = Date.now() - startTime;
@@ -119,15 +239,33 @@ const initializeAutomation = () => {
 
     // Monday, Wednesday, Friday at 09:00: Content Generation
     scheduledTasks.contentGeneration = cron.schedule(CRON_CONTENT_GEN_TIME, async () => {
+        // Reload config to get latest settings
+        await loadAutomationConfigFromDB();
+        
+        // Check if automation is enabled
+        if (!cachedAutomationConfig.masterEnabled || !cachedAutomationConfig.contentGeneration.enabled) {
+            console.log('[CRON] Content Generation skipped - disabled in config');
+            return;
+        }
+
+        // Check if today is a preferred day
+        const today = new Date().getDay();
+        const preferredDays = cachedAutomationConfig.contentGeneration.preferredDays || [];
+        if (!preferredDays.includes(today)) {
+            console.log('[CRON] Content Generation skipped - not a preferred day');
+            return;
+        }
+
         console.log('[CRON] Starting Content Generation...');
         automationStatus.contentGeneration.status = 'running';
         const startTime = Date.now();
         
         try {
-            console.log('[CRON] Content Generation - executing...');
+            const contentTypes = cachedAutomationConfig.contentGeneration.contentTypes || [];
+            const postsPerWeek = cachedAutomationConfig.contentGeneration.postsPerWeek || 3;
+            console.log(`[CRON] Content Generation - types: ${contentTypes.join(', ')}, postsPerWeek: ${postsPerWeek}`);
             // TODO: Implement actual service calls when TypeScript is compiled
-            // const category = await contentScheduler.selectTrendingCategory();
-            // await contentScheduler.generateDailyContent(category);
+            // await autonomousContentGenerator.runAutomatedContentGeneration(cachedAutomationConfig);
             
             const duration = Date.now() - startTime;
             automationStatus.contentGeneration.lastRun = new Date().toISOString();
@@ -143,6 +281,14 @@ const initializeAutomation = () => {
 
     // Every hour: Scheduled Content Publication Check
     scheduledTasks.publicationCheck = cron.schedule(CRON_PUBLICATION_CHECK_TIME, async () => {
+        // Reload config to get latest settings
+        await loadAutomationConfigFromDB();
+        
+        if (!cachedAutomationConfig.masterEnabled) {
+            console.log('[CRON] Publication Check skipped - master disabled');
+            return;
+        }
+
         console.log('[CRON] Starting Publication Check...');
         automationStatus.publicationCheck.status = 'running';
         const startTime = Date.now();
@@ -164,11 +310,60 @@ const initializeAutomation = () => {
         timezone: 'Europe/Amsterdam'
     });
 
+    // Daily at preferred time: Product Generation
+    scheduledTasks.productGeneration = cron.schedule(CRON_PRODUCT_GEN_TIME, async () => {
+        // Reload config to get latest settings
+        await loadAutomationConfigFromDB();
+        
+        // Check if automation is enabled
+        if (!cachedAutomationConfig.masterEnabled || !cachedAutomationConfig.productGeneration.enabled) {
+            console.log('[CRON] Product Generation skipped - disabled in config');
+            return;
+        }
+
+        // Check if it's the preferred time (within 30 minutes)
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinutes = now.getMinutes();
+        const preferredTime = cachedAutomationConfig.productGeneration.preferredTime || '09:00';
+        const [preferredHour, preferredMinutes] = preferredTime.split(':').map(Number);
+        const preferredTimeInMinutes = preferredHour * 60 + preferredMinutes;
+        const currentTimeInMinutes = currentHour * 60 + currentMinutes;
+        
+        if (Math.abs(currentTimeInMinutes - preferredTimeInMinutes) > 30) {
+            console.log('[CRON] Product Generation skipped - not preferred time');
+            return;
+        }
+
+        console.log('[CRON] Starting Product Generation...');
+        automationStatus.productGeneration.status = 'running';
+        const startTime = Date.now();
+        
+        try {
+            const productsPerDay = cachedAutomationConfig.productGeneration.productsPerDay || 3;
+            const categories = cachedAutomationConfig.productGeneration.categories || [];
+            console.log(`[CRON] Product Generation - productsPerDay: ${productsPerDay}, categories: ${categories.join(', ')}`);
+            // TODO: Implement actual service calls when TypeScript is compiled
+            // await autonomousProductGenerator.runAutomatedProductGeneration(cachedAutomationConfig);
+            
+            const duration = Date.now() - startTime;
+            automationStatus.productGeneration.lastRun = new Date().toISOString();
+            automationStatus.productGeneration.status = 'completed';
+            console.log(`[CRON] Product Generation completed in ${duration}ms`);
+        } catch (error) {
+            automationStatus.productGeneration.status = 'failed';
+            console.error('[CRON] Product Generation failed:', error);
+        }
+    }, {
+        timezone: 'Europe/Amsterdam'
+    });
+
     console.log('[AUTOMATION] Cron jobs scheduled:');
     console.log(`  - Link Health Check: ${CRON_LINK_CHECK_TIME}`);
     console.log(`  - Commission Sync: ${CRON_COMMISSION_SYNC_TIME}`);
     console.log(`  - Content Generation: ${CRON_CONTENT_GEN_TIME}`);
     console.log(`  - Publication Check: ${CRON_PUBLICATION_CHECK_TIME}`);
+    console.log(`  - Product Generation: ${CRON_PRODUCT_GEN_TIME}`);
 };
 
 app.use(express.json());
@@ -522,19 +717,24 @@ app.post('/api/admin/sync-prices', (req, res) => {
  * GET /api/automation/status
  * Get the status of all automation jobs
  */
-app.get('/api/automation/status', (req, res) => {
+app.get('/api/automation/status', async (req, res) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/status`);
     
+    // Reload config to get latest settings
+    await loadAutomationConfigFromDB();
+    
     res.json({
-        enabled: AUTOMATION_ENABLED,
+        enabled: AUTOMATION_ENABLED && cachedAutomationConfig.masterEnabled,
         jobs: automationStatus,
         config: {
             linkHealthCheck: CRON_LINK_CHECK_TIME,
             commissionSync: CRON_COMMISSION_SYNC_TIME,
             contentGeneration: CRON_CONTENT_GEN_TIME,
-            publicationCheck: CRON_PUBLICATION_CHECK_TIME
+            publicationCheck: CRON_PUBLICATION_CHECK_TIME,
+            productGeneration: CRON_PRODUCT_GEN_TIME
         },
+        automationConfig: cachedAutomationConfig,
         timestamp
     });
 });
@@ -548,7 +748,7 @@ app.post('/api/automation/trigger/:jobName', async (req, res) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/trigger/${jobName}`);
     
-    const validJobs = ['linkHealthCheck', 'commissionSync', 'contentGeneration', 'publicationCheck'];
+    const validJobs = ['linkHealthCheck', 'commissionSync', 'contentGeneration', 'publicationCheck', 'productGeneration'];
     
     if (!validJobs.includes(jobName)) {
         return res.status(400).json({
