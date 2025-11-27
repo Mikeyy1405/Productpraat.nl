@@ -4,12 +4,11 @@
  * Main dashboard for CMS administration with template switching and feature management.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
     TEMPLATES, 
     FEATURES,
-    CATEGORY_LABELS,
-    TemplateType,
+    TemplateSettings,
 } from './types';
 import { useCMS, useTemplate } from './CMSContext';
 import { TemplateSelector } from './TemplateSelector';
@@ -22,10 +21,15 @@ interface CMSDashboardProps {
 type DashboardTab = 'overview' | 'templates' | 'features' | 'settings';
 
 export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
-    const { siteConfig, saveSiteConfig, resetToDefaults, currentTemplate, updateSiteConfig } = useCMS();
+    const { siteConfig, saveSiteConfig, resetToDefaults, currentTemplate, updateSiteConfig, updateTemplateSettings } = useCMS();
     const template = useTemplate();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
     const [isSaving, setIsSaving] = useState(false);
+
+    // Helper to update template settings with proper typing
+    const handleTemplateSettingChange = useCallback((key: keyof TemplateSettings, value: string) => {
+        updateTemplateSettings({ [key]: value } as Partial<TemplateSettings>);
+    }, [updateTemplateSettings]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -325,23 +329,13 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                                     <input
                                         type="color"
                                         value={template.settings.primaryColor}
-                                        onChange={(e) => updateSiteConfig({ 
-                                            templateSettings: { 
-                                                ...siteConfig?.templateSettings, 
-                                                primaryColor: e.target.value 
-                                            } as any
-                                        })}
+                                        onChange={(e) => handleTemplateSettingChange('primaryColor', e.target.value)}
                                         className="w-12 h-12 rounded-lg border-2 border-slate-700 cursor-pointer"
                                     />
                                     <input
                                         type="text"
                                         value={template.settings.primaryColor}
-                                        onChange={(e) => updateSiteConfig({ 
-                                            templateSettings: { 
-                                                ...siteConfig?.templateSettings, 
-                                                primaryColor: e.target.value 
-                                            } as any
-                                        })}
+                                        onChange={(e) => handleTemplateSettingChange('primaryColor', e.target.value)}
                                         className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition font-mono"
                                     />
                                 </div>
@@ -355,23 +349,13 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                                     <input
                                         type="color"
                                         value={template.settings.secondaryColor}
-                                        onChange={(e) => updateSiteConfig({ 
-                                            templateSettings: { 
-                                                ...siteConfig?.templateSettings, 
-                                                secondaryColor: e.target.value 
-                                            } as any
-                                        })}
+                                        onChange={(e) => handleTemplateSettingChange('secondaryColor', e.target.value)}
                                         className="w-12 h-12 rounded-lg border-2 border-slate-700 cursor-pointer"
                                     />
                                     <input
                                         type="text"
                                         value={template.settings.secondaryColor}
-                                        onChange={(e) => updateSiteConfig({ 
-                                            templateSettings: { 
-                                                ...siteConfig?.templateSettings, 
-                                                secondaryColor: e.target.value 
-                                            } as any
-                                        })}
+                                        onChange={(e) => handleTemplateSettingChange('secondaryColor', e.target.value)}
                                         className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition font-mono"
                                     />
                                 </div>
@@ -383,12 +367,7 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                                 </label>
                                 <select
                                     value={template.settings.fontFamily}
-                                    onChange={(e) => updateSiteConfig({ 
-                                        templateSettings: { 
-                                            ...siteConfig?.templateSettings, 
-                                            fontFamily: e.target.value 
-                                        } as any
-                                    })}
+                                    onChange={(e) => handleTemplateSettingChange('fontFamily', e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition cursor-pointer"
                                 >
                                     <option value="Inter">Inter (Modern)</option>

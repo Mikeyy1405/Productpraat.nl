@@ -181,33 +181,89 @@ const FeatureToggleCard: React.FC<FeatureToggleCardProps> = ({
         updateSettings({ [key]: value });
     };
 
-    const getCategoryColor = (category: FeatureCategory): string => {
+    // Static color classes to ensure Tailwind generates them
+    const getCategoryClasses = (category: FeatureCategory): {
+        border: string;
+        bg: string;
+        text: string;
+        bgLight: string;
+        toggle: string;
+    } => {
         switch (category) {
-            case 'core': return 'blue';
-            case 'content': return 'purple';
-            case 'engagement': return 'pink';
-            case 'commerce': return 'green';
-            case 'seo_analytics': return 'yellow';
-            case 'communication': return 'orange';
-            default: return 'slate';
+            case 'core': 
+                return {
+                    border: 'border-blue-500/50',
+                    bg: 'bg-blue-600/20',
+                    text: 'text-blue-400',
+                    bgLight: 'bg-blue-600/10',
+                    toggle: 'bg-blue-600'
+                };
+            case 'content': 
+                return {
+                    border: 'border-purple-500/50',
+                    bg: 'bg-purple-600/20',
+                    text: 'text-purple-400',
+                    bgLight: 'bg-purple-600/10',
+                    toggle: 'bg-purple-600'
+                };
+            case 'engagement': 
+                return {
+                    border: 'border-pink-500/50',
+                    bg: 'bg-pink-600/20',
+                    text: 'text-pink-400',
+                    bgLight: 'bg-pink-600/10',
+                    toggle: 'bg-pink-600'
+                };
+            case 'commerce': 
+                return {
+                    border: 'border-green-500/50',
+                    bg: 'bg-green-600/20',
+                    text: 'text-green-400',
+                    bgLight: 'bg-green-600/10',
+                    toggle: 'bg-green-600'
+                };
+            case 'seo_analytics': 
+                return {
+                    border: 'border-yellow-500/50',
+                    bg: 'bg-yellow-600/20',
+                    text: 'text-yellow-400',
+                    bgLight: 'bg-yellow-600/10',
+                    toggle: 'bg-yellow-600'
+                };
+            case 'communication': 
+                return {
+                    border: 'border-orange-500/50',
+                    bg: 'bg-orange-600/20',
+                    text: 'text-orange-400',
+                    bgLight: 'bg-orange-600/10',
+                    toggle: 'bg-orange-600'
+                };
+            default: 
+                return {
+                    border: 'border-slate-500/50',
+                    bg: 'bg-slate-600/20',
+                    text: 'text-slate-400',
+                    bgLight: 'bg-slate-600/10',
+                    toggle: 'bg-slate-600'
+                };
         }
     };
 
-    const color = getCategoryColor(feature.category);
+    const categoryClasses = getCategoryClasses(feature.category);
 
     return (
         <div className={`
             bg-slate-900 border rounded-xl overflow-hidden transition-all duration-300
-            ${enabled ? `border-${color}-500/50` : 'border-slate-800'}
+            ${enabled ? categoryClasses.border : 'border-slate-800'}
         `}>
             {/* Main row */}
             <div className="p-4 flex items-center gap-4">
                 {/* Icon */}
                 <div className={`
                     w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0
-                    ${enabled ? `bg-${color}-600/20` : 'bg-slate-800'}
+                    ${enabled ? categoryClasses.bg : 'bg-slate-800'}
                 `}>
-                    <i className={`fas ${feature.icon} text-xl ${enabled ? `text-${color}-400` : 'text-slate-500'}`}></i>
+                    <i className={`fas ${feature.icon} text-xl ${enabled ? categoryClasses.text : 'text-slate-500'}`}></i>
                 </div>
                 
                 {/* Info */}
@@ -221,7 +277,7 @@ const FeatureToggleCard: React.FC<FeatureToggleCardProps> = ({
                                 Kern
                             </span>
                         )}
-                        <span className={`text-xs bg-${color}-600/10 text-${color}-400 px-2 py-0.5 rounded`}>
+                        <span className={`text-xs ${categoryClasses.bgLight} ${categoryClasses.text} px-2 py-0.5 rounded`}>
                             {CATEGORY_LABELS[feature.category]}
                         </span>
                     </div>
@@ -235,7 +291,7 @@ const FeatureToggleCard: React.FC<FeatureToggleCardProps> = ({
                     className={`
                         relative w-14 h-7 rounded-full transition-all duration-300 flex-shrink-0
                         ${feature.isCore ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                        ${enabled ? `bg-${color}-600` : 'bg-slate-700'}
+                        ${enabled ? categoryClasses.toggle : 'bg-slate-700'}
                     `}
                 >
                     <span className={`
