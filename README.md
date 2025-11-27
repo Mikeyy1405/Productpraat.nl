@@ -243,7 +243,81 @@ Dit project is geoptimaliseerd voor deployment op **Render.com** als een **Web S
 - **Build Command:** `npm install && npm run build`
 - **Start Command:** `npm start`
 
+## Automation Systeem
+
+ProductPraat beschikt over een volledig geautomatiseerd systeem dat 24/7 werkt aan het optimaliseren van affiliate commissies.
+
+### Geautomatiseerde Taken
+
+| Taak | Schema | Beschrijving |
+|------|--------|--------------|
+| Link Health Check | Dagelijks 02:00 | Controleert alle affiliate links op geldigheid |
+| Commission Sync | Dagelijks 03:00 | Haalt commissie data op van alle netwerken |
+| Content Generatie | Ma/Wo/Vr 09:00 | Genereert automatisch nieuwe content |
+| Publicatie Check | Elk uur | Publiceert geplande content |
+
+### Automation Services
+
+- **affiliateLinkMonitor.ts** - Monitort link gezondheid en vervangt broken links
+- **commissionTracker.ts** - Integreert met affiliate netwerk APIs
+- **contentScheduler.ts** - Plant en publiceert content automatisch
+- **automationLogger.ts** - Centrale logging voor alle taken
+- **alertSystem.ts** - Error handling en notificaties
+
+### Automation API Endpoints
+
+```bash
+# Get automation status
+GET /api/automation/status
+
+# Trigger a job manually
+POST /api/automation/trigger/:jobName
+# jobName: linkHealthCheck, commissionSync, contentGeneration, publicationCheck
+
+# Enable/disable automation
+POST /api/automation/enable
+Content-Type: application/json
+{ "enabled": true }
+
+# Get automation logs
+GET /api/automation/logs
+```
+
+### Configuratie
+
+Automation wordt geconfigureerd via environment variabelen:
+
+```bash
+AUTOMATION_ENABLED=true
+CRON_LINK_CHECK_TIME="0 2 * * *"
+CRON_COMMISSION_SYNC_TIME="0 3 * * *"
+CRON_CONTENT_GEN_TIME="0 9 * * 1,3,5"
+CRON_PUBLICATION_CHECK_TIME="0 * * * *"
+```
+
+### Database Migraties
+
+Run `supabase/migrations/20241127_automation_infrastructure.sql` in Supabase SQL Editor voor:
+- `link_health_checks` - Link gezondheid historie
+- `commission_records` - Commissie data
+- `performance_metrics` - Performance metrics
+- `content_schedule` - Geplande content
+- `automation_logs` - Job execution logs
+- `automation_alerts` - Notificaties
+- `retry_tasks` - Retry queue
+
 ## Changelog
+
+### v4.2.0 - Automation Infrastructure
+- ✅ **NIEUW**: node-cron voor scheduled tasks
+- ✅ **NIEUW**: Affiliate Link Health Monitor service
+- ✅ **NIEUW**: Commission Tracker met netwerk API integraties
+- ✅ **NIEUW**: Content Scheduler voor geautomatiseerde publicatie
+- ✅ **NIEUW**: Centralized Automation Logger
+- ✅ **NIEUW**: Alert System met retry logic
+- ✅ **NIEUW**: Database migraties voor automation tabellen
+- ✅ **NIEUW**: Automation API endpoints
+- ✅ **NIEUW**: Environment variabelen voor automation configuratie
 
 ### v4.1.0 - Affiliate Infrastructure
 - ✅ **NIEUW**: Affiliate netwerk integratie (Bol.com, TradeTracker, Daisycon, Awin)
