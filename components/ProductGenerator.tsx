@@ -19,20 +19,31 @@ type ProcessingStep = 'idle' | 'scraping' | 'analyzing' | 'complete';
 type ImportMode = 'single' | 'bulk';
 
 /**
- * Helper function to get store name from URL for display
+ * Helper function to safely check if a hostname matches a domain.
+ * Matches exact domain or subdomains (e.g., 'www.bol.com' matches 'bol.com').
+ * Does not match if the domain is embedded (e.g., 'evilbol.com' does not match 'bol.com').
+ */
+const isHostnameMatch = (hostname: string, domain: string): boolean => {
+  return hostname === domain || hostname.endsWith('.' + domain);
+};
+
+/**
+ * Helper function to get store name from URL for display.
+ * Uses secure hostname matching to prevent subdomain confusion attacks.
  */
 export const getStoreName = (url: string): string => {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    if (hostname.includes('bol.com')) return 'Bol.com';
-    if (hostname.includes('amazon.')) return 'Amazon';
-    if (hostname.includes('coolblue.')) return 'Coolblue';
-    if (hostname.includes('mediamarkt.')) return 'MediaMarkt';
-    if (hostname.includes('wehkamp.')) return 'Wehkamp';
-    if (hostname.includes('zalando.')) return 'Zalando';
-    if (hostname.includes('fonq.')) return 'Fonq';
-    if (hostname.includes('blokker.')) return 'Blokker';
-    if (hostname.includes('aliexpress.')) return 'AliExpress';
+    if (isHostnameMatch(hostname, 'bol.com')) return 'Bol.com';
+    if (isHostnameMatch(hostname, 'amazon.nl') || isHostnameMatch(hostname, 'amazon.de') || 
+        isHostnameMatch(hostname, 'amazon.com') || isHostnameMatch(hostname, 'amazon.co.uk')) return 'Amazon';
+    if (isHostnameMatch(hostname, 'coolblue.nl') || isHostnameMatch(hostname, 'coolblue.be')) return 'Coolblue';
+    if (isHostnameMatch(hostname, 'mediamarkt.nl') || isHostnameMatch(hostname, 'mediamarkt.de')) return 'MediaMarkt';
+    if (isHostnameMatch(hostname, 'wehkamp.nl')) return 'Wehkamp';
+    if (isHostnameMatch(hostname, 'zalando.nl') || isHostnameMatch(hostname, 'zalando.de')) return 'Zalando';
+    if (isHostnameMatch(hostname, 'fonq.nl')) return 'Fonq';
+    if (isHostnameMatch(hostname, 'blokker.nl')) return 'Blokker';
+    if (isHostnameMatch(hostname, 'aliexpress.com')) return 'AliExpress';
     // Return formatted domain name if not recognized
     return hostname.replace('www.', '').split('.')[0].charAt(0).toUpperCase() + 
            hostname.replace('www.', '').split('.')[0].slice(1);
@@ -41,8 +52,30 @@ export const getStoreName = (url: string): string => {
   }
 };
 
-// Rate limiting delay between bulk imports (in ms)
+/**
+ * Rate limiting delay between bulk imports (in ms).
+ * This helps respect API limits and prevents overwhelming servers.
+ */
 const BULK_IMPORT_DELAY_MS = 2000;
+
+/**
+ * Validates and extracts URLs from a multi-line text input.
+ * Returns only valid HTTP/HTTPS URLs.
+ */
+const parseUrlsFromText = (text: string): string[] => {
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => {
+      if (!line) return false;
+      try {
+        const url = new URL(line);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    });
+};
 
 export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCancel }) => {
   // Single URL mode state
@@ -169,10 +202,7 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
    * Processes URLs one by one with rate limiting
    */
   const handleBulkImport = async () => {
-    const urls = bulkUrls
-      .split('\n')
-      .map(u => u.trim())
-      .filter(u => u.length > 0 && (u.startsWith('http://') || u.startsWith('https://')));
+    const urls = parseUrlsFromText(bulkUrls);
     
     if (urls.length === 0) {
       setError('Voer minimaal één geldige URL in (beginnend met http:// of https://)');
@@ -536,7 +566,7 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
                     className="w-full h-48 bg-slate-950 border border-slate-700 rounded-xl p-4 text-white focus:border-purple-500 focus:outline-none transition placeholder-slate-600 font-mono text-sm disabled:opacity-50"
                   />
                   <div className="mt-2 text-xs text-slate-500">
-                    {bulkUrls.split('\n').filter(u => u.trim() && (u.startsWith('http://') || u.startsWith('https://'))).length} geldige URLs gevonden
+                    {parseUrlsFromText(bulkUrls).length} geldige URLs gevonden
                   </div>
                 </div>
                 
