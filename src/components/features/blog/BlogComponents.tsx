@@ -44,10 +44,25 @@ export const saveBlogPosts = (posts: BlogPost[]): void => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
 };
 
-// Calculate reading time
+/**
+ * Calculate estimated reading time from HTML content.
+ * Uses DOM parser for safe HTML stripping when available.
+ */
 const calculateReadingTime = (content: string): number => {
-    const text = content.replace(/<[^>]*>/g, ''); // Strip HTML
-    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+    let text = content;
+    
+    // Use DOM parser if available for safe HTML stripping
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const doc = new DOMParser().parseFromString(content, 'text/html');
+            text = doc.body.textContent || '';
+        } catch {
+            // Fallback: count words ignoring obvious tags
+            text = content;
+        }
+    }
+    
+    const wordCount = text.split(/\s+/).filter(w => w.length > 0 && !w.startsWith('<')).length;
     return Math.max(1, Math.ceil(wordCount / 200)); // 200 words per minute
 };
 

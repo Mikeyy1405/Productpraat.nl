@@ -54,7 +54,15 @@ const saveSession = (user: User | null): void => {
     }
 };
 
-// Hash password (simple hash for demo - use proper hashing in production!)
+/**
+ * Hash password for demo purposes only.
+ * 
+ * WARNING: This is NOT cryptographically secure!
+ * For production use, replace with:
+ * - bcrypt/bcryptjs for server-side hashing
+ * - WebCrypto API with PBKDF2 for client-side
+ * - Or use a secure authentication service (Auth0, Firebase Auth, etc.)
+ */
 const hashPassword = (password: string): string => {
     let hash = 0;
     for (let i = 0; i < password.length; i++) {

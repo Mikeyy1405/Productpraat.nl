@@ -52,10 +52,10 @@ export const SocialShare: React.FC<SocialShareProps> = ({
             color: 'bg-[#1877F2] hover:bg-[#166FE5]'
         },
         twitter: {
-            url: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`,
-            icon: 'fa-twitter',
-            label: 'Twitter',
-            color: 'bg-[#1DA1F2] hover:bg-[#1A91DA]'
+            url: `https://x.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`,
+            icon: 'fa-x-twitter',
+            label: 'X',
+            color: 'bg-black hover:bg-gray-900'
         },
         linkedin: {
             url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,

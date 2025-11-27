@@ -59,6 +59,17 @@ const saveTestimonials = (testimonials: Testimonial[]): void => {
     localStorage.setItem(TESTIMONIALS_STORAGE_KEY, JSON.stringify(testimonials));
 };
 
+/**
+ * Generate a URL-friendly slug from a title.
+ * Converts to lowercase, replaces spaces with hyphens, removes special characters.
+ */
+const generateSlug = (title: string): string => {
+    return title
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
+};
+
 type ContentTab = 'blog' | 'faq' | 'testimonials' | 'contact' | 'newsletter' | 'analytics';
 
 interface ContentManagementPanelProps {
@@ -247,7 +258,7 @@ const BlogPostEditor: React.FC<BlogPostEditorProps> = ({ post, onSave, onCancel 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const slug = formData.slug || formData.title?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || '';
+        const slug = formData.slug || generateSlug(formData.title || '');
         
         onSave({
             id: post?.id || '',

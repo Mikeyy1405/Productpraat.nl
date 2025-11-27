@@ -194,7 +194,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                                             <span className="text-xs text-slate-500">{result.category}</span>
                                         )}
                                     </div>
-                                    <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition mb-1 line-clamp-1">
+                                    <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition mb-1 truncate">
                                         {result.title}
                                     </h3>
                                     {result.description && (

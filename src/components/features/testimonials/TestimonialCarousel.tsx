@@ -36,6 +36,14 @@ export const saveTestimonials = (testimonials: Testimonial[]): void => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(testimonials));
 };
 
+// Helper function to format role and company display
+const formatRoleAndCompany = (role?: string, company?: string): string => {
+    if (role && company) {
+        return `${role} bij ${company}`;
+    }
+    return role || company || '';
+};
+
 interface TestimonialCardProps {
     testimonial: Testimonial;
     className?: string;
@@ -96,7 +104,7 @@ export const TestimonialCard: React.FC<TestimonialCardProps> = ({
                     <div className="font-bold text-white">{testimonial.name}</div>
                     {(testimonial.role || testimonial.company) && (
                         <div className="text-sm text-slate-500">
-                            {testimonial.role}{testimonial.role && testimonial.company && ' bij '}{testimonial.company}
+                            {formatRoleAndCompany(testimonial.role, testimonial.company)}
                         </div>
                     )}
                 </div>
