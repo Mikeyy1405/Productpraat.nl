@@ -21,3 +21,4 @@ export { TemplateSelector } from './TemplateSelector';
 export { FeatureTogglePanel } from './FeatureTogglePanel';
 export { SetupWizard } from './SetupWizard';
 export { CMSDashboard } from './CMSDashboard';
+export { ContentManagementPanel } from './ContentManagementPanel';

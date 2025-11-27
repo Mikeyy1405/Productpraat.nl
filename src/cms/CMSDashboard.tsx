@@ -13,12 +13,13 @@ import {
 import { useCMS, useTemplate } from './CMSContext';
 import { TemplateSelector } from './TemplateSelector';
 import { FeatureTogglePanel } from './FeatureTogglePanel';
+import { ContentManagementPanel } from './ContentManagementPanel';
 
 interface CMSDashboardProps {
     onClose?: () => void;
 }
 
-type DashboardTab = 'overview' | 'templates' | 'features' | 'settings';
+type DashboardTab = 'overview' | 'templates' | 'features' | 'content' | 'settings';
 
 export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
     const { siteConfig, saveSiteConfig, resetToDefaults, currentTemplate, updateSiteConfig, updateTemplateSettings } = useCMS();
@@ -50,6 +51,7 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
         { id: 'overview', label: 'Overzicht', icon: 'fa-th-large' },
         { id: 'templates', label: 'Templates', icon: 'fa-layer-group' },
         { id: 'features', label: 'Functies', icon: 'fa-puzzle-piece' },
+        { id: 'content', label: 'Content Beheer', icon: 'fa-edit' },
         { id: 'settings', label: 'Instellingen', icon: 'fa-cog' },
     ];
 
@@ -275,6 +277,10 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                     <FeatureTogglePanel showCategories={true} editableSettings={true} />
                 </div>
+            )}
+
+            {activeTab === 'content' && (
+                <ContentManagementPanel />
             )}
 
             {activeTab === 'settings' && (
