@@ -8,6 +8,7 @@ import { generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFi
 import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResult } from '../utils/validation';
 import { AnalyticsWidget } from './AnalyticsWidget';
 import { ProductGenerator } from './ProductGenerator';
+import { CMSDashboard } from '../src/cms';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -35,7 +36,7 @@ interface ImportError {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, articles, setArticles, onLogout }) => {
     // --- MAIN NAVIGATION ---
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles' | 'cms'>('dashboard');
     const [productSubTab, setProductSubTab] = useState<'import' | 'bulk' | 'autopilot' | 'list' | 'url-import'>('import');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -1194,7 +1195,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         {[
                             { id: 'dashboard', icon: 'fa-th-large', label: 'Dashboard', color: 'blue' },
                             { id: 'products', icon: 'fa-box-open', label: 'Producten', color: 'purple' },
-                            { id: 'articles', icon: 'fa-newspaper', label: 'Artikelen', color: 'green' }
+                            { id: 'articles', icon: 'fa-newspaper', label: 'Artikelen', color: 'green' },
+                            { id: 'cms', icon: 'fa-sliders-h', label: 'CMS', color: 'orange' }
                         ].map(item => (
                             <button
                                 key={item.id}
@@ -2917,6 +2919,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* === CMS TAB === */}
+                        {activeTab === 'cms' && (
+                            <div className="animate-fade-in">
+                                <CMSDashboard />
                             </div>
                         )}
                     </div>
