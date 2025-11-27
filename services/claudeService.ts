@@ -9,7 +9,7 @@
  * - OpenAI-compatible format for easy model switching
  * - Uses native fetch (no SDK dependencies)
  * 
- * API Reference: https://docs.aimlapi.com/api-references/text-models-llm/anthropic/claude-4-sonnet
+ * API Reference: https://docs.aimlapi.com/api-references/text-models-llm/anthropic/claude-sonnet-4-5
  */
 
 import { Product } from '../types';
