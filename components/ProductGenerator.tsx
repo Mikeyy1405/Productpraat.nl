@@ -82,6 +82,7 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
   const [url, setUrl] = useState('');
   const [rawText, setRawText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [generatedProduct, setGeneratedProduct] = useState<Product | null>(null);
   const [processingStep, setProcessingStep] = useState<ProcessingStep>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -189,11 +190,27 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
   const handleSaveProduct = async () => {
     if (!generatedProduct) return;
     
+    setIsSaving(true);
+    setError(null);
+    
     try {
       await onSave(generatedProduct);
+      
+      // Success! Reset UI and show success state
+      setGeneratedProduct(null);
+      setUrl('');
+      setRawText('');
+      setShowManualInput(false);
+      setError(null);
+      
+      // The parent component (AdminPanel) will show a toast notification
+      // via the onSave callback, so we just need to reset our local state
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Opslaan mislukt';
       setError(errorMessage);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -913,16 +930,26 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
             <div className="flex gap-3 pt-4 border-t border-slate-800">
               <button 
                 onClick={handleSaveProduct}
-                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 transition-all"
+                disabled={isSaving}
+                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center justify-center gap-2 transition-all"
               >
-                <i className="fas fa-check-circle"></i> Opslaan & Publiceren
+                {isSaving ? (
+                  <>
+                    <i className="fas fa-circle-notch fa-spin"></i> Opslaan...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-check-circle"></i> Opslaan & Publiceren
+                  </>
+                )}
               </button>
               <button 
                 onClick={() => {
                   setGeneratedProduct(null);
                   setError(null);
                 }}
-                className="px-6 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition"
+                disabled={isSaving}
+                className="px-6 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition"
               >
                 Annuleren
               </button>
