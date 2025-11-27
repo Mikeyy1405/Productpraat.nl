@@ -1,4 +1,22 @@
+/**
+ * @deprecated This service is deprecated.
+ * 
+ * The Bol.com API integration has been fully removed from ProductPraat.
+ * All products are now added via URL scraping + AI generation.
+ * 
+ * For affiliate link generation, use the new affiliateService.ts instead:
+ * - detectNetwork(url) - Detect affiliate network from URL
+ * - generateAffiliateLink(url) - Generate tracked affiliate links
+ * - trackClick(productId, url) - Track affiliate clicks
+ * 
+ * @see services/affiliateService.ts for the new affiliate infrastructure
+ * @see components/ProductGenerator.tsx for URL-based product import
+ */
+
 import { Product } from '../types';
+
+// Log deprecation warning
+console.warn('[DEPRECATED] bolService.ts is deprecated. Use URL-based import via ProductGenerator and affiliateService.ts for affiliate tracking.');
 
 interface BolData {
     title: string;
@@ -38,94 +56,41 @@ export interface BolSearchResult {
     message?: string;
 }
 
-export const fetchBolProduct = async (input: string): Promise<BolData> => {
-    try {
-        const response = await fetch('/api/bol/import', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ input })
-        });
+const deprecationError = new Error(
+    'Bol.com API is verwijderd. Gebruik URL-based import via ProductGenerator of affiliateService.ts voor affiliate tracking.'
+);
 
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Fout bij ophalen Bol.com data');
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error("Bol Service Error:", error);
-        throw error;
-    }
-};
-
-export const searchBolProducts = async (term: string, limit: number = 5): Promise<BolListItem[]> => {
-    try {
-        const response = await fetch('/api/bol/search-list', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ term, limit })
-        });
-        
-        if (!response.ok) return [];
-        const data = await response.json();
-        return data.products || [];
-    } catch (e) {
-        console.error("Search List Error", e);
-        return [];
-    }
+/**
+ * @deprecated Use URL-based import instead
+ */
+export const fetchBolProduct = async (_input: string): Promise<BolData> => {
+    console.error('[DEPRECATED] fetchBolProduct is deprecated. Use URL-based import via ProductGenerator.');
+    throw deprecationError;
 };
 
 /**
- * Search for Bol.com products with detailed information for manual selection
+ * @deprecated Use URL-based import instead
  */
-export const searchBolProductsDetailed = async (searchTerm: string, limit: number = 50): Promise<BolSearchResult> => {
-    try {
-        const response = await fetch('/api/bol/search-products', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ searchTerm, limit })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            return { 
-                products: [], 
-                error: data.error || 'Zoeken mislukt'
-            };
-        }
-        
-        return data;
-    } catch (e) {
-        console.error("Detailed Search Error", e);
-        return { 
-            products: [], 
-            error: e instanceof Error ? e.message : 'Zoeken mislukt'
-        };
-    }
+export const searchBolProducts = async (_term: string, _limit: number = 5): Promise<BolListItem[]> => {
+    console.error('[DEPRECATED] searchBolProducts is deprecated. Use URL-based import via ProductGenerator.');
+    return [];
 };
 
 /**
- * Import a product by EAN with AI enrichment
+ * @deprecated Use URL-based import instead
  */
-export const importProductByEan = async (ean: string): Promise<{ bolData: any; aiData: any; warnings?: string[] }> => {
-    try {
-        const response = await fetch('/api/bol/import-by-ean', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ean })
-        });
-        
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Import mislukt');
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error("Import by EAN Error:", error);
-        throw error;
-    }
+export const searchBolProductsDetailed = async (_searchTerm: string, _limit: number = 50): Promise<BolSearchResult> => {
+    console.error('[DEPRECATED] searchBolProductsDetailed is deprecated. Use URL-based import via ProductGenerator.');
+    return { 
+        products: [], 
+        error: 'Bol.com API is verwijderd. Gebruik URL-based import.'
+    };
+};
+
+/**
+ * @deprecated Use URL-based import instead
+ */
+export const importProductByEan = async (_ean: string): Promise<{ bolData: any; aiData: any; warnings?: string[] }> => {
+    console.error('[DEPRECATED] importProductByEan is deprecated. Use URL-based import via ProductGenerator.');
+    throw deprecationError;
 };

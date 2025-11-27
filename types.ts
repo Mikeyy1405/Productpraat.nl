@@ -1,3 +1,129 @@
+// ============================================================================
+// AFFILIATE INFRASTRUCTURE TYPES
+// ============================================================================
+
+/**
+ * Supported affiliate network identifiers
+ */
+export type AffiliateNetworkId = 'bol' | 'tradetracker' | 'daisycon' | 'awin' | 'paypro' | 'plugpay';
+
+/**
+ * Type of affiliate network (physical goods vs digital products)
+ */
+export type AffiliateNetworkType = 'physical' | 'digital';
+
+/**
+ * Affiliate network configuration and metadata
+ */
+export interface AffiliateNetwork {
+    /** Unique network identifier */
+    id: AffiliateNetworkId;
+    /** Display name of the network */
+    name: string;
+    /** Type: 'physical' for product marketplaces, 'digital' for digital products */
+    type: AffiliateNetworkType;
+    /** Network's website URL */
+    website?: string;
+    /** Commission range description (e.g., "5-10%") */
+    commissionRange?: string;
+    /** Cookie duration in days */
+    cookieDurationDays?: number;
+    /** Types of products available on this network */
+    productTypes?: string[];
+    /** Whether the network has an API available */
+    apiAvailable?: boolean;
+    /** Additional notes about the network */
+    notes?: string;
+    /** Timestamps */
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+/**
+ * Affiliate link for a product
+ * Links a product to an affiliate network with tracking information
+ */
+export interface AffiliateLink {
+    /** Unique identifier */
+    id: string;
+    /** Reference to the product this link belongs to */
+    productId: string;
+    /** Reference to the affiliate network */
+    networkId: AffiliateNetworkId;
+    /** Shop/merchant name */
+    shopName?: string;
+    /** Full affiliate URL with tracking parameters */
+    url: string;
+    /** Current price at this shop (if available) */
+    price?: number;
+    /** Whether the product is in stock */
+    inStock?: boolean;
+    /** When this link was last checked/verified */
+    lastChecked?: string;
+    /** Whether this is the primary/default affiliate link for the product */
+    isPrimary?: boolean;
+    /** Timestamps */
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+/**
+ * Digital product from PayPro or Plug&Pay
+ */
+export interface DigitalProduct {
+    /** Unique identifier */
+    id: string;
+    /** Reference to the affiliate network (paypro or plugpay) */
+    networkId: 'paypro' | 'plugpay';
+    /** Campaign ID from the network */
+    campaignId?: string;
+    /** URL-friendly slug */
+    slug: string;
+    /** Product name */
+    name: string;
+    /** Product description */
+    description?: string;
+    /** Price in EUR */
+    price?: number;
+    /** Commission percentage for affiliates */
+    commissionPercentage?: number;
+    /** Vendor/creator name */
+    vendorName?: string;
+    /** Product category */
+    category?: string;
+    /** Product image URL */
+    imageUrl?: string;
+    /** Full affiliate URL */
+    affiliateUrl?: string;
+    /** Timestamps */
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+/**
+ * Affiliate click tracking record
+ */
+export interface AffiliateClick {
+    /** Unique identifier */
+    id: string;
+    /** Reference to the affiliate link that was clicked */
+    linkId: string;
+    /** When the click occurred */
+    clickedAt: string;
+    /** Hashed IP address for fraud prevention (never store raw IPs) */
+    ipHash?: string;
+    /** User ID if authenticated */
+    userId?: string;
+    /** Whether this click resulted in a conversion */
+    converted?: boolean;
+    /** Commission amount if converted */
+    commissionAmount?: number;
+}
+
+// ============================================================================
+// PRODUCT TYPES
+// ============================================================================
+
 export interface Product {
     id: string;
     brand: string;
@@ -48,6 +174,12 @@ export interface Product {
     imageUrl?: string; // Primary product image URL
     galleryImages?: string[]; // Array of gallery image URLs
     affiliateLink?: string; // Affiliate/tracking link to shop
+    
+    // === AFFILIATE INFRASTRUCTURE FIELDS ===
+    /** Array of affiliate links for this product across different networks */
+    affiliateLinks?: AffiliateLink[];
+    /** The primary/default affiliate link for this product */
+    primaryAffiliateLink?: AffiliateLink;
     tags?: string[]; // Product tags/keywords
     features?: string[]; // Key product features
     reviewContent?: {
