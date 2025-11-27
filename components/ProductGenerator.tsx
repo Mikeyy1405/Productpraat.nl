@@ -201,7 +201,6 @@ export const ProductGenerator: React.FC<ProductGeneratorProps> = ({ onSave, onCa
       setUrl('');
       setRawText('');
       setShowManualInput(false);
-      setError(null);
       
       // The parent component (AdminPanel) will show a toast notification
       // via the onSave callback, so we just need to reset our local state
