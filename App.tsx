@@ -1018,9 +1018,14 @@ export const App: React.FC = () => {
                                         </div>
                                     )}
                                     <div dangerouslySetInnerHTML={{ __html: selectedProduct.longDescription || '' }} className="prose prose-invert mb-8" />
-                                    <button onClick={() => window.open(selectedProduct.affiliateUrl, '_blank')} className={`w-full py-4 rounded-xl font-bold text-lg mb-8 ${currentTheme.buttonClass}`}>
+                                    <a 
+                                        href={selectedProduct.affiliateLink || selectedProduct.affiliateUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className={`w-full py-4 rounded-xl font-bold text-lg mb-8 flex items-center justify-center ${currentTheme.buttonClass}`}
+                                    >
                                         <i className="fas fa-external-link-alt mr-2"></i>Bekijk aanbieding
-                                    </button>
+                                    </a>
                                     <UserReviewSection productId={selectedProduct.id} />
                                 </div>
                             </div>

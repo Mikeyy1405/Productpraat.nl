@@ -85,6 +85,46 @@ export interface UserReview {
     date: string;
 }
 
+/**
+ * Result of a bulk import operation.
+ * 
+ * Used by ProductGenerator component to display import results to the user.
+ * 
+ * A product is considered 'successful' when:
+ * - URL was successfully scraped
+ * - AI analysis generated a valid product
+ * - Product was saved to the database
+ * 
+ * A product is considered 'failed' when:
+ * - URL is invalid or unreachable
+ * - Scraping failed (CORS issues, blocked by site, etc.)
+ * - AI analysis failed or returned invalid data
+ * - Database save failed
+ */
+export interface BulkImportResult {
+    /** Products that were successfully scraped, analyzed, and saved */
+    successful: Product[];
+    /** URLs that failed with their error messages */
+    failed: Array<{ url: string; error: string }>;
+}
+
+/**
+ * Progress tracking for bulk import operations.
+ * Updated during each step of the import process.
+ */
+export interface BulkImportProgress {
+    /** Current product being processed (1-indexed) */
+    current: number;
+    /** Total number of products to import */
+    total: number;
+    /** Current processing status */
+    status: 'idle' | 'scraping' | 'analyzing' | 'saving' | 'complete' | 'error';
+    /** URL currently being processed */
+    currentUrl?: string;
+    /** Human-readable status message */
+    message?: string;
+}
+
 export type ArticleType = 'comparison' | 'list' | 'guide' | 'informational';
 
 export interface Article {
