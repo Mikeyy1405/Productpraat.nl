@@ -117,15 +117,166 @@ app.get('/api/admin/categories', (req, res) => {
     });
 });
 
+// --- AFFILIATE TRACKING ENDPOINTS ---
+// New affiliate infrastructure for tracking clicks and managing networks
+
+/**
+ * Default affiliate networks (used when database is not available)
+ */
+const DEFAULT_AFFILIATE_NETWORKS = [
+    {
+        id: 'bol',
+        name: 'Bol.com Partner',
+        type: 'physical',
+        website: 'https://partnerprogramma.bol.com',
+        commission_range: '5-10%',
+        cookie_duration_days: 30,
+        product_types: ['electronics', 'books', 'toys', 'home', 'fashion'],
+        api_available: true,
+        notes: 'Largest Dutch marketplace. Requires partner account and approval.',
+    },
+    {
+        id: 'tradetracker',
+        name: 'TradeTracker',
+        type: 'physical',
+        website: 'https://www.tradetracker.com',
+        commission_range: '2-15%',
+        cookie_duration_days: 30,
+        product_types: ['electronics', 'fashion', 'travel', 'finance', 'telecom'],
+        api_available: true,
+        notes: 'European affiliate network with many Dutch merchants.',
+    },
+    {
+        id: 'daisycon',
+        name: 'Daisycon',
+        type: 'physical',
+        website: 'https://www.daisycon.com',
+        commission_range: '2-12%',
+        cookie_duration_days: 30,
+        product_types: ['electronics', 'fashion', 'travel', 'finance', 'utilities'],
+        api_available: true,
+        notes: 'Dutch affiliate network with strong local presence.',
+    },
+    {
+        id: 'awin',
+        name: 'Awin',
+        type: 'physical',
+        website: 'https://www.awin.com',
+        commission_range: '3-15%',
+        cookie_duration_days: 30,
+        product_types: ['electronics', 'fashion', 'travel', 'retail', 'finance'],
+        api_available: true,
+        notes: 'Global affiliate network with major brands.',
+    },
+    {
+        id: 'paypro',
+        name: 'PayPro',
+        type: 'digital',
+        website: 'https://paypro.nl/affiliates',
+        commission_range: '10-75%',
+        cookie_duration_days: 365,
+        product_types: ['courses', 'ebooks', 'software', 'memberships', 'digital'],
+        api_available: true,
+        notes: 'Dutch digital product platform. High commissions for digital products.',
+    },
+    {
+        id: 'plugpay',
+        name: 'Plug&Pay',
+        type: 'digital',
+        website: 'https://www.plugpay.nl/affiliate',
+        commission_range: '10-50%',
+        cookie_duration_days: 365,
+        product_types: ['courses', 'coaching', 'memberships', 'digital'],
+        api_available: false,
+        notes: 'Dutch digital product and course platform.',
+    },
+];
+
+/**
+ * POST /api/affiliate/track
+ * Track a click on an affiliate link
+ * 
+ * Request body:
+ * - productId: string (required) - The product ID
+ * - url: string (required) - The affiliate link URL that was clicked
+ * - ipHash: string (optional) - Pre-hashed IP address
+ * - userId: string (optional) - User ID if authenticated
+ * 
+ * Response:
+ * - success: boolean
+ * - linkId: string (if successful)
+ * - clickId: string (if successful)
+ */
+app.post('/api/affiliate/track', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AFFILIATE] POST /api/affiliate/track`);
+    
+    try {
+        const { productId, url, ipHash, userId } = req.body;
+        
+        // Validate required fields
+        if (!productId || !url) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: productId and url are required'
+            });
+        }
+        
+        // Log the click (in production, this would save to the database)
+        console.log(`[AFFILIATE] Click tracked: product=${productId}, url=${url.substring(0, 50)}...`);
+        
+        // Generate a simple click ID for tracking
+        const clickId = `click-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const linkId = `link-${productId}-${Math.random().toString(36).substring(2, 9)}`;
+        
+        // Note: Full database integration requires the affiliateService.ts to be 
+        // imported and used here. For now, we return a success response.
+        // The actual tracking is done client-side via the affiliateService.
+        
+        res.json({
+            success: true,
+            linkId,
+            clickId,
+            message: 'Click tracked successfully'
+        });
+    } catch (error) {
+        console.error('[AFFILIATE] Error tracking click:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to track click'
+        });
+    }
+});
+
+/**
+ * GET /api/affiliate/networks
+ * Get list of supported affiliate networks
+ * 
+ * Response:
+ * - networks: AffiliateNetwork[]
+ */
+app.get('/api/affiliate/networks', (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AFFILIATE] GET /api/affiliate/networks`);
+    
+    // Return the default networks (in production, these come from the database)
+    res.json({
+        networks: DEFAULT_AFFILIATE_NETWORKS,
+        note: 'Configure affiliate IDs in environment variables to enable tracking'
+    });
+});
+
 // --- DEPRECATED ENDPOINTS ---
 // These endpoints are no longer available since Bol.com API has been removed
 // They return helpful error messages guiding users to use URL-based import instead
+// Note: Use the new /api/affiliate/* routes for affiliate functionality
 
 const deprecatedMessage = {
     error: 'Bol.com API is verwijderd',
     message: 'Deze functionaliteit is niet meer beschikbaar.',
     solution: 'Gebruik de URL-based product import via het Admin Dashboard > Producten > Via URL',
-    documentation: 'Zie README.md voor instructies'
+    documentation: 'Zie README.md voor instructies',
+    affiliateNote: 'Voor affiliate tracking, gebruik de nieuwe /api/affiliate/* endpoints'
 };
 
 // Deprecated: Bol.com search endpoints

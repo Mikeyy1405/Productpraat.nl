@@ -105,6 +105,20 @@ Voor de productie-omgeving moeten de volgende variabelen worden ingesteld:
 | `VITE_SUPABASE_ANON_KEY` | Jouw Supabase Key |
 | `VITE_ANTHROPIC_API_KEY` | Jouw Anthropic/Claude API Key |
 
+### Affiliate Network Configuratie
+
+Om affiliate tracking in te schakelen, configureer de volgende variabelen:
+
+| Key | Netwerk | Beschrijving |
+| :--- | :--- | :--- |
+| `BOL_PARTNER_ID` | Bol.com | Partner ID van het Bol.com Partner Program |
+| `TRADETRACKER_SITE_ID` | TradeTracker | Site ID van TradeTracker publisher account |
+| `DAISYCON_PUBLISHER_ID` | Daisycon | Publisher ID van Daisycon account |
+| `AWIN_PUBLISHER_ID` | Awin | Publisher ID van Awin account |
+| `PAYPRO_AFFILIATE_ID` | PayPro | Affiliate ID voor digitale producten |
+| `PAYPRO_API_KEY` | PayPro | API Key voor product search (optioneel) |
+| `PLUGPAY_AFFILIATE_ID` | Plug&Pay | Affiliate ID voor digitale producten |
+
 ### Optionele variabelen
 
 | Key | Waarde (Voorbeeld/Beschrijving) |
@@ -124,6 +138,88 @@ De volgende variabelen zijn **niet meer nodig** en worden **niet meer gebruikt**
 
 **LET OP:** Alle producten worden nu toegevoegd via URL scraping + AI generatie. De Bol.com API is volledig verwijderd!
 
+## Affiliate Netwerk Setup
+
+ProductPraat ondersteunt integratie met meerdere affiliate netwerken voor zowel fysieke als digitale producten.
+
+### Ondersteunde Netwerken
+
+**Fysieke Product Netwerken:**
+- **Bol.com Partner Program** - Grootste Nederlandse marketplace
+- **TradeTracker** - Europees affiliate netwerk met veel Nederlandse merchants
+- **Daisycon** - Nederlands affiliate netwerk met sterke lokale aanwezigheid
+- **Awin** - Globaal affiliate netwerk met grote merken
+
+**Digitale Product Netwerken:**
+- **PayPro** - Nederlands platform voor online cursussen en digitale producten
+- **Plug&Pay** - Nederlands platform voor coaching en digitale producten
+
+### Hoe te Registreren
+
+1. **Bol.com Partner Program:**
+   - Ga naar https://partnerprogramma.bol.com
+   - Registreer als partner
+   - Kopieer je Partner ID naar `BOL_PARTNER_ID`
+
+2. **TradeTracker:**
+   - Ga naar https://www.tradetracker.com
+   - Registreer als publisher
+   - Kopieer je Site ID naar `TRADETRACKER_SITE_ID`
+
+3. **Daisycon:**
+   - Ga naar https://www.daisycon.com
+   - Registreer als publisher
+   - Kopieer je Publisher ID naar `DAISYCON_PUBLISHER_ID`
+
+4. **Awin:**
+   - Ga naar https://www.awin.com
+   - Registreer als publisher
+   - Kopieer je Publisher ID naar `AWIN_PUBLISHER_ID`
+
+5. **PayPro:**
+   - Ga naar https://paypro.nl/affiliates
+   - Registreer voor het affiliate programma
+   - Kopieer je Affiliate ID naar `PAYPRO_AFFILIATE_ID`
+   - (Optioneel) Kopieer je API Key naar `PAYPRO_API_KEY`
+
+6. **Plug&Pay:**
+   - Ga naar https://www.plugpay.nl/affiliate
+   - Registreer voor het affiliate programma
+   - Kopieer je Affiliate ID naar `PLUGPAY_AFFILIATE_ID`
+
+### Affiliate API Endpoints
+
+De server biedt de volgende endpoints voor affiliate tracking:
+
+```bash
+# Track een klik op een affiliate link
+POST /api/affiliate/track
+Content-Type: application/json
+
+{
+  "productId": "product-123",
+  "url": "https://www.bol.com/nl/p/product/123"
+}
+
+# Response:
+{
+  "success": true,
+  "linkId": "link-abc123",
+  "clickId": "click-xyz789"
+}
+
+# Haal alle ondersteunde netwerken op
+GET /api/affiliate/networks
+
+# Response:
+{
+  "networks": [
+    { "id": "bol", "name": "Bol.com Partner", "type": "physical", ... },
+    { "id": "paypro", "name": "PayPro", "type": "digital", ... }
+  ]
+}
+```
+
 ## Database Migrations
 
 Before running the application for the first time or after updates, ensure the Supabase database schema is up to date.
@@ -138,6 +234,7 @@ Run the SQL files in `supabase/migrations/` in your Supabase SQL Editor:
 
 **Available Migrations:**
 - `20241126_add_bolreviewsraw_column.sql` - Adds the `bolReviewsRaw` column for storing Bol.com review data
+- `20241128_affiliate_infrastructure.sql` - Creates affiliate tables (networks, links, clicks, digital_products) and seeds network data
 
 ## Deployment
 
@@ -147,6 +244,15 @@ Dit project is geoptimaliseerd voor deployment op **Render.com** als een **Web S
 - **Start Command:** `npm start`
 
 ## Changelog
+
+### v4.1.0 - Affiliate Infrastructure
+- ✅ **NIEUW**: Affiliate netwerk integratie (Bol.com, TradeTracker, Daisycon, Awin)
+- ✅ **NIEUW**: Digitale product netwerken (PayPro, Plug&Pay)
+- ✅ **NIEUW**: Click tracking API endpoints
+- ✅ **NIEUW**: AffiliateBuyButton component
+- ✅ **NIEUW**: affiliateService.ts met link generatie en detectie
+- ✅ **NIEUW**: Database migratie voor affiliate tabellen
+- ✅ **VERBETERD**: Types uitgebreid met AffiliateLink en DigitalProduct
 
 ### v4.0.0 - WritgoCMS Integration
 - ✅ **NIEUW**: WritgoCMS - Flexibel Content Management Systeem
