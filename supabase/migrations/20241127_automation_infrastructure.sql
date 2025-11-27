@@ -1,6 +1,19 @@
 -- ============================================================================
 -- Automation Infrastructure Migration
 -- Run this in your Supabase SQL Editor to create automation-related tables
+-- 
+-- PREREQUISITES:
+-- This migration requires the following tables to exist:
+-- 1. products - Created by the initial Supabase setup
+-- 2. articles - Created by the initial Supabase setup
+-- 3. affiliate_links - Created by 20241128_affiliate_infrastructure.sql
+-- 4. affiliate_networks - Created by 20241128_affiliate_infrastructure.sql
+-- 5. affiliate_clicks - Created by 20241128_affiliate_infrastructure.sql
+--
+-- Run migrations in order:
+-- 1. 20241126_add_bolreviewsraw_column.sql (if not already run)
+-- 2. 20241128_affiliate_infrastructure.sql
+-- 3. 20241127_automation_infrastructure.sql (this file)
 -- ============================================================================
 
 -- 1. Link Health Checks Table

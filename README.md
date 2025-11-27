@@ -264,6 +264,8 @@ ProductPraat beschikt over een volledig geautomatiseerd systeem dat 24/7 werkt a
 - **automationLogger.ts** - Centrale logging voor alle taken
 - **alertSystem.ts** - Error handling en notificaties
 
+> **Note**: De affiliate netwerk API integraties (Bol.com, TradeTracker, Daisycon, Awin) zijn voorbereid maar vereisen specifieke API credentials en implementatie van de netwerk-specifieke endpoints. De stub implementaties loggen momenteel alleen naar de console.
+
 ### Automation API Endpoints
 
 ```bash

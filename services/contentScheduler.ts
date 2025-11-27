@@ -304,19 +304,30 @@ export const selectTrendingCategory = async (): Promise<string> => {
         const categories = Object.keys(CATEGORIES);
 
         for (const category of categories) {
-            // Get recent clicks for this category
-            const { data: clicks } = await supabase
-                .from('affiliate_clicks')
-                .select(`
-                    id,
-                    affiliate_links!inner (
-                        products!inner (
-                            category
-                        )
-                    )
-                `)
-                .eq('affiliate_links.products.category', category)
-                .gte('clicked_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+            // Get products for this category and count their affiliate link clicks
+            const { data: products } = await supabase
+                .from('products')
+                .select('id')
+                .eq('category', category);
+
+            let recentClicks = 0;
+            if (products && products.length > 0) {
+                const productIds = products.map(p => p.id);
+                const { data: links } = await supabase
+                    .from('affiliate_links')
+                    .select('id')
+                    .in('product_id', productIds);
+
+                if (links && links.length > 0) {
+                    const linkIds = links.map(l => l.id);
+                    const { count } = await supabase
+                        .from('affiliate_clicks')
+                        .select('*', { count: 'exact', head: true })
+                        .in('link_id', linkIds)
+                        .gte('clicked_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+                    recentClicks = count || 0;
+                }
+            }
 
             // Get existing content count
             const { count: articleCount } = await supabase
@@ -334,8 +345,8 @@ export const selectTrendingCategory = async (): Promise<string> => {
 
             trendingCategories.push({
                 category,
-                score: (clicks?.length || 0) + Math.max(0, contentGap) * 10,
-                recentClicks: clicks?.length || 0,
+                score: recentClicks + Math.max(0, contentGap) * 10,
+                recentClicks,
                 searchVolume: 0, // Would need external API
                 contentGap
             });
