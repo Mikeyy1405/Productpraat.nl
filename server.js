@@ -41,7 +41,7 @@ if (!isBolConfigured) {
 // AI API Configuration (Server-side only)
 const AIML_API_KEY = process.env.VITE_API_KEY;
 const AIML_BASE_URL = 'https://api.aimlapi.com/v1';
-const AI_MODEL = 'google/gemini-3-pro-preview';
+const AI_MODEL = 'anthropic/claude-sonnet-4.5';
 
 // Initialize OpenAI-compatible client for AIML API
 let openai = null;
