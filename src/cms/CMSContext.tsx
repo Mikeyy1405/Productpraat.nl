@@ -433,14 +433,24 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         
         // Sync to Supabase if authenticated
         if (isAuthenticated) {
-            // Check if site exists in Supabase
-            const existingResult = await siteService.getMySite();
-            if (existingResult.success && existingResult.data) {
-                // Update existing site
-                await siteService.updateSiteConfig(fullConfig);
-            } else {
-                // Create new site
-                await siteService.createSite(fullConfig);
+            try {
+                // Check if site exists in Supabase
+                const existingResult = await siteService.getMySite();
+                if (existingResult.success && existingResult.data) {
+                    // Update existing site
+                    const updateResult = await siteService.updateSiteConfig(fullConfig);
+                    if (!updateResult.success) {
+                        console.warn('[CMS] Failed to update site in Supabase:', updateResult.error);
+                    }
+                } else {
+                    // Create new site
+                    const createResult = await siteService.createSite(fullConfig);
+                    if (!createResult.success) {
+                        console.warn('[CMS] Failed to create site in Supabase:', createResult.error);
+                    }
+                }
+            } catch (e) {
+                console.error('[CMS] Error syncing setup to Supabase:', e);
             }
         }
     }, [siteConfig, isAuthenticated]);
@@ -470,14 +480,24 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         
         // Sync to Supabase if authenticated
         if (isAuthenticated) {
-            // Check if site exists in Supabase
-            const existingResult = await siteService.getMySite();
-            if (existingResult.success && existingResult.data) {
-                // Update existing site
-                await siteService.updateSiteConfig(fullConfig);
-            } else {
-                // Create new site
-                await siteService.createSite(fullConfig);
+            try {
+                // Check if site exists in Supabase
+                const existingResult = await siteService.getMySite();
+                if (existingResult.success && existingResult.data) {
+                    // Update existing site
+                    const updateResult = await siteService.updateSiteConfig(fullConfig);
+                    if (!updateResult.success) {
+                        console.warn('[CMS] Failed to update site in Supabase during migration:', updateResult.error);
+                    }
+                } else {
+                    // Create new site
+                    const createResult = await siteService.createSite(fullConfig);
+                    if (!createResult.success) {
+                        console.warn('[CMS] Failed to create site in Supabase during migration:', createResult.error);
+                    }
+                }
+            } catch (e) {
+                console.error('[CMS] Error syncing migration to Supabase:', e);
             }
         }
     }, [siteConfig, isAuthenticated]);

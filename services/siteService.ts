@@ -150,6 +150,7 @@ export const siteService = {
             }
 
             const row = siteConfigToRow(config, user.id);
+            // JSON serialization ensures clean data for Supabase (removes undefined, converts to plain object)
             const cleanRow = JSON.parse(JSON.stringify(row));
 
             const { data, error } = await supabase
@@ -188,6 +189,7 @@ export const siteService = {
             }
 
             const row = siteConfigToRow(config, user.id);
+            // JSON serialization ensures clean data for Supabase (removes undefined, converts to plain object)
             const cleanRow = JSON.parse(JSON.stringify(row));
 
             const { data, error } = await supabase
