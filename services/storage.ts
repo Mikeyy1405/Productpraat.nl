@@ -103,9 +103,8 @@ export const db = {
         const supabase = getSupabase();
         
         if (!supabase) {
-            const error = "❌ Database niet beschikbaar - Supabase client is null. Check je VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY environment variables.";
-            console.error(error);
-            throw new Error(error);
+            console.error("❌ Database niet beschikbaar - Supabase client is null. Check je VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY environment variables.");
+            throw new Error("Database niet beschikbaar. Controleer de database configuratie en internet verbinding.");
         }
         
         console.log('✅ Supabase client is beschikbaar');
@@ -125,7 +124,7 @@ export const db = {
             const { data, error } = await supabase
                 .from('products')
                 .insert([cleanProduct])
-                .select();
+                .select('id');
             
             if (error) {
                 console.error('❌ Supabase insert error:', {
@@ -134,7 +133,8 @@ export const db = {
                     hint: error.hint,
                     code: error.code
                 });
-                throw new Error(`Database fout: ${error.message} ${error.details || ''} ${error.hint || ''}`);
+                const errorParts = [error.message, error.details, error.hint].filter(Boolean);
+                throw new Error(`Database fout: ${errorParts.join(' - ')}`);
             }
             
             console.log('✅ Product succesvol opgeslagen in database:', data);
