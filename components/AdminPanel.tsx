@@ -9,6 +9,22 @@ import { validateProduct, validateArticle, checkDuplicateProduct, ValidationResu
 import { AnalyticsWidget } from './AnalyticsWidget';
 import { ProductGenerator } from './ProductGenerator';
 import { CMSDashboard } from '../src/cms';
+import { 
+    loadAffiliateConfig, 
+    saveAffiliateConfig, 
+    updateNetworkConfig,
+    getNetworkStats,
+    getTotalStats,
+    getTopProducts as getAffiliateTopProducts,
+    getDailyStats,
+    getRecentClicks,
+    getRecentConversions,
+    clearTrackingData,
+    exportAllData,
+    AffiliateNetworkConfig,
+    AffiliateConfig,
+    AffiliateNetworkId
+} from '../utils/affiliateUtils';
 
 interface AdminPanelProps {
     onAddProduct: (product: Product) => Promise<void>;
@@ -36,13 +52,17 @@ interface ImportError {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeleteProduct, customProducts, articles, setArticles, onLogout }) => {
     // --- MAIN NAVIGATION ---
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles' | 'cms'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'articles' | 'cms' | 'affiliate'>('dashboard');
     const [productSubTab, setProductSubTab] = useState<'import' | 'bulk' | 'autopilot' | 'list' | 'url-import'>('import');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     
     // --- STATE: URL-BASED PRODUCT GENERATOR ---
     const [showProductGenerator, setShowProductGenerator] = useState(false);
+    
+    // --- STATE: AFFILIATE MANAGEMENT ---
+    const [affiliateConfig, setAffiliateConfig] = useState<AffiliateConfig>(() => loadAffiliateConfig());
+    const [affiliateSubTab, setAffiliateSubTab] = useState<'networks' | 'stats' | 'analytics'>('networks');
 
     // --- LOGGING & PROCESSING ---
     const [pilotLogs, setPilotLogs] = useState<string[]>([]);
@@ -1196,6 +1216,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                             { id: 'dashboard', icon: 'fa-th-large', label: 'Dashboard', color: 'blue' },
                             { id: 'products', icon: 'fa-box-open', label: 'Producten', color: 'purple' },
                             { id: 'articles', icon: 'fa-newspaper', label: 'Artikelen', color: 'green' },
+                            { id: 'affiliate', icon: 'fa-link', label: 'Affiliate', color: 'yellow' },
                             { id: 'cms', icon: 'fa-sliders-h', label: 'CMS', color: 'orange' }
                         ].map(item => (
                             <button
@@ -2926,6 +2947,460 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                         {activeTab === 'cms' && (
                             <div className="animate-fade-in">
                                 <CMSDashboard />
+                            </div>
+                        )}
+
+                        {/* === AFFILIATE TAB === */}
+                        {activeTab === 'affiliate' && (
+                            <div className="animate-fade-in">
+                                {/* Affiliate Sub-Navigation */}
+                                <div className="flex flex-wrap gap-2 mb-6 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                                    {[
+                                        { id: 'networks', icon: 'fa-network-wired', label: 'Netwerken', color: 'yellow' },
+                                        { id: 'stats', icon: 'fa-chart-bar', label: 'Statistieken', color: 'blue' },
+                                        { id: 'analytics', icon: 'fa-chart-line', label: 'Analytics', color: 'green' }
+                                    ].map(sub => (
+                                        <button
+                                            key={sub.id}
+                                            onClick={() => setAffiliateSubTab(sub.id as any)}
+                                            className={`
+                                                flex-1 min-w-[120px] flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium text-sm transition-all
+                                                ${affiliateSubTab === sub.id 
+                                                    ? `bg-${sub.color}-600 text-white shadow-lg` 
+                                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                                }
+                                            `}
+                                        >
+                                            <i className={`fas ${sub.icon}`}></i>
+                                            <span className="hidden sm:inline">{sub.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Networks Configuration */}
+                                {affiliateSubTab === 'networks' && (
+                                    <div className="space-y-6">
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                            <div className="bg-gradient-to-r from-yellow-900/30 to-slate-900 p-4 border-b border-slate-800">
+                                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                                    <i className="fas fa-network-wired text-yellow-400"></i> Affiliate Netwerk Configuratie
+                                                </h2>
+                                                <p className="text-sm text-slate-400 mt-1">Configureer hier je affiliate ID's voor elk netwerk</p>
+                                            </div>
+                                            
+                                            <div className="p-6 space-y-4">
+                                                {affiliateConfig.networks.map((network) => (
+                                                    <div 
+                                                        key={network.networkId}
+                                                        className={`bg-slate-950 border rounded-xl p-4 ${network.enabled ? 'border-green-500/30' : 'border-slate-700'}`}
+                                                    >
+                                                        <div className="flex items-start gap-4">
+                                                            {/* Network Icon */}
+                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                                                network.enabled ? 'bg-green-600/20' : 'bg-slate-800'
+                                                            }`}>
+                                                                <i className={`fas ${
+                                                                    network.networkId === 'bol' ? 'fa-shopping-bag' :
+                                                                    network.networkId === 'tradetracker' ? 'fa-exchange-alt' :
+                                                                    network.networkId === 'daisycon' ? 'fa-flower' :
+                                                                    network.networkId === 'awin' ? 'fa-globe' :
+                                                                    network.networkId === 'paypro' ? 'fa-credit-card' :
+                                                                    'fa-plug'
+                                                                } text-xl ${network.enabled ? 'text-green-400' : 'text-slate-500'}`}></i>
+                                                            </div>
+                                                            
+                                                            {/* Network Info */}
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <h3 className="font-bold text-white">{network.name}</h3>
+                                                                    {network.enabled && network.affiliateId && (
+                                                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-600/20 text-green-400">
+                                                                            Actief
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-slate-500 mb-3">{network.notes}</p>
+                                                                
+                                                                {/* Affiliate ID Input */}
+                                                                <div className="flex gap-3">
+                                                                    <div className="flex-1">
+                                                                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                                                                            Affiliate / Partner ID
+                                                                        </label>
+                                                                        <input
+                                                                            type="text"
+                                                                            value={network.affiliateId}
+                                                                            onChange={(e) => {
+                                                                                const updated = updateNetworkConfig(network.networkId, { 
+                                                                                    affiliateId: e.target.value 
+                                                                                });
+                                                                                setAffiliateConfig(updated);
+                                                                            }}
+                                                                            placeholder={`Vul je ${network.name} ID in...`}
+                                                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-yellow-500 transition"
+                                                                        />
+                                                                    </div>
+                                                                    
+                                                                    {/* Enable Toggle */}
+                                                                    <div className="flex flex-col items-center">
+                                                                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                                                                            Actief
+                                                                        </label>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                const updated = updateNetworkConfig(network.networkId, { 
+                                                                                    enabled: !network.enabled 
+                                                                                });
+                                                                                setAffiliateConfig(updated);
+                                                                            }}
+                                                                            disabled={!network.affiliateId}
+                                                                            className={`w-12 h-8 rounded-full transition-all ${
+                                                                                network.enabled && network.affiliateId
+                                                                                    ? 'bg-green-600' 
+                                                                                    : 'bg-slate-700'
+                                                                            } ${!network.affiliateId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                        >
+                                                                            <div className={`w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                                                                                network.enabled && network.affiliateId ? 'translate-x-5' : 'translate-x-1'
+                                                                            }`}></div>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Info Box */}
+                                        <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+                                            <div className="flex items-start gap-3">
+                                                <i className="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                                                <div>
+                                                    <h4 className="font-medium text-blue-300 mb-1">Hoe werkt dit?</h4>
+                                                    <p className="text-sm text-blue-200/70">
+                                                        Vul je affiliate ID's in voor elk netwerk. Wanneer een netwerk actief is, worden product links 
+                                                        automatisch voorzien van je affiliate tracking code. Klik op de toggle om een netwerk te activeren of deactiveren.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Statistics */}
+                                {affiliateSubTab === 'stats' && (
+                                    <div className="space-y-6">
+                                        {/* Overview Stats */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="bg-gradient-to-br from-blue-600/20 to-blue-900/20 p-6 rounded-2xl border border-blue-500/30">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-xl bg-blue-600/30 flex items-center justify-center">
+                                                        <i className="fas fa-mouse-pointer text-blue-400 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-3xl font-black text-white">{getTotalStats().clicks}</div>
+                                                        <div className="text-sm text-blue-400">Totaal Clicks</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="bg-gradient-to-br from-green-600/20 to-green-900/20 p-6 rounded-2xl border border-green-500/30">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-xl bg-green-600/30 flex items-center justify-center">
+                                                        <i className="fas fa-check-circle text-green-400 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-3xl font-black text-white">{getTotalStats().conversions}</div>
+                                                        <div className="text-sm text-green-400">Conversies</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="bg-gradient-to-br from-yellow-600/20 to-yellow-900/20 p-6 rounded-2xl border border-yellow-500/30">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-xl bg-yellow-600/30 flex items-center justify-center">
+                                                        <i className="fas fa-euro-sign text-yellow-400 text-xl"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-3xl font-black text-white">€{getTotalStats().earnings.toFixed(2)}</div>
+                                                        <div className="text-sm text-yellow-400">Verdiensten</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Per Network Stats */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                            <div className="bg-slate-950 p-4 border-b border-slate-800">
+                                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                                    <i className="fas fa-chart-pie text-blue-400"></i> Statistieken per Netwerk
+                                                </h2>
+                                            </div>
+                                            <div className="p-4">
+                                                <div className="space-y-3">
+                                                    {(() => {
+                                                        const networkStats = getNetworkStats();
+                                                        return affiliateConfig.networks
+                                                            .filter(n => n.enabled)
+                                                            .map(network => {
+                                                                const stats = networkStats[network.networkId] || { clicks: 0, conversions: 0, earnings: 0 };
+                                                                return (
+                                                                    <div key={network.networkId} className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
+                                                                                    <i className={`fas ${
+                                                                                        network.networkId === 'bol' ? 'fa-shopping-bag' :
+                                                                                        network.networkId === 'tradetracker' ? 'fa-exchange-alt' :
+                                                                                        network.networkId === 'daisycon' ? 'fa-flower' :
+                                                                                        network.networkId === 'awin' ? 'fa-globe' :
+                                                                                        network.networkId === 'paypro' ? 'fa-credit-card' :
+                                                                                        'fa-plug'
+                                                                                    } text-slate-400`}></i>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="font-medium text-white">{network.name}</div>
+                                                                                    <div className="text-xs text-slate-500">ID: {network.affiliateId}</div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-6 text-sm">
+                                                                                <div className="text-center">
+                                                                                    <div className="font-bold text-blue-400">{stats.clicks}</div>
+                                                                                    <div className="text-xs text-slate-500">Clicks</div>
+                                                                                </div>
+                                                                                <div className="text-center">
+                                                                                    <div className="font-bold text-green-400">{stats.conversions}</div>
+                                                                                    <div className="text-xs text-slate-500">Conversies</div>
+                                                                                </div>
+                                                                                <div className="text-center">
+                                                                                    <div className="font-bold text-yellow-400">€{stats.earnings.toFixed(2)}</div>
+                                                                                    <div className="text-xs text-slate-500">Verdiensten</div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            });
+                                                    })()}
+                                                    
+                                                    {affiliateConfig.networks.filter(n => n.enabled).length === 0 && (
+                                                        <div className="text-center py-8 text-slate-500">
+                                                            <i className="fas fa-info-circle text-2xl mb-2"></i>
+                                                            <p>Geen actieve netwerken. Configureer eerst je affiliate ID's.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Top Products */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                            <div className="bg-slate-950 p-4 border-b border-slate-800">
+                                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                                    <i className="fas fa-fire text-orange-400"></i> Top Producten
+                                                </h2>
+                                            </div>
+                                            <div className="p-4">
+                                                {(() => {
+                                                    const topProducts = getAffiliateTopProducts(5);
+                                                    if (topProducts.length === 0) {
+                                                        return (
+                                                            <div className="text-center py-8 text-slate-500">
+                                                                <i className="fas fa-chart-bar text-2xl mb-2"></i>
+                                                                <p>Nog geen click data beschikbaar.</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div className="space-y-2">
+                                                            {topProducts.map((product, index) => (
+                                                                <div key={product.productId} className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-lg p-3">
+                                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
+                                                                        index === 0 ? 'bg-yellow-600/30 text-yellow-400' :
+                                                                        index === 1 ? 'bg-slate-600/30 text-slate-300' :
+                                                                        index === 2 ? 'bg-orange-600/30 text-orange-400' :
+                                                                        'bg-slate-800 text-slate-500'
+                                                                    }`}>
+                                                                        {index + 1}
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <div className="font-medium text-white text-sm truncate">
+                                                                            {product.productName || product.productId}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-sm font-bold text-blue-400">{product.clicks} clicks</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Analytics */}
+                                {affiliateSubTab === 'analytics' && (
+                                    <div className="space-y-6">
+                                        {/* Daily Chart */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                            <div className="bg-slate-950 p-4 border-b border-slate-800">
+                                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                                    <i className="fas fa-chart-line text-green-400"></i> Clicks & Conversies (30 dagen)
+                                                </h2>
+                                            </div>
+                                            <div className="p-4">
+                                                {(() => {
+                                                    const dailyStats = getDailyStats(30);
+                                                    const maxClicks = Math.max(...dailyStats.map(d => d.clicks), 1);
+                                                    
+                                                    return (
+                                                        <div className="h-48 flex items-end gap-1">
+                                                            {dailyStats.map((day, index) => (
+                                                                <div 
+                                                                    key={day.date} 
+                                                                    className="flex-1 flex flex-col items-center gap-1"
+                                                                    title={`${day.date}: ${day.clicks} clicks, ${day.conversions} conversies`}
+                                                                >
+                                                                    <div 
+                                                                        className="w-full bg-blue-600/50 rounded-t transition-all hover:bg-blue-500"
+                                                                        style={{ height: `${(day.clicks / maxClicks) * 100}%`, minHeight: day.clicks > 0 ? '4px' : '0' }}
+                                                                    ></div>
+                                                                    {day.conversions > 0 && (
+                                                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                })()}
+                                                <div className="flex justify-between mt-2 text-xs text-slate-500">
+                                                    <span>30 dagen geleden</span>
+                                                    <span>Vandaag</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Recent Activity */}
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            {/* Recent Clicks */}
+                                            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                                <div className="bg-slate-950 p-4 border-b border-slate-800">
+                                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                                        <i className="fas fa-mouse-pointer text-blue-400"></i> Recente Clicks
+                                                    </h2>
+                                                </div>
+                                                <div className="p-4 max-h-64 overflow-y-auto custom-scroll">
+                                                    {(() => {
+                                                        const recentClicks = getRecentClicks(10);
+                                                        if (recentClicks.length === 0) {
+                                                            return (
+                                                                <div className="text-center py-8 text-slate-500">
+                                                                    <p>Nog geen clicks geregistreerd.</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div className="space-y-2">
+                                                                {recentClicks.map(click => (
+                                                                    <div key={click.id} className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm">
+                                                                        <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                                                                            <i className="fas fa-mouse-pointer text-blue-400 text-xs"></i>
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="font-medium text-white truncate">
+                                                                                {click.productName || click.productId}
+                                                                            </div>
+                                                                            <div className="text-xs text-slate-500">{click.networkId}</div>
+                                                                        </div>
+                                                                        <div className="text-xs text-slate-400">
+                                                                            {new Date(click.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+
+                                            {/* Recent Conversions */}
+                                            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                                <div className="bg-slate-950 p-4 border-b border-slate-800">
+                                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                                        <i className="fas fa-check-circle text-green-400"></i> Recente Conversies
+                                                    </h2>
+                                                </div>
+                                                <div className="p-4 max-h-64 overflow-y-auto custom-scroll">
+                                                    {(() => {
+                                                        const recentConversions = getRecentConversions(10);
+                                                        if (recentConversions.length === 0) {
+                                                            return (
+                                                                <div className="text-center py-8 text-slate-500">
+                                                                    <p>Nog geen conversies geregistreerd.</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div className="space-y-2">
+                                                                {recentConversions.map(conversion => (
+                                                                    <div key={conversion.id} className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm">
+                                                                        <div className="w-8 h-8 rounded-lg bg-green-600/20 flex items-center justify-center">
+                                                                            <i className="fas fa-check text-green-400 text-xs"></i>
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="font-medium text-white truncate">
+                                                                                {conversion.productName || conversion.productId}
+                                                                            </div>
+                                                                            <div className="text-xs text-slate-500">{conversion.networkId}</div>
+                                                                        </div>
+                                                                        <div className="text-sm font-bold text-green-400">
+                                                                            €{conversion.amount.toFixed(2)}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Export & Clear Data */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                                            <div className="flex flex-wrap gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        const data = exportAllData();
+                                                        const blob = new Blob([data], { type: 'application/json' });
+                                                        const url = URL.createObjectURL(blob);
+                                                        const a = document.createElement('a');
+                                                        a.href = url;
+                                                        a.download = `affiliate-data-${new Date().toISOString().split('T')[0]}.json`;
+                                                        a.click();
+                                                        URL.revokeObjectURL(url);
+                                                        showToast('Data geëxporteerd!', 'success');
+                                                    }}
+                                                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition"
+                                                >
+                                                    <i className="fas fa-download"></i> Exporteer Data
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm('Weet je zeker dat je alle tracking data wilt wissen? Dit kan niet ongedaan worden gemaakt.')) {
+                                                            clearTrackingData();
+                                                            setAffiliateConfig(loadAffiliateConfig());
+                                                            showToast('Tracking data gewist', 'info');
+                                                        }
+                                                    }}
+                                                    className="bg-red-600/20 border border-red-500/50 text-red-400 px-4 py-2 rounded-lg font-medium flex items-center gap-2 hover:bg-red-600/30 transition"
+                                                >
+                                                    <i className="fas fa-trash"></i> Wis Tracking Data
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
