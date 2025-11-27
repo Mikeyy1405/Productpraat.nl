@@ -464,14 +464,285 @@ export const App = () => {
 
 ```
 src/cms/
-├── index.ts              # Module exports
-├── types.ts              # Type definities, templates, features
-├── CMSContext.tsx        # React context en hooks
-├── CMSDashboard.tsx      # Admin dashboard component
-├── TemplateSelector.tsx  # Template keuze component
-├── FeatureTogglePanel.tsx # Feature toggles UI
-└── SetupWizard.tsx       # Setup wizard voor nieuwe gebruikers
+├── index.ts                 # Module exports
+├── types.ts                 # Type definities, templates, features
+├── CMSContext.tsx           # React context en hooks
+├── CMSDashboard.tsx         # Admin dashboard component
+├── TemplateSelector.tsx     # Template keuze component
+├── FeatureTogglePanel.tsx   # Feature toggles UI
+├── SetupWizard.tsx          # Setup wizard voor nieuwe gebruikers
+└── ContentManagementPanel.tsx # Content beheer admin panel
+
+src/components/features/
+├── index.ts                 # Alle feature exports
+├── search/
+│   ├── SearchBar.tsx        # Live search met autocomplete
+│   └── SearchResults.tsx    # Zoekresultaten pagina
+├── faq/
+│   └── FAQSection.tsx       # Accordion FAQ component
+├── testimonials/
+│   └── TestimonialCarousel.tsx # Testimonial carousel en grid
+├── contact/
+│   └── ContactForm.tsx      # Contact formulier met validatie
+├── newsletter/
+│   └── NewsletterForm.tsx   # Newsletter aanmelding
+├── comments/
+│   └── CommentSection.tsx   # Nested comments met voting
+├── social/
+│   └── SocialShare.tsx      # Social share buttons
+├── commerce/
+│   ├── ProductReviews.tsx   # Product review systeem
+│   ├── Wishlist.tsx         # Wishlist functionaliteit
+│   ├── PaymentFlow.tsx      # Mock checkout flow
+│   └── InventoryBadge.tsx   # Voorraad indicatoren
+├── seo/
+│   └── SEOHead.tsx          # Meta tags en structured data
+├── analytics/
+│   └── AnalyticsTracker.tsx # Page view en event tracking
+├── language/
+│   └── LanguageSelector.tsx # Multi-language support (NL/EN/DE/FR)
+├── auth/
+│   └── AuthComponents.tsx   # Login, Register, UserProfile
+└── blog/
+    └── BlogComponents.tsx   # Blog grid en post view
 ```
+
+---
+
+## Feature Componenten Gebruiken
+
+### Basis Gebruik
+
+Elk feature component checkt automatisch of de feature is ingeschakeld:
+
+```typescript
+import { FAQSection } from '../components/features';
+
+// Component toont alleen als 'faq_section' feature is ingeschakeld
+<FAQSection />
+```
+
+### Met Configuratie
+
+Gebruik feature settings in je componenten:
+
+```typescript
+import { useFeatureToggle } from '../cms';
+import { CommentSection } from '../components/features';
+
+const MyPage = () => {
+    const { enabled, settings } = useFeatureToggle('comments');
+    
+    // settings.maxNestingLevel, settings.allowVoting, etc.
+    return enabled ? <CommentSection contentId="article-123" /> : null;
+};
+```
+
+### Beschikbare Feature Componenten
+
+#### Search (`search`)
+```typescript
+import { SearchBar, SearchResults } from '../components/features';
+
+// Zoekbalk met autocomplete
+<SearchBar 
+    onSearch={(query) => console.log(query)}
+    searchData={[{ id: '1', type: 'product', title: 'Item', url: '/item' }]}
+    placeholder="Zoeken..."
+/>
+```
+
+#### FAQ Section (`faq_section`)
+```typescript
+import { FAQSection } from '../components/features';
+
+// Accordion FAQs met zoeken
+<FAQSection 
+    title="Veelgestelde Vragen"
+    showSearch={true}
+    showCategories={true}
+/>
+```
+
+#### Testimonials (`testimonials`)
+```typescript
+import { TestimonialCarousel, TestimonialGrid } from '../components/features';
+
+// Carousel of Grid view
+<TestimonialCarousel autoPlay={true} autoPlayInterval={5000} />
+<TestimonialGrid columns={3} />
+```
+
+#### Contact Form (`contact_form`)
+```typescript
+import { ContactForm } from '../components/features';
+
+<ContactForm 
+    title="Neem contact op"
+    showFileUpload={true}
+    onSubmit={(data) => console.log(data)}
+/>
+```
+
+#### Newsletter (`newsletter`)
+```typescript
+import { NewsletterForm } from '../components/features';
+
+<NewsletterForm 
+    variant="card" // 'inline' | 'stacked' | 'card'
+    buttonText="Aanmelden"
+/>
+```
+
+#### Comments (`comments`)
+```typescript
+import { CommentSection } from '../components/features';
+
+<CommentSection 
+    contentId="article-123"
+    title="Reacties"
+/>
+```
+
+#### Social Share (`social_media`)
+```typescript
+import { SocialShare, SocialLinks } from '../components/features';
+
+<SocialShare 
+    url={window.location.href}
+    title="Deel dit artikel"
+    platforms={['facebook', 'twitter', 'linkedin', 'whatsapp']}
+/>
+```
+
+#### Product Reviews (`product_reviews`)
+```typescript
+import { ProductReviews, StarRating } from '../components/features';
+
+<ProductReviews productId="product-123" />
+<StarRating rating={4.5} size="lg" showValue />
+```
+
+#### Wishlist (`cart_wishlist`)
+```typescript
+import { WishlistButton, WishlistCounter, WishlistPage } from '../components/features';
+
+<WishlistButton 
+    productId="product-123"
+    productName="Product Naam"
+    productPrice={99.99}
+/>
+<WishlistCounter /> // In header
+<WishlistPage onProductClick={(id) => navigate(`/product/${id}`)} />
+```
+
+#### Inventory (`inventory_management`)
+```typescript
+import { InventoryBadge, StockIndicator } from '../components/features';
+
+<InventoryBadge productId="product-123" variant="badge" />
+<StockIndicator productId="product-123" />
+```
+
+#### SEO (`seo_tools`)
+```typescript
+import { SEOHead, Breadcrumbs } from '../components/features';
+
+<SEOHead 
+    title="Pagina Titel"
+    description="Beschrijving voor zoekmachines"
+    ogImage="https://example.com/image.jpg"
+/>
+<Breadcrumbs items={[
+    { name: 'Home', url: '/' },
+    { name: 'Categorie', url: '/categorie' },
+    { name: 'Pagina', url: '/huidige-pagina' }
+]} />
+```
+
+#### Analytics (`analytics`)
+```typescript
+import { AnalyticsTracker, AnalyticsDashboard, trackEvent } from '../components/features';
+
+// Wrap je app
+<AnalyticsTracker>
+    <App />
+</AnalyticsTracker>
+
+// Track custom events
+trackEvent('button_click', 'engagement', 'newsletter_signup');
+
+// Dashboard in admin
+<AnalyticsDashboard />
+```
+
+#### Multi-language (`multi_language`)
+```typescript
+import { LanguageSelector, LanguageProvider, useLanguage } from '../components/features';
+
+// Wrap je app
+<LanguageProvider>
+    <App />
+</LanguageProvider>
+
+// Taal selector
+<LanguageSelector variant="dropdown" />
+
+// Gebruik vertalingen
+const { t, currentLanguage } = useLanguage();
+<span>{t('common.search')}</span>
+```
+
+#### Blog (`blog_posts`)
+```typescript
+import { BlogGrid, BlogPostView, BlogCategories } from '../components/features';
+
+<BlogGrid columns={3} onPostClick={(post) => navigate(`/blog/${post.slug}`)} />
+<BlogPostView post={post} onBack={() => navigate('/blog')} />
+```
+
+#### Authentication (`user_authentication`)
+```typescript
+import { LoginForm, RegisterForm, UserProfile } from '../components/features';
+
+<LoginForm onSuccess={(user) => setUser(user)} onRegisterClick={() => setView('register')} />
+<RegisterForm onSuccess={(user) => setUser(user)} onLoginClick={() => setView('login')} />
+<UserProfile user={user} onLogout={() => setUser(null)} />
+```
+
+---
+
+## Data Persistence
+
+Alle feature data wordt opgeslagen in localStorage met de prefix `writgo_`:
+
+| Feature | Storage Key | Beschrijving |
+|---------|-------------|--------------|
+| FAQs | `writgo_faq_data` | FAQ items |
+| Testimonials | `writgo_testimonials_data` | Klantbeoordelingen |
+| Contact | `writgo_contact_submissions` | Contactformulier inzendingen |
+| Newsletter | `writgo_newsletter_subscribers` | Email abonnees |
+| Comments | `writgo_comments_data` | Reacties |
+| Product Reviews | `writgo_product_reviews` | Productbeoordelingen |
+| Wishlist | `writgo_wishlist_data` | Verlanglijst items |
+| Inventory | `writgo_inventory_data` | Voorraadniveaus |
+| Blog Posts | `writgo_blog_posts` | Blog artikelen |
+| Analytics | `writgo_analytics_data` | Page views en events |
+| Users | `writgo_users_data` | Geregistreerde gebruikers |
+| Orders | `writgo_orders_data` | Bestellingen |
+
+---
+
+## Admin Content Beheer
+
+Het CMS Dashboard bevat een "Content Beheer" tab waar je:
+
+- **Blog Posts** kunt aanmaken, bewerken en verwijderen
+- **FAQs** kunt beheren
+- **Testimonials** kunt toevoegen
+- **Contact inzendingen** kunt bekijken
+- **Newsletter abonnees** kunt monitoren
+- **Analytics** dashboard kunt bekijken
 
 ---
 
