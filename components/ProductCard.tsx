@@ -72,9 +72,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
         }
     };
 
-    const imgSrc = imgError || !product.image 
-        ? 'https://placehold.co/400x400/f1f5f9/94a3b8?text=Geen+Afbeelding' 
-        : product.image;
+    /** Get the best available image source */
+    const getImageSrc = (): string => {
+        if (imgError) {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(product.brand || 'Product')}&background=f1f5f9&color=94a3b8&size=400`;
+        }
+        return product.imageUrl || product.image || 
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(product.brand || 'Product')}&background=f1f5f9&color=94a3b8&size=400`;
+    };
+    
+    const imgSrc = getImageSrc();
 
     // --- GRID VARIANT (Shop Style / Vertical) ---
     if (variant === 'grid') {
@@ -91,9 +98,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
                 >
                     <img 
                         src={imgSrc} 
-                        alt={product.model} 
+                        alt={`${product.brand} ${product.model}`}
                         referrerPolicy="no-referrer"
                         onError={() => setImgError(true)}
+                        loading="lazy"
                         className="max-h-full max-w-full object-contain mix-blend-multiply group-hover:scale-105 transition duration-500" 
                     />
                     {/* Score Badge floating in image area for Grid */}
@@ -156,9 +164,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
                 {renderSeal()}
                 <img 
                     src={imgSrc} 
-                    alt={product.model} 
+                    alt={`${product.brand} ${product.model}`}
                     referrerPolicy="no-referrer"
                     onError={() => setImgError(true)}
+                    loading="lazy"
                     className="max-w-full max-h-32 object-contain mix-blend-multiply group-hover:scale-105 transition duration-500" 
                 />
             </a>
