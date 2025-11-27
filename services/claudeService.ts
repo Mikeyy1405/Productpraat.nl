@@ -6,8 +6,26 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Product } from '../types';
 
+// Type for window.__ENV__ in production
+interface WindowEnv {
+  VITE_ANTHROPIC_API_KEY?: string;
+  VITE_SUPABASE_URL?: string;
+  VITE_SUPABASE_ANON_KEY?: string;
+}
+
+declare global {
+  interface Window {
+    __ENV__?: WindowEnv;
+  }
+}
+
 // Helper to get API key from environment (works in Vite)
 const getApiKey = (): string => {
+  // Check window.__ENV__ first (for production/Render)
+  if (typeof window !== 'undefined' && window.__ENV__?.VITE_ANTHROPIC_API_KEY) {
+    return window.__ENV__.VITE_ANTHROPIC_API_KEY;
+  }
+  // Fall back to import.meta.env (for local development)
   return import.meta.env.VITE_ANTHROPIC_API_KEY || '';
 };
 
