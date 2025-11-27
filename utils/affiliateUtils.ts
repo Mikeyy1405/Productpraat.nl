@@ -411,9 +411,11 @@ export const extractAffiliateInfo = (url: string): { networkId: AffiliateNetwork
     
     try {
         const parsedUrl = new URL(url);
+        const hostname = parsedUrl.hostname.toLowerCase();
         
         // Check for Bol.com partner URL format
-        if (parsedUrl.hostname.includes('partner.bol.com')) {
+        // Use exact match or proper subdomain check to prevent domain spoofing
+        if (hostname === 'partner.bol.com' || hostname.endsWith('.partner.bol.com')) {
             const affiliateId = parsedUrl.searchParams.get('s');
             if (affiliateId) {
                 return { networkId: 'bol', affiliateId };

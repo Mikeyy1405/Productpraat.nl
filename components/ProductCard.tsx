@@ -57,10 +57,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isCompareSele
             // Generate affiliate link with tracking
             const affiliateLink = generateAffiliateLink(baseLink);
             
-            // Track the click
+            // Track the click with safe product name fallback
             const networkId = detectNetwork(baseLink);
             if (networkId) {
-                trackAffiliateClick(networkId, product.id, `${product.brand} ${product.model}`);
+                const productName = [product.brand, product.model].filter(Boolean).join(' ') || 'Unknown Product';
+                trackAffiliateClick(networkId, product.id, productName);
             }
             
             // Open the affiliate link
