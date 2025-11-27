@@ -21,10 +21,13 @@ export const SimpleAdminPanel: React.FC<SimpleAdminPanelProps> = ({
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-    /** Show notification and auto-hide after 3 seconds */
+    /** Duration in milliseconds before notification auto-hides */
+    const NOTIFICATION_TIMEOUT_MS = 5000;
+
+    /** Show notification and auto-hide after timeout */
     const showNotification = (type: 'success' | 'error', message: string) => {
         setNotification({ type, message });
-        setTimeout(() => setNotification(null), 5000);
+        setTimeout(() => setNotification(null), NOTIFICATION_TIMEOUT_MS);
     };
 
     /** Handle product add with error handling */

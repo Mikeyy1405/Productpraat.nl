@@ -233,14 +233,16 @@ export const ProductView: React.FC<ProductViewProps> = ({
                                 usability: 'Gebruiksgemak',
                                 design: 'Design'
                             };
+                            // Ensure value is a valid number before using it
+                            const numericValue = typeof value === 'number' && !isNaN(value) ? value : 0;
                             return (
                                 <div key={key} className="bg-slate-800/50 rounded-lg p-4 text-center">
-                                    <div className="text-2xl font-bold text-[#1877F2]">{value}</div>
+                                    <div className="text-2xl font-bold text-[#1877F2]">{numericValue}</div>
                                     <div className="text-xs text-slate-400 uppercase mt-1">{labels[key] || key}</div>
                                     <div className="w-full h-1.5 bg-slate-700 rounded-full mt-2 overflow-hidden">
                                         <div 
                                             className="h-full bg-gradient-to-r from-[#1877F2] to-blue-400 rounded-full transition-all duration-500" 
-                                            style={{ width: `${(value as number) * 10}%` }}
+                                            style={{ width: `${numericValue * 10}%` }}
                                         />
                                     </div>
                                 </div>
