@@ -93,29 +93,62 @@ export const db = {
     },
 
     add: async (product: Product): Promise<Product[]> => {
+        console.log('🔍 [DB.ADD] Starting product insert:', {
+            brand: product.brand,
+            model: product.model,
+            category: product.category,
+            timestamp: new Date().toISOString()
+        });
+
         const supabase = getSupabase();
-        if (!supabase) { 
-            throw new Error("Database niet beschikbaar. Controleer Supabase configuratie."); 
+        
+        if (!supabase) {
+            console.error("❌ Database niet beschikbaar - Supabase client is null. Check je VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY environment variables.");
+            throw new Error("Database niet beschikbaar. Controleer de database configuratie en internet verbinding.");
         }
+        
+        console.log('✅ Supabase client is beschikbaar');
+        
         try {
-            const cleanProduct = JSON.parse(JSON.stringify(product));
-            const { error } = await supabase.from('products').insert([cleanProduct]);
-            
-            if (error) {
-                // Extract meaningful error message
-                const errorMessage = error.message || error.details || error.hint || 'Onbekende database fout';
-                console.error("Supabase Insert Error:", error);
-                throw new Error(`Database fout: ${errorMessage}`);
+            // Validate product before insert
+            if (!product.id) {
+                throw new Error('Product ID ontbreekt');
+            }
+            if (!product.slug) {
+                throw new Error('Product slug ontbreekt');
             }
             
-            return await db.getAll();
+            const cleanProduct = JSON.parse(JSON.stringify(product));
+            console.log('📦 Product data voorbereid voor insert:', Object.keys(cleanProduct));
+            
+            const { data, error } = await supabase
+                .from('products')
+                .insert([cleanProduct])
+                .select('id');
+            
+            if (error) {
+                console.error('❌ Supabase insert error:', {
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    code: error.code
+                });
+                const errorParts = [error.message, error.details, error.hint].filter(Boolean);
+                throw new Error(`Database fout: ${errorParts.join(' - ')}`);
+            }
+            
+            console.log('✅ Product succesvol opgeslagen in database:', data);
+            
+            const allProducts = await db.getAll();
+            console.log(`📊 Totaal aantal producten na insert: ${allProducts.length}`);
+            return allProducts;
+            
         } catch (e) {
-            console.error("Add Error:", formatError(e));
-            // Re-throw with clear message
+            console.error('❌ [DB.ADD] Critical error:', e);
             if (e instanceof Error) {
                 throw e;
             }
-            throw new Error(`Fout bij opslaan product: ${formatError(e)}`);
+            throw new Error(`Onverwachte fout bij opslaan: ${formatError(e)}`);
         }
     },
 

@@ -126,7 +126,24 @@ export const App: React.FC = () => {
     const handleSearch = (e?: React.FormEvent) => { if (e) e.preventDefault(); if (searchTerm.trim()) { setView('search'); urlRouter.push(`/search?q=${encodeURIComponent(searchTerm)}`); } };
     const handleLoginSuccess = () => { setIsAuthenticated(true); setView('admin'); urlRouter.push('/dashboard'); };
     const handleLogout = async () => { await authService.logout(); setIsAuthenticated(false); setView('login'); urlRouter.push('/dashboard'); };
-    const handleAddProduct = async (newProduct: Product) => { const updated = await db.add(newProduct); setProducts(updated); if (CATEGORIES[newProduct.category]) { setActiveCategory(newProduct.category); setView('category'); urlRouter.push(`/shop/${newProduct.category}`); } };
+    const handleAddProduct = async (newProduct: Product) => {
+        try {
+            console.log('🚀 handleAddProduct called with:', newProduct.brand, newProduct.model);
+            const updated = await db.add(newProduct);
+            console.log('✅ Product toegevoegd, updated list length:', updated.length);
+            setProducts(updated);
+            
+            if (CATEGORIES[newProduct.category]) {
+                setActiveCategory(newProduct.category);
+                setView('category');
+                urlRouter.push(`/shop/${newProduct.category}`);
+            }
+        } catch (error) {
+            console.error('❌ handleAddProduct failed:', error);
+            alert(`Fout bij toevoegen product: ${error instanceof Error ? error.message : String(error)}`);
+            throw error; // Re-throw so caller knows it failed
+        }
+    };
     const handleDeleteProduct = async (id: string) => { const updated = await db.remove(id); setProducts(updated); };
 
     // Footer
