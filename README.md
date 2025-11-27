@@ -1,9 +1,39 @@
 
-# ProductPraat.nl - AI Powered Affiliate Platform
+# ProductPraat.nl - AI Powered Affiliate Platform + WritgoCMS
 
 Dit is de source code voor ProductPraat.nl, een modern vergelijkingsplatform dat gebruik maakt van AI (Claude) om volledig autonoom productreviews en content te genereren.
 
-**Laatste Update: Versie 3.0.0 - Universal URL Import (Bol.com API Verwijderd)**
+**Laatste Update: Versie 4.0.0 - WritgoCMS Integratie**
+
+## Wat is Nieuw in v4.0.0
+
+### WritgoCMS - Flexibel Content Management Systeem
+
+ProductPraat is nu uitgebreid met WritgoCMS, een modulaire CMS-laag die gebruikers in staat stelt om:
+
+- **3 Template Types** te kiezen: Bedrijfswebsite, Shop, of Blog
+- **20+ Feature Toggles** in/uit te schakelen per template
+- **Template Switchen** zonder dataverlies
+- **Visuele Preview** van templates bekijken
+- **Backwards Compatible** met alle bestaande ProductPraat shop data
+
+### CMS Features
+
+| Feature | Beschrijving |
+|---------|-------------|
+| Template Selector | Kies uit Business, Shop of Blog template |
+| Feature Toggles | 20+ modulaire functies in/uit schakelen |
+| CMS Dashboard | Centraal beheer van alle CMS instellingen |
+| Setup Wizard | Intuïtieve setup voor nieuwe gebruikers |
+| Migratie Tool | Behoud bestaande ProductPraat data |
+
+### Documentatie
+
+Zie [docs/WRITGO_CMS.md](docs/WRITGO_CMS.md) voor uitgebreide documentatie over:
+- Nieuwe templates toevoegen
+- Nieuwe features toevoegen
+- CMS Context API gebruiken
+- Migratie van ProductPraat
 
 ## Features
 
@@ -14,6 +44,7 @@ Dit is de source code voor ProductPraat.nl, een modern vergelijkingsplatform dat
 - **Bulk Import:** Importeer meerdere producten tegelijk met één klik.
 - **Content Studio:** Genereer blogs, vergelijkingen en toplijstjes met één klik.
 - **Database:** Supabase integratie voor persistente opslag.
+- **CMS:** WritgoCMS met templates en feature toggles.
 
 ## Product Toevoegen via URL
 
@@ -116,6 +147,18 @@ Dit project is geoptimaliseerd voor deployment op **Render.com** als een **Web S
 - **Start Command:** `npm start`
 
 ## Changelog
+
+### v4.0.0 - WritgoCMS Integration
+- ✅ **NIEUW**: WritgoCMS - Flexibel Content Management Systeem
+- ✅ **NIEUW**: 3 Template types (Bedrijfswebsite, Shop, Blog)
+- ✅ **NIEUW**: 20+ Feature Toggles met categorieën
+- ✅ **NIEUW**: CMS Dashboard in Admin Panel
+- ✅ **NIEUW**: Template Selector met visuele preview
+- ✅ **NIEUW**: Feature Toggle Panel met instellingen
+- ✅ **NIEUW**: Setup Wizard voor nieuwe gebruikers
+- ✅ **NIEUW**: Migratie tool voor bestaande ProductPraat data
+- ✅ **NIEUW**: Uitgebreide documentatie (docs/WRITGO_CMS.md)
+- ✅ **VERBETERD**: Modulaire architectuur met React Context
 
 ### v3.0.0 - Universal URL Import
 - ✅ **VERWIJDERD**: Bol.com API integratie volledig verwijderd
