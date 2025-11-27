@@ -19,6 +19,7 @@ const port = process.env.PORT || 3000;
 // --- CONFIG ---
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
+const VITE_ANTHROPIC_API_KEY = process.env.VITE_ANTHROPIC_API_KEY || '';
 
 // Initialize Supabase client
 let supabase = null;
@@ -29,6 +30,7 @@ if (VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY) {
 console.log('[CONFIG] Server starting with configuration:');
 console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] AIML API Key: ${VITE_ANTHROPIC_API_KEY ? 'Configured' : 'Not set'}`);
 
 app.use(express.json());
 app.use(express.static('dist', { index: false }));
@@ -41,7 +43,8 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         version: packageJson.version,
         services: {
-            supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY)
+            supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY),
+            aiml: !!VITE_ANTHROPIC_API_KEY
         },
         notes: ['Simplified version - use URL-based product import'],
         timestamp: new Date().toISOString()
@@ -52,7 +55,8 @@ app.get('/api/health', (req, res) => {
 app.get('/api/config', (req, res) => {
     res.json({
         VITE_SUPABASE_URL: VITE_SUPABASE_URL,
-        VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY
+        VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY,
+        VITE_ANTHROPIC_API_KEY: VITE_ANTHROPIC_API_KEY
     });
 });
 
@@ -177,7 +181,8 @@ app.get('*', (req, res) => {
             <script>
                 window.__ENV__ = {
                     VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}",
-                    VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
+                    VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}",
+                    VITE_ANTHROPIC_API_KEY: "${VITE_ANTHROPIC_API_KEY}"
                 };
             </script>
         `;

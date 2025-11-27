@@ -8,6 +8,11 @@ import { Product } from '../types';
 
 // Helper to get API key from environment (works in Vite)
 const getApiKey = (): string => {
+  // Check window.__ENV__ first (for production/Render)
+  if (typeof window !== 'undefined' && (window as { __ENV__?: Record<string, string> }).__ENV__?.VITE_ANTHROPIC_API_KEY) {
+    return (window as { __ENV__?: Record<string, string> }).__ENV__?.VITE_ANTHROPIC_API_KEY || '';
+  }
+  // Fall back to import.meta.env (for local development)
   return import.meta.env.VITE_ANTHROPIC_API_KEY || '';
 };
 
