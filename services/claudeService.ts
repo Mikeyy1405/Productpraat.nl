@@ -87,6 +87,7 @@ export const generateProductReview = async (input: ProductReviewInput): Promise<
 
   const anthropic = new Anthropic({
     apiKey: apiKey,
+    baseURL: 'https://api.aimlapi.com/v1',
     dangerouslyAllowBrowser: true
   });
 
@@ -361,6 +362,7 @@ export const extractProductInfo = async (url: string, scrapedContent: string): P
 
   const anthropic = new Anthropic({
     apiKey: apiKey,
+    baseURL: 'https://api.aimlapi.com/v1',
     dangerouslyAllowBrowser: true
   });
 
