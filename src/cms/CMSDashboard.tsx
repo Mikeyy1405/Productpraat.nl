@@ -4,7 +4,7 @@
  * Main dashboard for CMS administration with template switching and feature management.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
     TEMPLATES, 
     FEATURES,
@@ -14,6 +14,7 @@ import { useCMS, useTemplate } from './CMSContext';
 import { TemplateSelector } from './TemplateSelector';
 import { FeatureTogglePanel } from './FeatureTogglePanel';
 import { ContentManagementPanel } from './ContentManagementPanel';
+import { useToast } from '../components/toast';
 
 interface CMSDashboardProps {
     onClose?: () => void;
@@ -22,10 +23,20 @@ interface CMSDashboardProps {
 type DashboardTab = 'overview' | 'templates' | 'features' | 'content' | 'settings';
 
 export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
-    const { siteConfig, saveSiteConfig, resetToDefaults, currentTemplate, updateSiteConfig, updateTemplateSettings } = useCMS();
+    const { 
+        siteConfig, 
+        saveSiteConfig, 
+        resetToDefaults, 
+        currentTemplate, 
+        updateSiteConfig, 
+        updateTemplateSettings,
+        isSaving,
+        lastSaved,
+        hasUnsavedChanges
+    } = useCMS();
     const template = useTemplate();
+    const toast = useToast();
     const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-    const [isSaving, setIsSaving] = useState(false);
 
     // Helper to update template settings with proper typing
     const handleTemplateSettingChange = useCallback((key: keyof TemplateSettings, value: string) => {
@@ -33,13 +44,26 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
     }, [updateTemplateSettings]);
 
     const handleSave = async () => {
-        setIsSaving(true);
-        try {
-            await saveSiteConfig();
-        } finally {
-            setIsSaving(false);
+        console.log('[CMSDashboard] Saving...');
+        const success = await saveSiteConfig();
+        if (success) {
+            toast.success('✅ Configuratie succesvol opgeslagen!');
+        } else {
+            toast.error('❌ Kon configuratie niet opslaan');
         }
     };
+
+    // Keyboard shortcut for save (Ctrl+S)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                handleSave();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleSave]);
 
     // Count enabled features
     const enabledFeatures = siteConfig?.features.filter(f => f.enabled).length || 0;
@@ -71,11 +95,35 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                     </p>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {/* Status indicator */}
+                    {lastSaved && (
+                        <span className="text-xs text-slate-500 hidden sm:inline">
+                            {hasUnsavedChanges ? (
+                                <span className="text-yellow-400">
+                                    <i className="fas fa-circle text-[6px] mr-1"></i>
+                                    Onopgeslagen wijzigingen
+                                </span>
+                            ) : (
+                                <span className="text-green-400">
+                                    <i className="fas fa-check-circle mr-1"></i>
+                                    Opgeslagen {new Date(lastSaved).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            )}
+                        </span>
+                    )}
+                    
                     <button
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-green-600/20 flex items-center gap-2 transition-all"
+                        className={`
+                            px-6 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 transition-all
+                            ${hasUnsavedChanges 
+                                ? 'bg-gradient-to-r from-yellow-600 to-orange-500 hover:from-yellow-500 hover:to-orange-400 shadow-yellow-600/20' 
+                                : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 shadow-green-600/20'
+                            }
+                            disabled:opacity-50 text-white
+                        `}
                     >
                         {isSaving ? (
                             <><i className="fas fa-spinner fa-spin"></i> Opslaan...</>
@@ -400,6 +448,7 @@ export const CMSDashboard: React.FC<CMSDashboardProps> = ({ onClose }) => {
                             onClick={() => {
                                 if (confirm('Weet je zeker dat je alle CMS instellingen wilt resetten naar de standaardwaarden?')) {
                                     resetToDefaults();
+                                    toast.warning('⚠️ CMS instellingen gereset naar standaardwaarden');
                                 }
                             }}
                             className="bg-red-600/20 border border-red-500/50 text-red-400 hover:bg-red-600/30 px-4 py-2 rounded-xl font-medium transition flex items-center gap-2"
