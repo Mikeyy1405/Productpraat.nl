@@ -1207,6 +1207,104 @@ app.get('/api/admin/seed-status', async (req, res) => {
 });
 
 // ============================================================================
+// QUICK IMPORT ENDPOINT - Simple product import for SimpleDashboard
+// ============================================================================
+
+app.post('/api/admin/quick-import', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [QUICK-IMPORT] POST /api/admin/quick-import`);
+    
+    try {
+        const { categories, limit = 5 } = req.body;
+        
+        if (!Array.isArray(categories) || categories.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Selecteer minimaal 1 categorie' 
+            });
+        }
+
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({ 
+                success: false,
+                message: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in.'
+            });
+        }
+
+        if (!supabase) {
+            return res.status(503).json({
+                success: false,
+                message: 'Database niet beschikbaar'
+            });
+        }
+
+        let totalImported = 0;
+        const results = [];
+
+        // Category name mapping
+        const categoryNames = {
+            'televisies': 'Televisies',
+            'audio': 'Audio',
+            'laptops': 'Laptops',
+            'smartphones': 'Smartphones',
+            'wasmachines': 'Wasmachines',
+            'stofzuigers': 'Stofzuigers',
+            'smarthome': 'Smart Home',
+            'matrassen': 'Matrassen',
+            'airfryers': 'Airfryers',
+            'koffie': 'Koffie',
+            'keuken': 'Keukenmachines',
+            'verzorging': 'Verzorging'
+        };
+
+        for (const category of categories) {
+            const searchTerm = categoryNames[category] || category;
+            console.log(`[QUICK-IMPORT] Processing: ${searchTerm} (limit: ${limit})`);
+            
+            try {
+                const job = await bolSyncService.syncFromSearch(searchTerm, limit);
+                
+                totalImported += (job.itemsCreated || 0);
+                results.push({
+                    category,
+                    searchTerm,
+                    imported: job.itemsCreated || 0,
+                    updated: job.itemsUpdated || 0,
+                    status: job.status
+                });
+                
+                console.log(`[QUICK-IMPORT] ${searchTerm}: ${job.itemsCreated} imported`);
+            } catch (catError) {
+                console.error(`[QUICK-IMPORT] Error for ${searchTerm}:`, catError);
+                results.push({
+                    category,
+                    searchTerm,
+                    imported: 0,
+                    error: catError.message,
+                    status: 'failed'
+                });
+            }
+        }
+
+        console.log(`[QUICK-IMPORT] Completed. Total imported: ${totalImported}`);
+
+        res.json({
+            success: true,
+            imported: totalImported,
+            message: `${totalImported} producten geïmporteerd`,
+            details: results
+        });
+
+    } catch (error) {
+        console.error('[QUICK-IMPORT] Error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: error.message || 'Import mislukt'
+        });
+    }
+});
+
+// ============================================================================
 // PRODUCT DISCOVERY AUTOMATION ENDPOINTS
 // ============================================================================
 
