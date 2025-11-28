@@ -73,53 +73,48 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
 
             // Check if response is OK first
             if (!response.ok) {
-                const errorText = await response.text();
                 let errorMessage = `Server error: ${response.status}`;
-                
-                // Try to parse JSON error
                 try {
-                    const errorJson = JSON.parse(errorText);
-                    errorMessage = errorJson.message || errorMessage;
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
                 } catch {
-                    // Use raw text if not JSON
-                    if (errorText) {
-                        errorMessage = errorText;
-                    }
+                    // Failed to parse JSON, use status code message
                 }
-                
                 throw new Error(errorMessage);
             }
 
             const result: ImportResult = await response.json();
             console.log('[SimpleDashboard] Import result:', result);
             
-            // Update import result for display
-            setImportResult(result);
-            
-            // Update category progress from result details
-            if (result.details) {
-                setCategoryProgress(result.details.map(d => ({
-                    category: d.category,
-                    categoryId: d.categoryId,
-                    found: d.found,
-                    usedFallback: d.usedFallback,
-                    status: d.status,
-                    error: d.error
-                })));
-            }
-            
-            // Better success checking
-            const totalImported = (result.imported || 0) + (result.updated || 0);
-            
-            if (result.success && totalImported > 0) {
-                setImportStatus(`✅ ${result.imported} nieuwe producten, ${result.updated || 0} geüpdatet!`);
+            // Build detailed status message
+            if (result.success && (result.imported > 0 || result.updated > 0)) {
+                let statusMsg = `✅ ${result.imported} producten geïmporteerd`;
+                if (result.updated > 0) {
+                    statusMsg += `, ${result.updated} bijgewerkt`;
+                }
+                
+                // Check for per-category failures
+                if (result.errors && result.errors.length > 0) {
+                    const failedCategories = result.errors.map((e: { category: string; error: string }) => e.category).join(', ');
+                    statusMsg += ` (⚠️ Fouten bij: ${failedCategories})`;
+                }
+                
+                setImportStatus(statusMsg);
                 // Reload after 2 seconds to show imported products
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else if (result.success && totalImported === 0) {
-                // Import succeeded but no products found
-                setImportStatus('⚠️ Geen producten gevonden in de geselecteerde categorieën.');
+            } else if (result.success && result.imported === 0 && result.updated === 0) {
+                // No products found or imported
+                if (result.errors && result.errors.length > 0) {
+                    // Show specific error messages
+                    const errorMsgs = result.errors.map((e: { category: string; error: string }) => 
+                        `${e.category}: ${e.error}`
+                    ).join('; ');
+                    setImportStatus(`⚠️ Geen producten geïmporteerd. ${errorMsgs}`);
+                } else {
+                    setImportStatus('⚠️ Geen producten gevonden. Probeer andere categorieën.');
+                }
                 setIsImporting(false);
             } else {
                 // Import failed

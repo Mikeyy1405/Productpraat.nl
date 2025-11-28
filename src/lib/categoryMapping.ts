@@ -1,175 +1,167 @@
 /**
  * Category Mapping Module
  * 
- * Maps UI category button names to Bol.com numeric category IDs.
- * Based on Bol.com Marketing Catalog API requirements.
+ * Maps UI category buttons/names to Bol.com numeric category IDs.
+ * Based on the Bol.com Marketing Catalog API requirements.
  * 
  * @module src/lib/categoryMapping
  */
 
 /**
- * Category mapping configuration
- * Maps internal category keys to Bol.com category IDs and search terms
- */
-export interface CategoryConfig {
-    /** Bol.com numeric category ID */
-    categoryId: string;
-    /** Display name in Dutch */
-    displayName: string;
-    /** Fallback search term if category ID returns empty results */
-    searchTerm: string;
-}
-
-/**
- * Mapping of UI category names/keys to Bol.com category IDs
+ * Mapping of UI category names to Bol.com numeric category IDs.
  * 
- * Category IDs are obtained from Bol.com's Marketing Catalog API.
- * Use the discovery script (scripts/find-bol-categories.ts) to find new IDs.
+ * These IDs are used with the Bol.com Marketing Catalog API endpoints:
+ * - GET /marketing/catalog/v1/products/lists/popular?category-id={categoryId}
+ * - GET /marketing/catalog/v1/products/search?search-term={searchTerm}
  * 
- * Note: 'Verzorging' -> '12442' is confirmed from the issue screenshots.
+ * Category IDs can be discovered using the search endpoint with include-relevant-categories=true
+ * or via the scripts/find-bol-categories.ts discovery script.
  */
-export const CATEGORY_MAPPING: Record<string, CategoryConfig> = {
-    // Electronics & Entertainment
-    'televisies': {
-        categoryId: '15452',
-        displayName: 'Televisies',
-        searchTerm: 'televisie tv'
-    },
-    'audio': {
-        categoryId: '3137',
-        displayName: 'Audio & HiFi',
-        searchTerm: 'audio koptelefoon speakers'
-    },
-    'laptops': {
-        categoryId: '4770',
-        displayName: 'Laptops',
-        searchTerm: 'laptop notebook'
-    },
-    'smartphones': {
-        categoryId: '21328',
-        displayName: 'Smartphones',
-        searchTerm: 'smartphone mobiele telefoon'
-    },
+export const CATEGORY_ID_MAPPING: Record<string, string> = {
+    // Electronics & Media
+    'televisies': '10651',
+    'audio': '14490',
+    'laptops': '4770',
+    'smartphones': '10852',
     
-    // Home Appliances
-    'wasmachines': {
-        categoryId: '15457',
-        displayName: 'Wasmachines',
-        searchTerm: 'wasmachine'
-    },
-    'stofzuigers': {
-        categoryId: '13138',
-        displayName: 'Stofzuigers',
-        searchTerm: 'stofzuiger'
-    },
-    'smarthome': {
-        categoryId: '23868',
-        displayName: 'Smart Home',
-        searchTerm: 'smart home domotica'
-    },
-    'matrassen': {
-        categoryId: '13640',
-        displayName: 'Matrassen',
-        searchTerm: 'matras'
-    },
+    // Home & Living
+    'wasmachines': '11462',
+    'stofzuigers': '20104',
+    'smarthome': '20637',
+    'matrassen': '10689',
     
-    // Kitchen & Personal Care
-    'airfryers': {
-        categoryId: '21671',
-        displayName: 'Airfryers',
-        searchTerm: 'airfryer hetelucht friteuse'
-    },
-    'koffie': {
-        categoryId: '19298',
-        displayName: 'Koffie',
-        searchTerm: 'koffiezetapparaat espressomachine'
-    },
-    'keuken': {
-        categoryId: '12694',
-        displayName: 'Keukenmachines',
-        searchTerm: 'keukenmachine blender'
-    },
-    // Confirmed from issue: 'Verzorging' -> '12442'
-    'verzorging': {
-        categoryId: '12442',
-        displayName: 'Verzorging',
-        searchTerm: 'persoonlijke verzorging scheerapparaat'
-    }
+    // Kitchen & Care
+    'airfryers': '43756',
+    'koffie': '10550',
+    'keuken': '10540',
+    'verzorging': '12442', // Confirmed from problem statement
 };
 
 /**
- * Get category configuration by key
- * 
- * @param categoryKey - The internal category key (e.g., 'televisies', 'verzorging')
- * @returns Category configuration or undefined if not found
+ * Fallback search terms for categories when category ID lookup fails.
+ * These terms are used with the search endpoint as a fallback.
  */
-export function getCategoryConfig(categoryKey: string): CategoryConfig | undefined {
-    return CATEGORY_MAPPING[categoryKey.toLowerCase()];
-}
+export const CATEGORY_SEARCH_FALLBACK: Record<string, string> = {
+    'televisies': 'televisie smart tv',
+    'audio': 'bluetooth speaker koptelefoon',
+    'laptops': 'laptop notebook',
+    'smartphones': 'smartphone mobiele telefoon',
+    'wasmachines': 'wasmachine',
+    'stofzuigers': 'stofzuiger robotstofzuiger',
+    'smarthome': 'smart home domotica',
+    'matrassen': 'matras',
+    'airfryers': 'airfryer heteluchtfriteuse',
+    'koffie': 'koffiezetapparaat espressomachine',
+    'keuken': 'keukenmachine blender',
+    'verzorging': 'scheerapparaat elektrische tandenborstel',
+};
 
 /**
- * Get Bol.com category ID from category key
+ * Human-readable category names for display in the UI.
+ */
+export const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+    'televisies': 'Televisies',
+    'audio': 'Audio & HiFi',
+    'laptops': 'Laptops',
+    'smartphones': 'Smartphones',
+    'wasmachines': 'Wasmachines',
+    'stofzuigers': 'Stofzuigers',
+    'smarthome': 'Smart Home',
+    'matrassen': 'Matrassen',
+    'airfryers': 'Airfryers',
+    'koffie': 'Koffie',
+    'keuken': 'Keukenmachines',
+    'verzorging': 'Verzorging',
+};
+
+/**
+ * Get the Bol.com category ID for a given category key.
  * 
- * @param categoryKey - The internal category key
- * @returns Bol.com category ID or undefined if not found
+ * @param categoryKey - The category key (e.g., 'televisies', 'verzorging')
+ * @returns The Bol.com numeric category ID or undefined if not found
  */
 export function getCategoryId(categoryKey: string): string | undefined {
-    return getCategoryConfig(categoryKey)?.categoryId;
+    const normalizedKey = categoryKey.toLowerCase().trim();
+    return CATEGORY_ID_MAPPING[normalizedKey];
 }
 
 /**
- * Get search term fallback for a category
+ * Get the fallback search term for a given category key.
  * 
- * @param categoryKey - The internal category key
- * @returns Search term to use as fallback
+ * @param categoryKey - The category key (e.g., 'televisies', 'verzorging')
+ * @returns The search term to use as fallback, or the category key if not found
  */
-export function getSearchTerm(categoryKey: string): string | undefined {
-    return getCategoryConfig(categoryKey)?.searchTerm;
+export function getCategorySearchTerm(categoryKey: string): string {
+    const normalizedKey = categoryKey.toLowerCase().trim();
+    return CATEGORY_SEARCH_FALLBACK[normalizedKey] || normalizedKey;
 }
 
 /**
- * Get all available category keys
+ * Get the display name for a given category key.
  * 
- * @returns Array of category keys
- */
-export function getAllCategoryKeys(): string[] {
-    return Object.keys(CATEGORY_MAPPING);
-}
-
-/**
- * Get display name for a category
- * 
- * @param categoryKey - The internal category key
- * @returns Display name in Dutch
+ * @param categoryKey - The category key (e.g., 'televisies', 'verzorging')
+ * @returns The human-readable display name
  */
 export function getCategoryDisplayName(categoryKey: string): string {
-    return getCategoryConfig(categoryKey)?.displayName ?? categoryKey;
+    const normalizedKey = categoryKey.toLowerCase().trim();
+    return CATEGORY_DISPLAY_NAMES[normalizedKey] || categoryKey;
 }
 
 /**
- * Check if a category key is valid
+ * Get all available category keys.
+ * 
+ * @returns Array of all category keys
+ */
+export function getAllCategoryKeys(): string[] {
+    return Object.keys(CATEGORY_ID_MAPPING);
+}
+
+/**
+ * Check if a category key is valid.
  * 
  * @param categoryKey - The category key to check
- * @returns True if the category exists in mapping
+ * @returns True if the category exists in the mapping
  */
 export function isValidCategory(categoryKey: string): boolean {
-    return categoryKey.toLowerCase() in CATEGORY_MAPPING;
+    const normalizedKey = categoryKey.toLowerCase().trim();
+    return normalizedKey in CATEGORY_ID_MAPPING;
 }
 
 /**
- * Get category key from display name
+ * Get category info including ID, display name, and search fallback.
  * 
- * @param displayName - The display name to look up (case-insensitive)
- * @returns Category key or undefined if not found
+ * @param categoryKey - The category key
+ * @returns Object with category information or null if not found
  */
-export function getCategoryKeyFromDisplayName(displayName: string): string | undefined {
-    const normalizedName = displayName.toLowerCase();
+export function getCategoryInfo(categoryKey: string): {
+    key: string;
+    id: string;
+    displayName: string;
+    searchFallback: string;
+} | null {
+    const normalizedKey = categoryKey.toLowerCase().trim();
+    const id = CATEGORY_ID_MAPPING[normalizedKey];
     
-    for (const [key, config] of Object.entries(CATEGORY_MAPPING)) {
-        if (config.displayName.toLowerCase() === normalizedName) {
-            return key;
-        }
+    if (!id) {
+        return null;
     }
     
-    return undefined;
+    return {
+        key: normalizedKey,
+        id,
+        displayName: getCategoryDisplayName(normalizedKey),
+        searchFallback: getCategorySearchTerm(normalizedKey),
+    };
 }
+
+export default {
+    CATEGORY_ID_MAPPING,
+    CATEGORY_SEARCH_FALLBACK,
+    CATEGORY_DISPLAY_NAMES,
+    getCategoryId,
+    getCategorySearchTerm,
+    getCategoryDisplayName,
+    getAllCategoryKeys,
+    isValidCategory,
+    getCategoryInfo,
+};

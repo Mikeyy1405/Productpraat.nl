@@ -1,15 +1,19 @@
 /**
- * Bol.com Marketing Catalog API Client
+ * Bol.com Marketing Catalog API Module
  * 
  * Provides functions for interacting with the Bol.com Marketing Catalog API.
- * Supports popular products, search, and single product retrieval.
+ * Supports popular products, search, and single product endpoints.
  * 
- * Required Environment Variables:
- * - BOL_CLIENT_ID: OAuth2 client ID
- * - BOL_CLIENT_SECRET: OAuth2 client secret
+ * API Endpoints:
+ * - GET /marketing/catalog/v1/products/lists/popular?category-id={categoryId}
+ * - GET /marketing/catalog/v1/products/search?search-term={searchTerm}
+ * - GET /marketing/catalog/v1/products/{ean}
  * 
  * @module src/lib/bolApi
+ * @see https://api.bol.com/
  */
+
+import { getCategoryId, getCategorySearchTerm } from './categoryMapping';
 
 // ============================================================================
 // TYPES
@@ -19,35 +23,36 @@
  * API request options
  */
 export interface BolApiOptions {
-    /** Country code (default: 'NL') */
+    /** Country code for the request (default: 'NL') */
     countryCode?: string;
-    /** Accept-Language header (default: 'nl') */
+    /** Accept-Language header value (default: 'nl') */
     acceptLanguage?: string;
-    /** OAuth2 access token (if already obtained) */
+    /** Bearer token for Authorization header */
     authToken?: string;
-    /** Include product images in response */
-    includeImage?: boolean;
-    /** Include offer/pricing info in response */
-    includeOffer?: boolean;
-    /** Include ratings in response */
-    includeRating?: boolean;
 }
 
 /**
- * Product from Bol.com API
+ * Bol.com product from API response
  */
-export interface BolProduct {
+export interface BolApiProduct {
     ean: string;
     bolProductId?: string;
     title: string;
     description?: string;
     shortDescription?: string;
+    brand?: string;
     url?: string;
     mainImageUrl?: string;
-    images?: Array<{ url: string; width?: number; height?: number }>;
+    images?: Array<{
+        url: string;
+        width?: number;
+        height?: number;
+        displayOrder?: number;
+    }>;
     bestOffer?: {
-        price?: { value: number; currency?: string };
-        strikethroughPrice?: { value: number };
+        offerId?: string;
+        price?: { value: number; currency: string };
+        strikethroughPrice?: { value?: number; currency?: string };
         discountPercentage?: number;
         availability?: string;
         delivery?: { deliveryDescription?: string };
@@ -55,227 +60,152 @@ export interface BolProduct {
     rating?: {
         averageRating?: number;
         totalRatings?: number;
+        totalReviews?: number;
     };
-    brand?: string;
-    categories?: Array<{ id: string; name: string }>;
-    specifications?: Array<{ name: string; value: string }>;
+    specifications?: Array<{
+        key: string;
+        name: string;
+        value: string;
+        groupTitle?: string;
+    }>;
+    categories?: Array<{
+        categoryId: string;
+        categoryName: string;
+        isPrimary?: boolean;
+    }>;
 }
 
 /**
- * Response from popular products endpoint
+ * API response for popular products or search
  */
-export interface PopularProductsResponse {
-    products: BolProduct[];
+export interface BolApiProductsResponse {
+    products: BolApiProduct[];
+    totalResults?: number;
     categoryId?: string;
     categoryName?: string;
+    relevantCategories?: Array<{
+        id: string;
+        name: string;
+        productCount?: number;
+    }>;
 }
 
 /**
- * Response from search endpoint
+ * Error response from API
  */
-export interface SearchProductsResponse {
-    products: BolProduct[];
-    totalResults?: number;
-    page?: number;
-    limit?: number;
-    relevantCategories?: Array<{ id: string; name: string; productCount?: number }>;
-}
-
-/**
- * API error response
- */
-export interface BolApiError {
+export interface BolApiErrorResponse {
     status: number;
-    code: string;
-    message: string;
-    isRetryable: boolean;
+    title?: string;
+    detail?: string;
+    type?: string;
+    violations?: Array<{ name: string; reason: string }>;
 }
 
 /**
- * Result from category request with error info
+ * Result of fetching products for a category
  */
-export interface CategoryResult {
+export interface CategoryFetchResult {
     categoryKey: string;
-    categoryId: string;
-    success: boolean;
-    products: BolProduct[];
-    error?: BolApiError;
+    categoryId?: string;
+    products: BolApiProduct[];
+    error?: string;
+    errorCode?: number;
     usedFallback: boolean;
 }
 
 // ============================================================================
-// ERROR CODES AND MESSAGES
-// ============================================================================
-
-/**
- * User-friendly error messages for API status codes
- */
-export const ERROR_MESSAGES: Record<number, string> = {
-    400: 'Ongeldige aanvraag - controleer de parameters',
-    401: 'Niet geautoriseerd - controleer API credentials',
-    403: 'Geen toegang - API key mist rechten',
-    404: 'Geen producten gevonden in deze categorie',
-    406: 'Content type niet ondersteund',
-    429: 'Te veel aanvragen - probeer later opnieuw',
-    500: 'Bol.com server fout - probeer later opnieuw',
-    502: 'Bol.com tijdelijk onbereikbaar',
-    503: 'Bol.com onderhoud - probeer later opnieuw',
-    504: 'Bol.com reageerde niet op tijd'
-};
-
-/**
- * Retryable status codes
- */
-const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
-
-// ============================================================================
-// CONFIGURATION
+// CONSTANTS
 // ============================================================================
 
 const API_BASE_URL = 'https://api.bol.com';
-const TOKEN_ENDPOINT = 'https://login.bol.com/token';
 const API_PATH = '/marketing/catalog/v1';
+const DEFAULT_COUNTRY_CODE = 'NL';
+const DEFAULT_ACCEPT_LANGUAGE = 'nl';
+const DEFAULT_PAGE_SIZE = 24;
+const MAX_PAGE_SIZE = 100;
+const DEFAULT_CONCURRENCY = 3;
+const REQUEST_DELAY_MS = 500; // Delay between requests to avoid rate limiting
 
-/**
- * Default options for API requests
- */
-const DEFAULT_OPTIONS: Required<Omit<BolApiOptions, 'authToken'>> = {
-    countryCode: 'NL',
-    acceptLanguage: 'nl',
-    includeImage: true,
-    includeOffer: true,
-    includeRating: true
+// HTTP status codes with their user-friendly messages
+const ERROR_MESSAGES: Record<number, string> = {
+    400: 'Ongeldige aanvraag. Controleer de categorie parameters.',
+    404: 'Geen producten gevonden voor deze categorie.',
+    406: 'De server kan dit verzoek niet verwerken. Probeer het later opnieuw.',
+    500: 'Bol.com server fout. Probeer het later opnieuw.',
+    503: 'Bol.com service is tijdelijk niet beschikbaar. Probeer het later opnieuw.',
 };
-
-// Token cache
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
-// ============================================================================
-// AUTHENTICATION
-// ============================================================================
-
-/**
- * Get OAuth2 access token from Bol.com
- * 
- * Uses client credentials flow with BOL_CLIENT_ID and BOL_CLIENT_SECRET
- */
-export async function getAccessToken(): Promise<string> {
-    // Check for cached token
-    if (cachedToken && Date.now() < cachedToken.expiresAt - 30000) {
-        return cachedToken.token;
-    }
-
-    const clientId = process.env.BOL_CLIENT_ID || '';
-    const clientSecret = process.env.BOL_CLIENT_SECRET || '';
-
-    if (!clientId || !clientSecret) {
-        throw createApiError(401, 'BOL_AUTH_ERROR', 'BOL_CLIENT_ID en BOL_CLIENT_SECRET zijn niet geconfigureerd');
-    }
-
-    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-    const response = await fetch(TOKEN_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Basic ${credentials}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'
-        },
-        body: 'grant_type=client_credentials'
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw createApiError(response.status, 'TOKEN_ERROR', `OAuth token request failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    
-    // Cache the token
-    cachedToken = {
-        token: data.access_token,
-        expiresAt: Date.now() + (data.expires_in || 299) * 1000
-    };
-
-    return cachedToken.token;
-}
-
-/**
- * Clear the cached token
- */
-export function clearTokenCache(): void {
-    cachedToken = null;
-}
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
 /**
- * Create a structured API error
+ * Delay execution for rate limiting
  */
-function createApiError(status: number, code: string, message: string): BolApiError {
-    return {
-        status,
-        code,
-        message: ERROR_MESSAGES[status] || message,
-        isRetryable: RETRYABLE_STATUS_CODES.includes(status)
+function delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Build request headers for Bol.com API
+ */
+function buildHeaders(options: BolApiOptions = {}): Record<string, string> {
+    const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'Accept-Language': options.acceptLanguage || DEFAULT_ACCEPT_LANGUAGE,
+        'Content-Type': 'application/json',
     };
+    
+    if (options.authToken) {
+        headers['Authorization'] = `Bearer ${options.authToken}`;
+    }
+    
+    return headers;
 }
 
 /**
- * Build query parameters for API requests
+ * Parse error response and return user-friendly message
  */
-function buildQueryParams(options: BolApiOptions, pageSize: number): URLSearchParams {
-    const params = new URLSearchParams();
-    
-    params.set('country-code', options.countryCode || DEFAULT_OPTIONS.countryCode);
-    params.set('page-size', String(pageSize));
-    
-    if (options.includeImage ?? DEFAULT_OPTIONS.includeImage) {
-        params.set('include-image', 'true');
+function parseErrorResponse(status: number, errorData?: BolApiErrorResponse): string {
+    if (errorData?.detail) {
+        return errorData.detail;
     }
-    if (options.includeOffer ?? DEFAULT_OPTIONS.includeOffer) {
-        params.set('include-offer', 'true');
-    }
-    if (options.includeRating ?? DEFAULT_OPTIONS.includeRating) {
-        params.set('include-rating', 'true');
-    }
-    
-    return params;
+    return ERROR_MESSAGES[status] || `API fout (${status}). Probeer het later opnieuw.`;
 }
 
 /**
- * Make authenticated API request
+ * Execute API request with error handling
  */
-async function makeRequest<T>(
-    endpoint: string,
+async function executeRequest<T>(
+    url: string,
     options: BolApiOptions = {}
-): Promise<T> {
-    const token = options.authToken || await getAccessToken();
-    
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-            'Accept-Language': options.acceptLanguage || DEFAULT_OPTIONS.acceptLanguage
+): Promise<{ data?: T; error?: string; status?: number }> {
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: buildHeaders(options),
+        });
+        
+        if (!response.ok) {
+            let errorData: BolApiErrorResponse | undefined;
+            try {
+                errorData = await response.json();
+            } catch {
+                // Failed to parse error response
+            }
+            
+            return {
+                error: parseErrorResponse(response.status, errorData),
+                status: response.status,
+            };
         }
-    });
-
-    if (!response.ok) {
-        // Handle 401 by clearing cache and retrying once
-        if (response.status === 401 && !options.authToken) {
-            clearTokenCache();
-            const newToken = await getAccessToken();
-            return makeRequest(endpoint, { ...options, authToken: newToken });
-        }
-
-        const errorText = await response.text();
-        throw createApiError(response.status, `API_ERROR_${response.status}`, errorText);
+        
+        const data = await response.json() as T;
+        return { data };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Netwerkfout';
+        return { error: `Verbindingsfout: ${message}`, status: 0 };
     }
-
-    return response.json();
 }
 
 // ============================================================================
@@ -283,289 +213,364 @@ async function makeRequest<T>(
 // ============================================================================
 
 /**
- * Get popular products by category ID
+ * Get popular products by Bol.com category ID.
  * 
- * Primary endpoint: GET /marketing/catalog/v1/products/lists/popular
+ * @param categoryId - The Bol.com numeric category ID
+ * @param pageSize - Number of products to fetch (max 100)
+ * @param options - API request options
+ * @returns Promise with products response or error
  * 
- * @param categoryId - Bol.com numeric category ID
- * @param pageSize - Number of products to return (default: 10, max: 100)
- * @param options - Additional API options
- * @returns Popular products response
+ * @example
+ * ```typescript
+ * const result = await getPopularProductsByCategory('12442', 10);
+ * if (result.products.length > 0) {
+ *     console.log('Found products:', result.products);
+ * }
+ * ```
  */
 export async function getPopularProductsByCategory(
     categoryId: string,
-    pageSize: number = 10,
+    pageSize: number = DEFAULT_PAGE_SIZE,
     options: BolApiOptions = {}
-): Promise<PopularProductsResponse> {
-    const params = buildQueryParams(options, Math.min(pageSize, 100));
-    params.set('category-id', categoryId);
-
-    const endpoint = `${API_PATH}/products/lists/popular?${params.toString()}`;
+): Promise<{ products: BolApiProduct[]; error?: string; status?: number }> {
+    const countryCode = options.countryCode || DEFAULT_COUNTRY_CODE;
+    const size = Math.min(pageSize, MAX_PAGE_SIZE);
     
-    const data = await makeRequest<{
-        categoryId?: string;
-        categoryName?: string;
-        products?: BolProduct[];
-    }>(endpoint, options);
-
-    return {
-        products: data.products || [],
-        categoryId: data.categoryId,
-        categoryName: data.categoryName
-    };
+    const url = `${API_BASE_URL}${API_PATH}/products/lists/popular?` + new URLSearchParams({
+        'category-id': categoryId,
+        'country-code': countryCode,
+        'page-size': String(size),
+        'include-image': 'true',
+        'include-offer': 'true',
+        'include-rating': 'true',
+    });
+    
+    const result = await executeRequest<BolApiProductsResponse>(url, options);
+    
+    if (result.error) {
+        return { products: [], error: result.error, status: result.status };
+    }
+    
+    return { products: result.data?.products || [] };
 }
 
 /**
- * Search for products
+ * Search for products using a search term.
+ * Used as fallback when category ID lookup returns no results.
  * 
- * Endpoint: GET /marketing/catalog/v1/products/search
+ * @param searchTerm - The search term to use
+ * @param pageSize - Number of products to fetch (max 100)
+ * @param options - API request options
+ * @param includeRelevantCategories - Whether to include relevant categories in response
+ * @returns Promise with products response or error
  * 
- * @param searchTerm - Search query
- * @param pageSize - Number of products to return (default: 10, max: 100)
- * @param options - Additional API options
- * @returns Search response with products and optional relevant categories
+ * @example
+ * ```typescript
+ * const result = await searchProducts('scheerapparaat', 10);
+ * if (result.products.length > 0) {
+ *     console.log('Found products:', result.products);
+ * }
+ * ```
  */
 export async function searchProducts(
     searchTerm: string,
-    pageSize: number = 10,
-    options: BolApiOptions & { includeRelevantCategories?: boolean } = {}
-): Promise<SearchProductsResponse> {
-    const params = buildQueryParams(options, Math.min(pageSize, 100));
-    params.set('search-term', searchTerm);
+    pageSize: number = DEFAULT_PAGE_SIZE,
+    options: BolApiOptions = {},
+    includeRelevantCategories: boolean = false
+): Promise<{
+    products: BolApiProduct[];
+    relevantCategories?: Array<{ id: string; name: string; productCount?: number }>;
+    error?: string;
+    status?: number;
+}> {
+    const countryCode = options.countryCode || DEFAULT_COUNTRY_CODE;
+    const size = Math.min(pageSize, MAX_PAGE_SIZE);
     
-    if (options.includeRelevantCategories) {
-        params.set('include-relevant-categories', 'true');
+    const params = new URLSearchParams({
+        'search-term': searchTerm,
+        'country-code': countryCode,
+        'page-size': String(size),
+        'include-image': 'true',
+        'include-offer': 'true',
+        'include-rating': 'true',
+    });
+    
+    if (includeRelevantCategories) {
+        params.append('include-relevant-categories', 'true');
     }
-
-    const endpoint = `${API_PATH}/products/search?${params.toString()}`;
     
-    const data = await makeRequest<{
-        products?: BolProduct[];
-        totalResults?: number;
-        page?: number;
-        limit?: number;
-        relevantCategories?: Array<{ id: string; name: string; productCount?: number }>;
-    }>(endpoint, options);
-
+    const url = `${API_BASE_URL}${API_PATH}/products/search?${params}`;
+    
+    const result = await executeRequest<BolApiProductsResponse>(url, options);
+    
+    if (result.error) {
+        return { products: [], error: result.error, status: result.status };
+    }
+    
     return {
-        products: data.products || [],
-        totalResults: data.totalResults,
-        page: data.page,
-        limit: data.limit,
-        relevantCategories: data.relevantCategories
+        products: result.data?.products || [],
+        relevantCategories: result.data?.relevantCategories,
     };
 }
 
 /**
- * Get single product by EAN
+ * Get a single product by EAN.
  * 
- * Endpoint: GET /marketing/catalog/v1/products/{ean}
+ * @param ean - The European Article Number
+ * @param options - API request options
+ * @returns Promise with product or error
  * 
- * @param ean - European Article Number
- * @param options - Additional API options
- * @returns Product details or null if not found
+ * @example
+ * ```typescript
+ * const result = await getProductByEan('8718469564987');
+ * if (result.product) {
+ *     console.log('Product:', result.product.title);
+ * }
+ * ```
  */
 export async function getProductByEan(
     ean: string,
     options: BolApiOptions = {}
-): Promise<BolProduct | null> {
-    const params = buildQueryParams(options, 1);
+): Promise<{ product?: BolApiProduct; error?: string; status?: number }> {
+    const countryCode = options.countryCode || DEFAULT_COUNTRY_CODE;
     
-    const endpoint = `${API_PATH}/products/${ean}?${params.toString()}`;
+    const url = `${API_BASE_URL}${API_PATH}/products/${ean}?` + new URLSearchParams({
+        'country-code': countryCode,
+        'include-image': 'true',
+        'include-offer': 'true',
+        'include-rating': 'true',
+    });
     
-    try {
-        return await makeRequest<BolProduct>(endpoint, options);
-    } catch (error) {
-        if ((error as BolApiError).status === 404) {
-            return null;
-        }
-        throw error;
+    const result = await executeRequest<BolApiProduct>(url, options);
+    
+    if (result.error) {
+        return { error: result.error, status: result.status };
     }
+    
+    return { product: result.data };
 }
 
 /**
- * Discover category IDs by searching with include-relevant-categories
+ * Fetch products for a category with automatic fallback to search.
  * 
- * Useful for finding Bol.com category IDs for new product categories.
+ * First attempts to fetch popular products by category ID.
+ * If that fails or returns no results, falls back to search by category name.
  * 
- * @param searchTerms - Array of search terms to discover categories for
- * @param options - Additional API options
- * @returns Map of search term to discovered categories
+ * @param categoryKey - The category key (e.g., 'verzorging', 'televisies')
+ * @param pageSize - Number of products to fetch
+ * @param options - API request options
+ * @returns Promise with fetch result including products or error
+ * 
+ * @example
+ * ```typescript
+ * const result = await fetchProductsForCategory('verzorging', 5);
+ * if (result.products.length > 0) {
+ *     console.log(`Found ${result.products.length} products`);
+ *     if (result.usedFallback) {
+ *         console.log('Used search fallback');
+ *     }
+ * }
+ * ```
  */
-export async function discoverCategories(
-    searchTerms: string[],
+export async function fetchProductsForCategory(
+    categoryKey: string,
+    pageSize: number = DEFAULT_PAGE_SIZE,
     options: BolApiOptions = {}
-): Promise<Map<string, Array<{ id: string; name: string; productCount?: number }>>> {
-    const results = new Map<string, Array<{ id: string; name: string; productCount?: number }>>();
-
-    for (const term of searchTerms) {
-        try {
-            const response = await searchProducts(term, 1, {
-                ...options,
-                includeRelevantCategories: true
-            });
-            
-            results.set(term, response.relevantCategories || []);
-            
-            // Rate limiting
-            await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (error) {
-            console.error(`Error discovering categories for "${term}":`, error);
-            results.set(term, []);
+): Promise<CategoryFetchResult> {
+    const categoryId = getCategoryId(categoryKey);
+    
+    // Try category ID lookup first
+    if (categoryId) {
+        const result = await getPopularProductsByCategory(categoryId, pageSize, options);
+        
+        // If we got products, return them
+        if (result.products.length > 0) {
+            return {
+                categoryKey,
+                categoryId,
+                products: result.products,
+                usedFallback: false,
+            };
         }
+        
+        // If 404 or empty, try fallback
+        if (!result.error || result.status === 404) {
+            console.log(`[BolApi] Category ${categoryKey} (ID: ${categoryId}) returned no products, trying search fallback`);
+        } else {
+            // For other errors, still try fallback but log the error
+            console.warn(`[BolApi] Category ${categoryKey} (ID: ${categoryId}) error: ${result.error}`);
+        }
+    } else {
+        console.log(`[BolApi] No category ID for ${categoryKey}, using search fallback`);
     }
-
-    return results;
-}
-
-/**
- * Fetch products for a category with fallback to search
- * 
- * Tries the popular products endpoint first, falls back to search if:
- * - Primary endpoint returns empty
- * - Primary endpoint returns 404
- * 
- * @param categoryId - Bol.com category ID
- * @param searchTerm - Fallback search term
- * @param pageSize - Number of products
- * @param options - API options
- * @returns Products and whether fallback was used
- */
-export async function fetchCategoryProducts(
-    categoryId: string,
-    searchTerm: string,
-    pageSize: number = 10,
-    options: BolApiOptions = {}
-): Promise<{ products: BolProduct[]; usedFallback: boolean; error?: BolApiError }> {
-    try {
-        // Try primary endpoint first
-        const response = await getPopularProductsByCategory(categoryId, pageSize, options);
-        
-        if (response.products.length > 0) {
-            return { products: response.products, usedFallback: false };
-        }
-        
-        // Empty result - try fallback
-        console.log(`[BolApi] Category ${categoryId} returned empty, trying search fallback`);
-    } catch (error) {
-        const apiError = error as BolApiError;
-        
-        // Only fallback on 404, other errors should propagate
-        if (apiError.status !== 404) {
-            return { products: [], usedFallback: false, error: apiError };
-        }
-        
-        console.log(`[BolApi] Category ${categoryId} not found (404), trying search fallback`);
-    }
-
+    
     // Fallback to search
-    try {
-        const searchResponse = await searchProducts(searchTerm, pageSize, options);
-        return { products: searchResponse.products, usedFallback: true };
-    } catch (error) {
-        return { 
-            products: [], 
-            usedFallback: true, 
-            error: error as BolApiError 
+    const searchTerm = getCategorySearchTerm(categoryKey);
+    const searchResult = await searchProducts(searchTerm, pageSize, options);
+    
+    if (searchResult.error && searchResult.products.length === 0) {
+        return {
+            categoryKey,
+            categoryId,
+            products: [],
+            error: searchResult.error,
+            errorCode: searchResult.status,
+            usedFallback: true,
         };
     }
+    
+    return {
+        categoryKey,
+        categoryId,
+        products: searchResult.products,
+        usedFallback: true,
+    };
 }
 
 /**
- * Fetch products for multiple categories concurrently
+ * Fetch products for multiple categories concurrently.
+ * Handles deduplication by EAN and respects rate limiting.
  * 
- * @param categories - Array of { categoryKey, categoryId, searchTerm }
- * @param pageSize - Products per category
+ * @param categoryKeys - Array of category keys to fetch
+ * @param productsPerCategory - Number of products per category
+ * @param options - API request options
  * @param concurrency - Maximum concurrent requests (default: 3)
- * @param options - API options
- * @returns Array of results per category
+ * @returns Promise with all products and per-category results
+ * 
+ * @example
+ * ```typescript
+ * const result = await fetchProductsForCategories(
+ *     ['televisies', 'verzorging', 'laptops'],
+ *     5
+ * );
+ * console.log(`Total unique products: ${result.products.length}`);
+ * result.categoryResults.forEach(r => {
+ *     console.log(`${r.categoryKey}: ${r.products.length} products`);
+ * });
+ * ```
  */
-export async function fetchMultipleCategories(
-    categories: Array<{ categoryKey: string; categoryId: string; searchTerm: string }>,
-    pageSize: number = 10,
-    concurrency: number = 3,
-    options: BolApiOptions = {}
-): Promise<CategoryResult[]> {
-    const results: CategoryResult[] = [];
+export async function fetchProductsForCategories(
+    categoryKeys: string[],
+    productsPerCategory: number = DEFAULT_PAGE_SIZE,
+    options: BolApiOptions = {},
+    concurrency: number = DEFAULT_CONCURRENCY
+): Promise<{
+    products: BolApiProduct[];
+    categoryResults: CategoryFetchResult[];
+    totalRequested: number;
+    totalFetched: number;
+    errors: Array<{ category: string; error: string }>;
+}> {
+    const categoryResults: CategoryFetchResult[] = [];
+    const errors: Array<{ category: string; error: string }> = [];
+    const seenEans = new Set<string>();
+    const allProducts: BolApiProduct[] = [];
     
-    // Process in batches based on concurrency
-    for (let i = 0; i < categories.length; i += concurrency) {
-        const batch = categories.slice(i, i + concurrency);
+    // Process categories in batches based on concurrency limit
+    for (let i = 0; i < categoryKeys.length; i += concurrency) {
+        const batch = categoryKeys.slice(i, i + concurrency);
         
-        const batchPromises = batch.map(async (cat) => {
-            const result = await fetchCategoryProducts(
-                cat.categoryId,
-                cat.searchTerm,
-                pageSize,
-                options
-            );
+        // Execute batch concurrently
+        const batchResults = await Promise.all(
+            batch.map(categoryKey => fetchProductsForCategory(categoryKey, productsPerCategory, options))
+        );
+        
+        // Process results
+        for (const result of batchResults) {
+            categoryResults.push(result);
             
-            return {
-                categoryKey: cat.categoryKey,
-                categoryId: cat.categoryId,
-                success: result.products.length > 0,
-                products: result.products,
-                error: result.error,
-                usedFallback: result.usedFallback
-            };
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults);
-        
-        // Small delay between batches to avoid rate limiting
-        if (i + concurrency < categories.length) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+            if (result.error) {
+                errors.push({ category: result.categoryKey, error: result.error });
+            }
+            
+            // Deduplicate by EAN
+            for (const product of result.products) {
+                if (!seenEans.has(product.ean)) {
+                    seenEans.add(product.ean);
+                    allProducts.push(product);
+                }
+            }
         }
+        
+        // Rate limiting delay between batches (not after last batch)
+        if (i + concurrency < categoryKeys.length) {
+            await delay(REQUEST_DELAY_MS);
+        }
+    }
+    
+    return {
+        products: allProducts,
+        categoryResults,
+        totalRequested: categoryKeys.length * productsPerCategory,
+        totalFetched: allProducts.length,
+        errors,
+    };
+}
+
+/**
+ * Discover category IDs by searching with terms and getting relevant categories.
+ * This is useful for finding Bol.com category IDs for new categories.
+ * 
+ * @param searchTerms - Array of search terms to try
+ * @param options - API request options
+ * @returns Promise with discovered category mappings
+ * 
+ * @example
+ * ```typescript
+ * const categories = await discoverCategoryIds(['televisie', 'laptop', 'smartphone']);
+ * categories.forEach(cat => {
+ *     console.log(`${cat.searchTerm}: ${cat.categories.map(c => `${c.name} (${c.id})`).join(', ')}`);
+ * });
+ * ```
+ */
+export async function discoverCategoryIds(
+    searchTerms: string[],
+    options: BolApiOptions = {}
+): Promise<Array<{
+    searchTerm: string;
+    categories: Array<{ id: string; name: string; productCount?: number }>;
+    error?: string;
+}>> {
+    const results: Array<{
+        searchTerm: string;
+        categories: Array<{ id: string; name: string; productCount?: number }>;
+        error?: string;
+    }> = [];
+    
+    for (const searchTerm of searchTerms) {
+        const result = await searchProducts(searchTerm, 1, options, true);
+        
+        if (result.error) {
+            results.push({
+                searchTerm,
+                categories: [],
+                error: result.error,
+            });
+        } else {
+            results.push({
+                searchTerm,
+                categories: result.relevantCategories || [],
+            });
+        }
+        
+        // Rate limiting
+        await delay(REQUEST_DELAY_MS);
     }
     
     return results;
-}
-
-/**
- * Deduplicate products by EAN
- * 
- * @param products - Array of products (may contain duplicates)
- * @returns Deduplicated array
- */
-export function deduplicateByEan(products: BolProduct[]): BolProduct[] {
-    const seen = new Set<string>();
-    const unique: BolProduct[] = [];
-    
-    for (const product of products) {
-        if (product.ean && !seen.has(product.ean)) {
-            seen.add(product.ean);
-            unique.push(product);
-        }
-    }
-    
-    return unique;
-}
-
-/**
- * Check if the API is configured
- */
-export function isApiConfigured(): boolean {
-    return !!(process.env.BOL_CLIENT_ID && process.env.BOL_CLIENT_SECRET);
-}
-
-/**
- * Get user-friendly error message for a status code
- */
-export function getErrorMessage(status: number): string {
-    return ERROR_MESSAGES[status] || `Onbekende fout (status ${status})`;
 }
 
 export default {
     getPopularProductsByCategory,
     searchProducts,
     getProductByEan,
-    fetchCategoryProducts,
-    fetchMultipleCategories,
-    discoverCategories,
-    deduplicateByEan,
-    isApiConfigured,
-    getErrorMessage,
-    getAccessToken,
-    clearTokenCache
+    fetchProductsForCategory,
+    fetchProductsForCategories,
+    discoverCategoryIds,
+    // Constants for external use
+    DEFAULT_COUNTRY_CODE,
+    DEFAULT_ACCEPT_LANGUAGE,
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    DEFAULT_CONCURRENCY,
 };
