@@ -749,31 +749,11 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
     automationLoading,
     onTriggerJob
 }) => {
-    // Defensive checks - ensure all nested properties have defaults
-    const productGen = automationConfig.productGeneration || {
-        enabled: false,
-        productsPerDay: 3,
-        categories: [],
-        preferredTime: '09:00'
-    };
-    const contentGen = automationConfig.contentGeneration || {
-        enabled: false,
-        frequency: 'weekly',
-        contentTypes: [],
-        postsPerWeek: 3,
-        preferredDays: []
-    };
-    const linkMon = automationConfig.linkMonitoring || {
-        enabled: true,
-        checkFrequency: 'daily',
-        autoFix: true,
-        notifications: true
-    };
-    const commTrack = automationConfig.commissionTracking || {
-        enabled: true,
-        syncFrequency: 'daily',
-        networks: []
-    };
+    // Defensive checks - use imported DEFAULT_CONFIG for consistency
+    const productGen = automationConfig.productGeneration || DEFAULT_CONFIG.productGeneration;
+    const contentGen = automationConfig.contentGeneration || DEFAULT_CONFIG.contentGeneration;
+    const linkMon = automationConfig.linkMonitoring || DEFAULT_CONFIG.linkMonitoring;
+    const commTrack = automationConfig.commissionTracking || DEFAULT_CONFIG.commissionTracking;
 
     return (
     <div className="space-y-6">
@@ -920,13 +900,8 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
 const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
-    // Defensive check - ensure productGeneration always exists
-    const productGen = automationConfig.productGeneration || {
-        enabled: false,
-        productsPerDay: 3,
-        categories: [],
-        preferredTime: '09:00'
-    };
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const productGen = automationConfig.productGeneration || DEFAULT_CONFIG.productGeneration;
     
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -1040,14 +1015,8 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
 const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
-    // Defensive check - ensure contentGeneration always exists
-    const contentGen = automationConfig.contentGeneration || {
-        enabled: false,
-        frequency: 'weekly',
-        contentTypes: [],
-        postsPerWeek: 3,
-        preferredDays: []
-    };
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const contentGen = automationConfig.contentGeneration || DEFAULT_CONFIG.contentGeneration;
     
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -1202,25 +1171,10 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
 const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
-    // Defensive checks - ensure all nested properties have defaults
-    const linkMon = automationConfig.linkMonitoring || {
-        enabled: true,
-        checkFrequency: 'daily',
-        autoFix: true,
-        notifications: true
-    };
-    const commTrack = automationConfig.commissionTracking || {
-        enabled: true,
-        syncFrequency: 'daily',
-        networks: []
-    };
-    const perf = automationConfig.performance || {
-        enableCaching: true,
-        enableLazyLoading: true,
-        enableImageOptimization: true,
-        minConversionRate: 1.0,
-        autoRemoveLowPerformers: false
-    };
+    // Defensive checks - use imported DEFAULT_CONFIG for consistency
+    const linkMon = automationConfig.linkMonitoring || DEFAULT_CONFIG.linkMonitoring;
+    const commTrack = automationConfig.commissionTracking || DEFAULT_CONFIG.commissionTracking;
+    const perf = automationConfig.performance || DEFAULT_CONFIG.performance;
     
     return (
         <div className="space-y-6">
@@ -1480,12 +1434,8 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
 const NotificationsSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
-    // Defensive check - ensure notifications always exists
-    const notif = automationConfig.notifications || {
-        email: '',
-        alertTypes: [],
-        emailEnabled: false
-    };
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const notif = automationConfig.notifications || DEFAULT_CONFIG.notifications;
     
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
