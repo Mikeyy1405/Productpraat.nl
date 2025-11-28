@@ -1,6 +1,5 @@
 
-import React, { useState, useRef } from 'react';
-import { CATEGORIES } from '../types';
+import React, { useState } from 'react';
 
 interface HeaderProps {
     onNavigate: (view: 'home' | 'admin' | 'about' | 'contact' | 'artikelen' | 'bolshop') => void;
@@ -9,35 +8,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, activeView }) => {
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const timeoutRef = useRef<number | null>(null);
-
-    const handleMouseEnter = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setIsMenuOpen(true);
-    };
-
-    const handleMouseLeave = () => {
-        timeoutRef.current = window.setTimeout(() => {
-            setIsMenuOpen(false);
-        }, 150);
-    };
-
-    const categoryGroups = [
-        {
-            title: "Beeld, Geluid & Smart",
-            items: ['televisies', 'audio', 'laptops', 'smartphones']
-        },
-        {
-            title: "Huishouden & Wonen",
-            items: ['wasmachines', 'stofzuigers', 'smarthome', 'matrassen']
-        },
-        {
-            title: "Keuken & Verzorging",
-            items: ['airfryers', 'koffie', 'keuken', 'verzorging']
-        }
-    ];
 
     return (
         <header className="bg-slate-900 shadow-sm sticky top-0 z-50 border-b border-slate-800 font-sans">
@@ -92,61 +63,6 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                     
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-2 font-semibold text-sm text-slate-300">
-                        <div 
-                            className="relative group py-2"
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
-                        >
-                            <button 
-                                className={`flex items-center gap-2 py-2 px-4 rounded-lg transition ${isMenuOpen ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}
-                            >
-                                <i className="fas fa-bars text-xs"></i> Categorieën
-                            </button>
-
-                            {/* MEGA MENU DROPDOWN */}
-                            {isMenuOpen && (
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-[800px] bg-slate-900 shadow-2xl shadow-black/50 rounded-2xl border border-slate-700 overflow-hidden animate-fade-in z-[100] mt-2">
-                                    <div className="grid grid-cols-3 divide-x divide-slate-800 bg-slate-900">
-                                        {categoryGroups.map((group, idx) => (
-                                            <div key={idx} className="p-6">
-                                                <h4 className="font-bold text-slate-100 text-xs uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">
-                                                    {group.title}
-                                                </h4>
-                                                <ul className="space-y-2">
-                                                    {group.items.map(catId => {
-                                                        const cat = CATEGORIES[catId];
-                                                        if (!cat) return null;
-                                                        return (
-                                                            <li key={catId}>
-                                                                <button 
-                                                                    onClick={() => {
-                                                                        onSelectCategory(catId);
-                                                                        setIsMenuOpen(false);
-                                                                    }}
-                                                                    className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-slate-800 group/item transition text-left"
-                                                                >
-                                                                    <div className="w-8 h-8 rounded-full bg-slate-800 text-[#1877F2] flex items-center justify-center text-sm group-hover/item:bg-[#1877F2] group-hover/item:text-white transition border border-slate-700 group-hover/item:border-[#1877F2]">
-                                                                        <i className={`fas ${cat.icon}`}></i>
-                                                                    </div>
-                                                                    <span className="text-slate-400 font-medium group-hover/item:text-white text-sm">
-                                                                        {cat.name}
-                                                                    </span>
-                                                                </button>
-                                                            </li>
-                                                        );
-                                                    })}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="bg-slate-950 px-6 py-3 border-t border-slate-800 flex justify-between items-center text-xs text-slate-500">
-                                        <span><i className="fas fa-check-circle text-green-500 mr-1"></i> Onafhankelijk getest</span>
-                                        <span><i className="fas fa-bolt text-orange-500 mr-1"></i> Dagelijks nieuwe deals</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
                         <button onClick={() => onNavigate('artikelen')} className={`py-2 px-4 rounded-lg transition flex items-center gap-2 ${activeView === 'artikelen' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>
                             <i className="fas fa-newspaper text-xs"></i> Artikelen
                         </button>
@@ -178,28 +94,6 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                                 <button onClick={() => { onNavigate('admin'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-[#1877F2] py-2 text-left">Admin Login</button>
                             </div>
                         </div>
-
-                        {categoryGroups.map((group, idx) => (
-                            <div key={idx}>
-                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 tracking-wider">{group.title}</h4>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {group.items.map(catId => {
-                                        const cat = CATEGORIES[catId];
-                                        if (!cat) return null;
-                                        return (
-                                            <button 
-                                                key={catId}
-                                                onClick={() => { onSelectCategory(catId); setIsMobileMenuOpen(false); }}
-                                                className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-3 rounded-xl active:scale-95 transition"
-                                            >
-                                                <i className={`fas ${cat.icon} text-[#1877F2]`}></i>
-                                                <span className="text-sm text-slate-300 font-medium">{cat.name}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
                     </div>
                 </div>
             )}
