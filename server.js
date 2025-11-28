@@ -506,6 +506,163 @@ const BOL_DEFAULT_CATEGORIES = {
     '15654': 'Baby & Kind',
 };
 
+// ============================================================================
+// CATEGORY MAPPING - Maps UI category buttons to Bol.com numeric category IDs
+// ============================================================================
+
+/**
+ * Mapping of UI category names to Bol.com numeric category IDs.
+ * 
+ * These IDs are used with the Marketing Catalog API endpoints:
+ * - GET /marketing/catalog/v1/products/lists/popular?category-id={categoryId}
+ * - GET /marketing/catalog/v1/products/search?search-term={searchTerm}
+ */
+const CATEGORY_ID_MAPPING = {
+    // Electronics & Media
+    'televisies': '10651',
+    'audio': '14490',
+    'laptops': '4770',
+    'smartphones': '10852',
+    
+    // Home & Living
+    'wasmachines': '11462',
+    'stofzuigers': '20104',
+    'smarthome': '20637',
+    'matrassen': '10689',
+    
+    // Kitchen & Care
+    'airfryers': '43756',
+    'koffie': '10550',
+    'keuken': '10540',
+    'verzorging': '12442', // Confirmed from problem statement
+};
+
+/**
+ * Fallback search terms when category ID lookup fails or returns empty.
+ */
+const CATEGORY_SEARCH_FALLBACK = {
+    'televisies': 'televisie smart tv',
+    'audio': 'bluetooth speaker koptelefoon',
+    'laptops': 'laptop notebook',
+    'smartphones': 'smartphone mobiele telefoon',
+    'wasmachines': 'wasmachine',
+    'stofzuigers': 'stofzuiger robotstofzuiger',
+    'smarthome': 'smart home domotica',
+    'matrassen': 'matras',
+    'airfryers': 'airfryer heteluchtfriteuse',
+    'koffie': 'koffiezetapparaat espressomachine',
+    'keuken': 'keukenmachine blender',
+    'verzorging': 'scheerapparaat elektrische tandenborstel',
+};
+
+/**
+ * User-friendly error messages for API response codes
+ */
+const API_ERROR_MESSAGES = {
+    400: 'Ongeldige aanvraag. Controleer de categorie parameters.',
+    404: 'Geen producten gevonden voor deze categorie.',
+    406: 'De server kan dit verzoek niet verwerken. Probeer het later opnieuw.',
+    500: 'Bol.com server fout. Probeer het later opnieuw.',
+    503: 'Bol.com service is tijdelijk niet beschikbaar. Probeer het later opnieuw.',
+};
+
+/**
+ * Get user-friendly error message for API status code
+ */
+function getApiErrorMessage(status) {
+    return API_ERROR_MESSAGES[status] || `API fout (${status}). Probeer het later opnieuw.`;
+}
+
+/**
+ * Fetch products for a category using category ID with fallback to search.
+ * 
+ * @param {string} categoryKey - The category key (e.g., 'verzorging', 'televisies')
+ * @param {number} limit - Number of products to fetch
+ * @returns {Promise<{products: Array, error?: string, usedFallback: boolean, categoryId?: string}>}
+ */
+async function fetchProductsForCategory(categoryKey, limit = 50) {
+    const categoryId = CATEGORY_ID_MAPPING[categoryKey.toLowerCase()];
+    
+    // Try category ID lookup first if we have a mapping
+    if (categoryId && bolSyncService.isConfigured()) {
+        try {
+            const params = new URLSearchParams({
+                'category-id': categoryId,
+                'country-code': 'NL',
+                'page-size': String(Math.min(limit, 100)),
+                'include-image': 'true',
+                'include-offer': 'true',
+                'include-rating': 'true',
+            });
+            
+            const data = await bolSyncService.apiRequest(
+                `/marketing/catalog/v1/products/lists/popular?${params.toString()}`
+            );
+            
+            const products = data.products || [];
+            
+            if (products.length > 0) {
+                console.log(`[fetchProductsForCategory] Category ${categoryKey} (ID: ${categoryId}): ${products.length} products found`);
+                return {
+                    products,
+                    usedFallback: false,
+                    categoryId,
+                };
+            }
+            
+            console.log(`[fetchProductsForCategory] Category ${categoryKey} (ID: ${categoryId}): No products, trying fallback search`);
+        } catch (error) {
+            const errorMsg = error.message || String(error);
+            console.warn(`[fetchProductsForCategory] Category ${categoryKey} (ID: ${categoryId}) error: ${errorMsg}, trying fallback`);
+        }
+    }
+    
+    // Fallback to search
+    const searchTerm = CATEGORY_SEARCH_FALLBACK[categoryKey.toLowerCase()] || categoryKey;
+    
+    try {
+        if (!bolSyncService.isConfigured()) {
+            throw new Error('Bol.com API not configured. Set BOL_CLIENT_ID and BOL_CLIENT_SECRET.');
+        }
+        
+        const params = new URLSearchParams({
+            'search-term': searchTerm,
+            'country-code': 'NL',
+            'page-size': String(Math.min(limit, 100)),
+            'include-image': 'true',
+            'include-offer': 'true',
+            'include-rating': 'true',
+        });
+        
+        const data = await bolSyncService.apiRequest(
+            `/marketing/catalog/v1/products/search?${params.toString()}`
+        );
+        
+        const products = data.products || [];
+        console.log(`[fetchProductsForCategory] Search "${searchTerm}": ${products.length} products found`);
+        
+        return {
+            products,
+            usedFallback: true,
+            categoryId,
+        };
+    } catch (error) {
+        const errorMsg = error.message || String(error);
+        console.error(`[fetchProductsForCategory] Search "${searchTerm}" failed: ${errorMsg}`);
+        
+        // Try to extract status code from error message
+        const statusMatch = errorMsg.match(/(\d{3})/);
+        const status = statusMatch ? parseInt(statusMatch[1]) : 0;
+        
+        return {
+            products: [],
+            error: getApiErrorMessage(status) || errorMsg,
+            usedFallback: true,
+            categoryId,
+        };
+    }
+}
+
 app.use(express.json());
 app.use(express.static('dist', { index: false }));
 
@@ -1239,60 +1396,174 @@ app.post('/api/admin/quick-import', async (req, res) => {
         }
 
         let totalImported = 0;
+        let totalUpdated = 0;
         const results = [];
+        const categoryErrors = [];
+        const seenEans = new Set(); // For deduplication across categories
+        const CONCURRENCY_LIMIT = 3; // Process 3 categories at a time
+        const DELAY_BETWEEN_BATCHES = 500; // 500ms delay between batches
 
-        // Category name mapping
-        const categoryNames = {
-            'televisies': 'Televisies',
-            'audio': 'Audio',
-            'laptops': 'Laptops',
-            'smartphones': 'Smartphones',
-            'wasmachines': 'Wasmachines',
-            'stofzuigers': 'Stofzuigers',
-            'smarthome': 'Smart Home',
-            'matrassen': 'Matrassen',
-            'airfryers': 'Airfryers',
-            'koffie': 'Koffie',
-            'keuken': 'Keukenmachines',
-            'verzorging': 'Verzorging'
-        };
-
-        for (const category of categories) {
-            const searchTerm = categoryNames[category] || category;
-            console.log(`[QUICK-IMPORT] Processing: ${searchTerm} (limit: ${limit})`);
+        // Process categories in batches with concurrency limit
+        for (let i = 0; i < categories.length; i += CONCURRENCY_LIMIT) {
+            const batch = categories.slice(i, i + CONCURRENCY_LIMIT);
             
-            try {
-                const job = await bolSyncService.syncFromSearch(searchTerm, limit);
+            console.log(`[QUICK-IMPORT] Processing batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}: ${batch.join(', ')}`);
+            
+            // Fetch products for all categories in batch concurrently
+            const batchFetchResults = await Promise.all(
+                batch.map(category => fetchProductsForCategory(category, limit))
+            );
+            
+            // Process each category's results
+            for (let j = 0; j < batch.length; j++) {
+                const category = batch[j];
+                const fetchResult = batchFetchResults[j];
+                const categoryId = CATEGORY_ID_MAPPING[category.toLowerCase()];
                 
-                totalImported += (job.itemsCreated || 0);
-                results.push({
-                    category,
-                    searchTerm,
-                    imported: job.itemsCreated || 0,
-                    updated: job.itemsUpdated || 0,
-                    status: job.status
+                if (fetchResult.error) {
+                    categoryErrors.push({ category, error: fetchResult.error });
+                    results.push({
+                        category,
+                        categoryId: categoryId || null,
+                        imported: 0,
+                        updated: 0,
+                        error: fetchResult.error,
+                        status: 'failed',
+                        usedFallback: fetchResult.usedFallback
+                    });
+                    continue;
+                }
+                
+                // Deduplicate products by EAN
+                const uniqueProducts = fetchResult.products.filter(product => {
+                    if (!product.ean || seenEans.has(product.ean)) {
+                        return false;
+                    }
+                    seenEans.add(product.ean);
+                    return true;
                 });
                 
-                console.log(`[QUICK-IMPORT] ${searchTerm}: ${job.itemsCreated} imported`);
-            } catch (catError) {
-                console.error(`[QUICK-IMPORT] Error for ${searchTerm}:`, catError);
+                if (uniqueProducts.length === 0) {
+                    results.push({
+                        category,
+                        categoryId: categoryId || null,
+                        imported: 0,
+                        updated: 0,
+                        status: 'no_products',
+                        message: 'Geen producten gevonden voor deze categorie',
+                        usedFallback: fetchResult.usedFallback
+                    });
+                    continue;
+                }
+                
+                // Map and save products to database
+                const now = new Date().toISOString();
+                const dbProducts = uniqueProducts.map(bolProduct => ({
+                    ...bolSyncService.mapProductToDb(bolProduct),
+                    created_at: now,
+                }));
+                
+                // Get existing products EANs in one query
+                const eans = dbProducts.map(p => p.ean);
+                const { data: existingProducts, error: selectError } = await supabase
+                    .from('bol_products')
+                    .select('ean')
+                    .in('ean', eans);
+                
+                if (selectError) {
+                    console.error(`[QUICK-IMPORT] Error checking existing products:`, selectError);
+                    results.push({
+                        category,
+                        categoryId: categoryId || null,
+                        imported: 0,
+                        updated: 0,
+                        error: 'Database fout bij controleren bestaande producten',
+                        status: 'failed',
+                        usedFallback: fetchResult.usedFallback
+                    });
+                    continue;
+                }
+                
+                const existingEans = new Set((existingProducts || []).map(p => p.ean));
+                
+                // Split into new and existing products
+                const newProducts = dbProducts.filter(p => !existingEans.has(p.ean));
+                const updateProducts = dbProducts.filter(p => existingEans.has(p.ean));
+                
+                let categoryImported = 0;
+                let categoryUpdated = 0;
+                let categoryError = null;
+                
+                // Batch insert new products
+                if (newProducts.length > 0) {
+                    const { error: insertError } = await supabase
+                        .from('bol_products')
+                        .insert(newProducts);
+                    
+                    if (insertError) {
+                        console.error(`[QUICK-IMPORT] Insert error for ${category}:`, insertError);
+                        categoryError = `Fout bij invoegen: ${insertError.message}`;
+                    } else {
+                        categoryImported = newProducts.length;
+                    }
+                }
+                
+                // Batch update existing products using upsert
+                if (updateProducts.length > 0 && !categoryError) {
+                    const updateData = updateProducts.map(({ created_at, ...rest }) => rest);
+                    
+                    const { error: upsertError } = await supabase
+                        .from('bol_products')
+                        .upsert(updateData, { onConflict: 'ean' });
+                    
+                    if (upsertError) {
+                        console.error(`[QUICK-IMPORT] Upsert error for ${category}:`, upsertError);
+                        categoryError = `Fout bij bijwerken: ${upsertError.message}`;
+                    } else {
+                        categoryUpdated = updateProducts.length;
+                    }
+                }
+                
+                totalImported += categoryImported;
+                totalUpdated += categoryUpdated;
+                
                 results.push({
                     category,
-                    searchTerm,
-                    imported: 0,
-                    error: catError.message,
-                    status: 'failed'
+                    categoryId: categoryId || null,
+                    imported: categoryImported,
+                    updated: categoryUpdated,
+                    error: categoryError,
+                    status: categoryError ? 'partial' : 'completed',
+                    usedFallback: fetchResult.usedFallback
                 });
+                
+                console.log(`[QUICK-IMPORT] ${category} (ID: ${categoryId || 'search'}): ${categoryImported} imported, ${categoryUpdated} updated${fetchResult.usedFallback ? ' (fallback)' : ''}`);
+            }
+            
+            // Rate limiting delay between batches
+            if (i + CONCURRENCY_LIMIT < categories.length) {
+                await delay(DELAY_BETWEEN_BATCHES);
             }
         }
 
-        console.log(`[QUICK-IMPORT] Completed. Total imported: ${totalImported}`);
+        console.log(`[QUICK-IMPORT] Completed. Total imported: ${totalImported}, updated: ${totalUpdated}`);
+        
+        // Build response message
+        let message = `${totalImported} producten geïmporteerd`;
+        if (totalUpdated > 0) {
+            message += `, ${totalUpdated} bijgewerkt`;
+        }
+        if (categoryErrors.length > 0) {
+            message += `. ${categoryErrors.length} categorie(ën) met fouten.`;
+        }
 
         res.json({
-            success: true,
+            success: totalImported > 0 || totalUpdated > 0,
             imported: totalImported,
-            message: `${totalImported} producten geïmporteerd`,
-            details: results
+            updated: totalUpdated,
+            message,
+            details: results,
+            errors: categoryErrors.length > 0 ? categoryErrors : undefined
         });
 
     } catch (error) {
