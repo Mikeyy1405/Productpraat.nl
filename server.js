@@ -174,9 +174,16 @@ app.get('/api/products/search', async (req, res) => {
             .from('bol_products')
             .select('*', { count: 'exact' });
         
-        // Apply search filter
+        // Apply search filter with sanitization
         if (q) {
-            query = query.ilike('title', `%${q}%`);
+            // Sanitize search term: remove special SQL characters and limit length
+            const sanitizedQuery = String(q)
+                .replace(/[%_\\]/g, '') // Remove SQL wildcards
+                .substring(0, 100); // Limit length
+            
+            if (sanitizedQuery.trim()) {
+                query = query.ilike('title', `%${sanitizedQuery}%`);
+            }
         }
         
         // Apply price range

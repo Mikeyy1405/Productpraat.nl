@@ -60,11 +60,16 @@ function generateSessionId(): string {
 
 /**
  * Check if URL is a Bol.com URL
+ * Uses strict hostname matching to prevent subdomain bypass attacks
  */
 function isBolUrl(url: string): boolean {
     try {
         const parsed = new URL(url);
-        return parsed.hostname.includes('bol.com');
+        const hostname = parsed.hostname.toLowerCase();
+        // Strict matching: must be exactly bol.com or a subdomain of bol.com
+        return hostname === 'bol.com' || 
+               hostname === 'www.bol.com' || 
+               hostname.endsWith('.bol.com');
     } catch {
         return false;
     }

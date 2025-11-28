@@ -415,11 +415,35 @@ export const bolSyncService = {
             }
             
             // Deactivate old deals for products no longer on sale
-            await supabase
-                .from('bol_deals')
-                .update({ is_active: false, end_date: new Date().toISOString() })
-                .eq('is_active', true)
-                .not('product_id', 'in', `(${(dealProducts || []).map(p => `'${p.id}'`).join(',')})`);
+            const activeProductIds = (dealProducts || []).map(p => p.id);
+            if (activeProductIds.length > 0) {
+                // Build a query that excludes active deal products
+                let deactivateQuery = supabase
+                    .from('bol_deals')
+                    .update({ is_active: false, end_date: new Date().toISOString() })
+                    .eq('is_active', true);
+                
+                // Filter to exclude products that are still on sale
+                for (const id of activeProductIds) {
+                    deactivateQuery = deactivateQuery.neq('product_id', id);
+                }
+                
+                const { error: deactivateError } = await deactivateQuery;
+                    
+                if (deactivateError) {
+                    console.warn('[BolSync] Error deactivating old deals:', deactivateError);
+                }
+            } else {
+                // No active deals, deactivate all
+                const { error: deactivateError } = await supabase
+                    .from('bol_deals')
+                    .update({ is_active: false, end_date: new Date().toISOString() })
+                    .eq('is_active', true);
+                    
+                if (deactivateError) {
+                    console.warn('[BolSync] Error deactivating all deals:', deactivateError);
+                }
+            }
             
             job.status = 'completed';
             job.completedAt = new Date().toISOString();

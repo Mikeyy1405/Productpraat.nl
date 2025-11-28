@@ -261,7 +261,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                                 value={filters.priceRange[0]}
                                 onChange={(e) => onFilterChange({
                                     ...filters,
-                                    priceRange: [parseInt(e.target.value) || 0, filters.priceRange[1]],
+                                    priceRange: [parseInt(e.target.value) || priceMin, filters.priceRange[1]],
                                 })}
                                 placeholder="Min"
                                 className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#1877F2]"
@@ -272,7 +272,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                                 value={filters.priceRange[1]}
                                 onChange={(e) => onFilterChange({
                                     ...filters,
-                                    priceRange: [filters.priceRange[0], parseInt(e.target.value) || 5000],
+                                    priceRange: [filters.priceRange[0], parseInt(e.target.value) || priceMax],
                                 })}
                                 placeholder="Max"
                                 className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#1877F2]"

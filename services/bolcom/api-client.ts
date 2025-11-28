@@ -311,6 +311,17 @@ async function makeRequest<T>(
         retries = RATE_LIMIT.maxRetries,
     } = options;
 
+    // Check if API is configured
+    const apiKey = getEnvVar('BOL_API_KEY');
+    if (!apiKey) {
+        throw new BolApiError(
+            'Bol.com API is not configured. Set BOL_API_KEY environment variable.',
+            401,
+            undefined,
+            false
+        );
+    }
+
     // Check cache for GET requests
     const cacheKey = method === 'GET' ? `${method}:${buildUrl(path, params)}` : '';
     if (method === 'GET' && cacheKey) {
