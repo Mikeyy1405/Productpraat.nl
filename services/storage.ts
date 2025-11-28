@@ -1,6 +1,7 @@
 import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
 import { generateSlug, generateArticleSlug } from './urlService';
+import { SAMPLE_PRODUCTS } from '../data/realProducts';
 
 /**
  * Helper function to format error messages consistently
@@ -20,7 +21,10 @@ export const db = {
     // --- PRODUCTEN ---
     getAll: async (): Promise<Product[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            console.log("ℹ️ Supabase niet geconfigureerd, demo producten worden getoond");
+            return SAMPLE_PRODUCTS;
+        }
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -28,10 +32,19 @@ export const db = {
                 .order('created_at', { ascending: false });
             
             if (error) throw error;
-            return data as Product[] || [];
+            
+            // Return sample products if database is empty
+            if (!data || data.length === 0) {
+                console.log("ℹ️ Geen producten in database, demo producten worden getoond");
+                return SAMPLE_PRODUCTS;
+            }
+            
+            return data as Product[];
         } catch (e) {
             console.error("Fetch Error:", formatError(e));
-            return [];
+            // Return sample products as fallback on error
+            console.log("ℹ️ Fout bij ophalen producten, demo producten worden getoond");
+            return SAMPLE_PRODUCTS;
         }
     },
 
@@ -76,7 +89,10 @@ export const db = {
      */
     getByCategory: async (category: string): Promise<Product[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            // Return sample products filtered by category as fallback
+            return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+        }
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -85,10 +101,16 @@ export const db = {
                 .order('score', { ascending: false });
             
             if (error) throw error;
-            return data as Product[] || [];
+            
+            // Return sample products for this category if database is empty
+            if (!data || data.length === 0) {
+                return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+            }
+            
+            return data as Product[];
         } catch (e) {
             console.error("GetByCategory Error:", formatError(e));
-            return [];
+            return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
         }
     },
 
