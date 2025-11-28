@@ -17,6 +17,13 @@ const formatError = (e: unknown): string => {
     return String(e);
 };
 
+/**
+ * Helper function to get demo products filtered by category
+ */
+const getDemoProductsByCategory = (category: string): Product[] => {
+    return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+};
+
 export const db = {
     // --- PRODUCTEN ---
     getAll: async (): Promise<Product[]> => {
@@ -54,7 +61,14 @@ export const db = {
      */
     getBySlug: async (category: string, slug: string): Promise<Product | null> => {
         const supabase = getSupabase();
-        if (!supabase) return null;
+        if (!supabase) {
+            // Check demo products for matching slug
+            const demoProduct = getDemoProductsByCategory(category).find(p => {
+                const productSlug = p.slug || generateSlug(p.brand, p.model);
+                return productSlug.toLowerCase() === slug.toLowerCase();
+            });
+            return demoProduct || null;
+        }
         try {
             // First try to find by exact slug match
             const { data, error } = await supabase
