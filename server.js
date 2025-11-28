@@ -27,17 +27,18 @@ if (VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY) {
     supabase = createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY);
 }
 
-// Bol.com API Configuration
-const BOL_API_KEY = process.env.BOL_API_KEY || '';
-// BOL_AFFILIATE_ID is used for affiliate link generation when displaying products
-const BOL_AFFILIATE_ID = process.env.BOL_AFFILIATE_ID || '';
+// Bol.com Partner Program API - OAuth2 Credentials
+const BOL_CLIENT_ID = process.env.BOL_CLIENT_ID || '';
+const BOL_CLIENT_SECRET = process.env.BOL_CLIENT_SECRET || '';
+const BOL_SITE_ID = process.env.BOL_SITE_ID || '';
 
 console.log('[CONFIG] Server starting with configuration:');
 console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] AIML API Key: ${VITE_ANTHROPIC_API_KEY ? 'Configured' : 'Not set'}`);
-console.log(`[CONFIG] Bol.com API Key: ${BOL_API_KEY ? 'Configured' : 'Not set'}`);
-console.log(`[CONFIG] Bol.com Affiliate ID: ${BOL_AFFILIATE_ID ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] Bol.com Client ID: ${BOL_CLIENT_ID ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] Bol.com Client Secret: ${BOL_CLIENT_SECRET ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] Bol.com Site ID: ${BOL_SITE_ID ? 'Configured' : 'Not set'}`);
 
 // Helper function to escape strings for safe JavaScript injection
 const escapeForJs = (str) => {
@@ -61,31 +62,107 @@ const BOL_AVAILABILITY_IN_STOCK = 'IN_STOCK';
 const BOL_AVAILABILITY_LIMITED = 'LIMITED_STOCK';
 const DEAL_THRESHOLD_PERCENTAGE = 15;
 
+// OAuth2 token management constants
+const DEFAULT_TOKEN_EXPIRY_SECONDS = 299;
+const TOKEN_REFRESH_BUFFER_MS = 30000; // Refresh 30 seconds before expiry
+
 /**
  * Bol.com Sync Service for server-side product synchronization
- * Implements the Marketing Catalog API to fetch and sync products to Supabase
+ * Implements the Partner Program API with OAuth2 authentication
  */
 const bolSyncService = {
     apiBaseUrl: 'https://api.bol.com',
+    tokenEndpoint: 'https://login.bol.com/token',
+    
+    // OAuth2 token cache
+    accessToken: null,
+    tokenExpiresAt: null,
     
     /**
-     * Check if the Bol.com API is configured
+     * Check if the Bol.com API is configured with OAuth2 credentials
      */
     isConfigured() {
-        return Boolean(BOL_API_KEY);
+        return Boolean(BOL_CLIENT_ID && BOL_CLIENT_SECRET);
     },
     
     /**
-     * Make an authenticated API request to Bol.com
+     * Request a new OAuth2 access token from Bol.com
      */
-    async apiRequest(path, options = {}) {
+    async getAccessToken() {
         if (!this.isConfigured()) {
-            throw new Error('Bol.com API not configured. Set BOL_API_KEY environment variable.');
+            throw new Error('Bol.com API not configured. Set BOL_CLIENT_ID and BOL_CLIENT_SECRET environment variables.');
         }
+        
+        // Check if we have a valid cached token (with buffer before expiry)
+        if (this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
+            return this.accessToken;
+        }
+        
+        console.log('[BolSync] Requesting new OAuth2 access token');
+        
+        try {
+            // Create Basic Auth header from client credentials
+            const credentials = Buffer.from(`${BOL_CLIENT_ID}:${BOL_CLIENT_SECRET}`).toString('base64');
+            
+            const response = await fetch(this.tokenEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${credentials}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json',
+                },
+                body: 'grant_type=client_credentials',
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[BolSync] Token request failed:', response.status, errorText);
+                throw new Error(`OAuth2 token request failed: ${response.status} - ${errorText}`);
+            }
+            
+            const tokenData = await response.json();
+            
+            // Cache the token with expiration time
+            this.accessToken = tokenData.access_token;
+            // expires_in is in seconds, convert to milliseconds
+            const expiresInSeconds = tokenData.expires_in || DEFAULT_TOKEN_EXPIRY_SECONDS;
+            const expiresIn = expiresInSeconds * 1000;
+            this.tokenExpiresAt = Date.now() + expiresIn;
+            
+            console.log(`[BolSync] Access token obtained, expires in ${expiresInSeconds} seconds`);
+            
+            return this.accessToken;
+        } catch (error) {
+            console.error('[BolSync] Failed to obtain access token:', error);
+            // Clear any stale token
+            this.accessToken = null;
+            this.tokenExpiresAt = null;
+            throw error;
+        }
+    },
+    
+    /**
+     * Clear the cached token (useful for forcing refresh)
+     */
+    clearToken() {
+        this.accessToken = null;
+        this.tokenExpiresAt = null;
+    },
+    
+    /**
+     * Make an authenticated API request to Bol.com with OAuth2
+     */
+    async apiRequest(path, options = {}, retryCount = 0) {
+        if (!this.isConfigured()) {
+            throw new Error('Bol.com API not configured. Set BOL_CLIENT_ID and BOL_CLIENT_SECRET environment variables.');
+        }
+        
+        // Get a valid access token
+        const token = await this.getAccessToken();
         
         const url = `${this.apiBaseUrl}${path}`;
         const headers = {
-            'Authorization': `Bearer ${BOL_API_KEY}`,
+            'Authorization': `Bearer ${token}`,
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             ...options.headers,
@@ -96,6 +173,13 @@ const bolSyncService = {
             headers,
             body: options.body ? JSON.stringify(options.body) : undefined,
         });
+        
+        // Handle 401 Unauthorized - token may have expired
+        if (response.status === 401 && retryCount < 1) {
+            console.log('[BolSync] Received 401, refreshing token and retrying');
+            this.clearToken();
+            return this.apiRequest(path, options, retryCount + 1);
+        }
         
         if (!response.ok) {
             const errorText = await response.text();
@@ -399,8 +483,10 @@ const bolSyncService = {
     getStatus() {
         return {
             configured: this.isConfigured(),
-            apiKeySet: Boolean(BOL_API_KEY),
-            affiliateIdSet: Boolean(BOL_AFFILIATE_ID),
+            clientIdSet: Boolean(BOL_CLIENT_ID),
+            clientSecretSet: Boolean(BOL_CLIENT_SECRET),
+            siteIdSet: Boolean(BOL_SITE_ID),
+            hasValidToken: Boolean(this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt),
             supabaseConfigured: Boolean(supabase),
         };
     }
@@ -791,7 +877,7 @@ app.post('/api/sync/products', async (req, res) => {
             return res.status(503).json({
                 success: false,
                 error: 'Bol.com API not configured',
-                message: 'Set BOL_API_KEY environment variable to enable product sync',
+                message: 'Set BOL_CLIENT_ID and BOL_CLIENT_SECRET environment variables to enable product sync',
             });
         }
         
