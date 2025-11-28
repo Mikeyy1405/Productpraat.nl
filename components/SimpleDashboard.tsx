@@ -43,23 +43,48 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
 
             // Check if response is OK first
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Server error: ${response.status} - ${errorText}`);
+                let errorMessage = `Server error: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorMessage;
+                } catch {
+                    // Failed to parse JSON, use status code message
+                }
+                throw new Error(errorMessage);
             }
 
             const result = await response.json();
             console.log('[SimpleDashboard] Import result:', result);
             
-            // Better success checking
-            if (result.success && result.imported > 0) {
-                setImportStatus(`✅ ${result.imported} producten geïmporteerd!`);
+            // Build detailed status message
+            if (result.success && (result.imported > 0 || result.updated > 0)) {
+                let statusMsg = `✅ ${result.imported} producten geïmporteerd`;
+                if (result.updated > 0) {
+                    statusMsg += `, ${result.updated} bijgewerkt`;
+                }
+                
+                // Check for per-category failures
+                if (result.errors && result.errors.length > 0) {
+                    const failedCategories = result.errors.map((e: { category: string; error: string }) => e.category).join(', ');
+                    statusMsg += ` (⚠️ Fouten bij: ${failedCategories})`;
+                }
+                
+                setImportStatus(statusMsg);
                 // Reload after 2 seconds to show imported products
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else if (result.success && result.imported === 0) {
-                // Import succeeded but no products found
-                setImportStatus('⚠️ Geen producten gevonden. Probeer andere categorieën.');
+            } else if (result.success && result.imported === 0 && result.updated === 0) {
+                // No products found or imported
+                if (result.errors && result.errors.length > 0) {
+                    // Show specific error messages
+                    const errorMsgs = result.errors.map((e: { category: string; error: string }) => 
+                        `${e.category}: ${e.error}`
+                    ).join('; ');
+                    setImportStatus(`⚠️ Geen producten geïmporteerd. ${errorMsgs}`);
+                } else {
+                    setImportStatus('⚠️ Geen producten gevonden. Probeer andere categorieën.');
+                }
                 setIsImporting(false);
             } else {
                 // Import failed
@@ -69,7 +94,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
         } catch (err) {
             console.error('Import error:', err);
             const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
-            setImportStatus(`❌ Fout: ${errorMessage}`);
+            setImportStatus(`❌ ${errorMessage}`);
             setIsImporting(false);
             
             // DON'T reload on error - this was causing logout
