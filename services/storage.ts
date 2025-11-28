@@ -1,6 +1,7 @@
 import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
 import { generateSlug, generateArticleSlug } from './urlService';
+import { DEMO_PRODUCTS } from '../data/realProducts';
 
 /**
  * Helper function to format error messages consistently
@@ -20,18 +21,33 @@ export const db = {
     // --- PRODUCTEN ---
     getAll: async (): Promise<Product[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            console.log("📦 Database niet geconfigureerd - demo producten worden gebruikt");
+            return DEMO_PRODUCTS;
+        }
         try {
             const { data, error } = await supabase
                 .from('products')
                 .select('*')
                 .order('created_at', { ascending: false });
             
-            if (error) throw error;
-            return data as Product[] || [];
+            if (error) {
+                console.error("❌ Database fout bij ophalen producten:", formatError(error));
+                console.log("📦 Fallback naar demo producten");
+                return DEMO_PRODUCTS;
+            }
+            
+            // If no products in database, return demo products
+            if (!data || data.length === 0) {
+                console.log("📦 Geen producten in database - demo producten worden gebruikt");
+                return DEMO_PRODUCTS;
+            }
+            
+            return data as Product[];
         } catch (e) {
-            console.error("Fetch Error:", formatError(e));
-            return [];
+            console.error("❌ Fout bij ophalen producten:", formatError(e));
+            console.log("📦 Fallback naar demo producten");
+            return DEMO_PRODUCTS;
         }
     },
 
@@ -76,7 +92,10 @@ export const db = {
      */
     getByCategory: async (category: string): Promise<Product[]> => {
         const supabase = getSupabase();
-        if (!supabase) return [];
+        if (!supabase) {
+            // Return demo products filtered by category
+            return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+        }
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -84,11 +103,20 @@ export const db = {
                 .eq('category', category.toLowerCase())
                 .order('score', { ascending: false });
             
-            if (error) throw error;
-            return data as Product[] || [];
+            if (error) {
+                console.error("GetByCategory Error:", formatError(error));
+                return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+            }
+            
+            // If no products in category, return demo products for that category
+            if (!data || data.length === 0) {
+                return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+            }
+            
+            return data as Product[];
         } catch (e) {
             console.error("GetByCategory Error:", formatError(e));
-            return [];
+            return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
         }
     },
 
