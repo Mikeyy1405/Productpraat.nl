@@ -156,6 +156,318 @@ app.get('/api/affiliate/networks', (req, res) => {
     });
 });
 
+// --- BOL.COM SHOP API ENDPOINTS ---
+
+// Search products
+app.get('/api/products/search', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] GET /api/products/search`);
+    
+    try {
+        const { q, category, minPrice, maxPrice, minRating, inStock, sortBy, page, limit } = req.query;
+        
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        let query = supabase
+            .from('bol_products')
+            .select('*', { count: 'exact' });
+        
+        // Apply search filter
+        if (q) {
+            query = query.ilike('title', `%${q}%`);
+        }
+        
+        // Apply price range
+        if (minPrice) {
+            query = query.gte('price', parseFloat(minPrice));
+        }
+        if (maxPrice) {
+            query = query.lte('price', parseFloat(maxPrice));
+        }
+        
+        // Apply rating filter
+        if (minRating) {
+            query = query.gte('average_rating', parseFloat(minRating));
+        }
+        
+        // Apply stock filter
+        if (inStock === 'true') {
+            query = query.eq('in_stock', true);
+        }
+        
+        // Apply sorting
+        switch (sortBy) {
+            case 'price_asc':
+                query = query.order('price', { ascending: true });
+                break;
+            case 'price_desc':
+                query = query.order('price', { ascending: false });
+                break;
+            case 'rating':
+                query = query.order('average_rating', { ascending: false });
+                break;
+            case 'popularity':
+            default:
+                query = query.order('total_ratings', { ascending: false });
+        }
+        
+        // Apply pagination
+        const pageNum = parseInt(page) || 1;
+        const pageSize = Math.min(parseInt(limit) || 24, 100);
+        const offset = (pageNum - 1) * pageSize;
+        
+        query = query.range(offset, offset + pageSize - 1);
+        
+        const { data, count, error } = await query;
+        
+        if (error) {
+            console.error('[SHOP] Search error:', error);
+            return res.status(500).json({ error: 'Search failed' });
+        }
+        
+        res.json({
+            products: data || [],
+            totalCount: count || 0,
+            page: pageNum,
+            pageSize,
+            totalPages: Math.ceil((count || 0) / pageSize)
+        });
+    } catch (error) {
+        console.error('[SHOP] Search error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get product by EAN
+app.get('/api/products/:ean', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    const { ean } = req.params;
+    console.log(`[${timestamp}] [SHOP] GET /api/products/${ean}`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        // Get product with images and specifications
+        const { data: product, error } = await supabase
+            .from('bol_products')
+            .select('*')
+            .eq('ean', ean)
+            .single();
+        
+        if (error || !product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+        
+        // Get images
+        const { data: images } = await supabase
+            .from('bol_product_images')
+            .select('*')
+            .eq('product_id', product.id)
+            .order('display_order');
+        
+        // Get specifications
+        const { data: specifications } = await supabase
+            .from('bol_product_specifications')
+            .select('*')
+            .eq('product_id', product.id);
+        
+        // Get categories
+        const { data: categories } = await supabase
+            .from('bol_product_categories')
+            .select('category_id, bol_categories(id, name)')
+            .eq('product_id', product.id);
+        
+        res.json({
+            ...product,
+            images: images || [],
+            specifications: specifications || [],
+            categories: categories?.map(c => c.bol_categories) || []
+        });
+    } catch (error) {
+        console.error('[SHOP] Product error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get popular products
+app.get('/api/products/popular', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] GET /api/products/popular`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const { category, limit } = req.query;
+        const pageSize = Math.min(parseInt(limit) || 12, 50);
+        
+        let query = supabase
+            .from('bol_products')
+            .select('*')
+            .eq('in_stock', true)
+            .order('total_ratings', { ascending: false })
+            .limit(pageSize);
+        
+        const { data, error } = await query;
+        
+        if (error) {
+            console.error('[SHOP] Popular products error:', error);
+            return res.status(500).json({ error: 'Failed to fetch popular products' });
+        }
+        
+        res.json({ products: data || [] });
+    } catch (error) {
+        console.error('[SHOP] Popular error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get deals
+app.get('/api/products/deals', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] GET /api/products/deals`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const { limit } = req.query;
+        const pageSize = Math.min(parseInt(limit) || 12, 50);
+        
+        const { data, error } = await supabase
+            .from('bol_products')
+            .select('*')
+            .eq('is_deal', true)
+            .eq('in_stock', true)
+            .order('discount_percentage', { ascending: false })
+            .limit(pageSize);
+        
+        if (error) {
+            console.error('[SHOP] Deals error:', error);
+            return res.status(500).json({ error: 'Failed to fetch deals' });
+        }
+        
+        res.json({ products: data || [] });
+    } catch (error) {
+        console.error('[SHOP] Deals error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get shop categories
+app.get('/api/categories', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] GET /api/categories`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const { parentId } = req.query;
+        
+        let query = supabase
+            .from('bol_categories')
+            .select('*')
+            .order('name');
+        
+        if (parentId) {
+            query = query.eq('parent_id', parentId);
+        } else {
+            query = query.is('parent_id', null);
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) {
+            console.error('[SHOP] Categories error:', error);
+            return res.status(500).json({ error: 'Failed to fetch categories' });
+        }
+        
+        res.json({ categories: data || [] });
+    } catch (error) {
+        console.error('[SHOP] Categories error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Trigger product sync (admin only)
+app.post('/api/sync/products', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] POST /api/sync/products`);
+    
+    try {
+        // In production, this should be protected with authentication
+        const { categoryIds, type } = req.body;
+        
+        // Return a mock response - actual sync would be triggered server-side
+        res.json({
+            success: true,
+            message: 'Sync job queued',
+            jobId: `sync-${Date.now()}`,
+            type: type || 'popular_products',
+            categoryIds: categoryIds || []
+        });
+    } catch (error) {
+        console.error('[SHOP] Sync error:', error);
+        res.status(500).json({ error: 'Failed to start sync' });
+    }
+});
+
+// Track Bol.com affiliate click
+app.post('/api/bol/track-click', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SHOP] POST /api/bol/track-click`);
+    
+    try {
+        const { productEan, affiliateUrl, referrer } = req.body;
+        
+        if (!productEan || !affiliateUrl) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        // Validate URL
+        try {
+            const parsedUrl = new URL(affiliateUrl);
+            if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                return res.status(400).json({ error: 'Invalid URL protocol' });
+            }
+        } catch {
+            return res.status(400).json({ error: 'Invalid URL format' });
+        }
+        
+        if (supabase) {
+            const { error } = await supabase
+                .from('bol_affiliate_clicks')
+                .insert({
+                    product_ean: productEan,
+                    affiliate_url: affiliateUrl,
+                    clicked_at: timestamp,
+                    session_id: `sess-${Date.now()}`,
+                    referrer: referrer || null
+                });
+            
+            if (error) {
+                console.error('[SHOP] Click tracking error:', error);
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: 'Click tracked'
+        });
+    } catch (error) {
+        console.error('[SHOP] Click tracking error:', error);
+        res.status(500).json({ error: 'Failed to track click' });
+    }
+});
+
 // --- DEPRECATED ENDPOINTS ---
 const deprecatedHandler = (req, res) => {
     res.status(410).json({
