@@ -241,6 +241,136 @@ const bolSyncService = {
     },
     
     /**
+     * Get popular products by category ID with search fallback
+     * Primary: GET /marketing/catalog/v1/products/lists/popular?category-id={categoryId}
+     * Fallback: GET /marketing/catalog/v1/products/search?search-term={searchTerm}
+     * 
+     * @param {string} categoryId - Bol.com numeric category ID
+     * @param {string} searchTerm - Fallback search term if category returns empty/404
+     * @param {number} limit - Number of products to return
+     * @returns {Promise<{products: Array, usedFallback: boolean, error?: string}>}
+     */
+    async getProductsByCategoryWithFallback(categoryId, searchTerm, limit = 10) {
+        try {
+            // Try primary endpoint first (popular by category ID)
+            const params = new URLSearchParams({
+                'category-id': categoryId,
+                'country-code': 'NL',
+                'page-size': String(Math.min(limit, 100)),
+                'include-image': 'true',
+                'include-offer': 'true',
+                'include-rating': 'true',
+            });
+            
+            try {
+                const data = await this.apiRequest(`/marketing/catalog/v1/products/lists/popular?${params.toString()}`);
+                const products = data.products || [];
+                
+                if (products.length > 0) {
+                    console.log(`[BolSync] Category ${categoryId}: Found ${products.length} products via popular endpoint`);
+                    return { products, usedFallback: false };
+                }
+                
+                // Empty result - try fallback
+                console.log(`[BolSync] Category ${categoryId} returned empty, trying search fallback with "${searchTerm}"`);
+            } catch (primaryError) {
+                // Check if it's a 404 (category not found) - then try fallback
+                if (primaryError.message && primaryError.message.includes('404')) {
+                    console.log(`[BolSync] Category ${categoryId} not found (404), trying search fallback with "${searchTerm}"`);
+                } else {
+                    // Other errors should propagate
+                    throw primaryError;
+                }
+            }
+            
+            // Fallback to search
+            const searchParams = new URLSearchParams({
+                'search-term': searchTerm,
+                'country-code': 'NL',
+                'page-size': String(Math.min(limit, 100)),
+                'include-image': 'true',
+                'include-offer': 'true',
+                'include-rating': 'true',
+            });
+            
+            const searchData = await this.apiRequest(`/marketing/catalog/v1/products/search?${searchParams.toString()}`);
+            const products = searchData.products || [];
+            
+            console.log(`[BolSync] Search fallback for "${searchTerm}": Found ${products.length} products`);
+            return { products, usedFallback: true };
+            
+        } catch (error) {
+            console.error(`[BolSync] Error fetching category ${categoryId}:`, error);
+            return { 
+                products: [], 
+                usedFallback: true, 
+                error: error.message || 'Unknown error' 
+            };
+        }
+    },
+    
+    /**
+     * Fetch products for multiple categories concurrently
+     * Uses category IDs with search fallback, respects concurrency limits
+     * 
+     * @param {Array<{categoryKey: string, categoryId: string, searchTerm: string}>} categories
+     * @param {number} pageSize - Products per category
+     * @param {number} concurrency - Max concurrent requests (default: 3)
+     * @returns {Promise<Array<{categoryKey: string, success: boolean, products: Array, error?: string, usedFallback: boolean}>>}
+     */
+    async fetchMultipleCategories(categories, pageSize = 10, concurrency = 3) {
+        const results = [];
+        
+        // Process in batches based on concurrency
+        for (let i = 0; i < categories.length; i += concurrency) {
+            const batch = categories.slice(i, i + concurrency);
+            
+            const batchPromises = batch.map(async (cat) => {
+                const result = await this.getProductsByCategoryWithFallback(
+                    cat.categoryId,
+                    cat.searchTerm,
+                    pageSize
+                );
+                
+                return {
+                    categoryKey: cat.categoryKey,
+                    categoryId: cat.categoryId,
+                    success: result.products.length > 0,
+                    products: result.products,
+                    error: result.error,
+                    usedFallback: result.usedFallback
+                };
+            });
+            
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+            
+            // Small delay between batches to avoid rate limiting
+            if (i + concurrency < categories.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        
+        return results;
+    },
+    
+    /**
+     * Deduplicate products by EAN
+     * @param {Array} products - Array of products
+     * @returns {Array} - Deduplicated array
+     */
+    deduplicateByEan(products) {
+        const seen = new Set();
+        return products.filter(product => {
+            if (!product.ean || seen.has(product.ean)) {
+                return false;
+            }
+            seen.add(product.ean);
+            return true;
+        });
+    },
+    
+    /**
      * Map Bol.com product to database format
      */
     mapProductToDb(bolProduct) {
@@ -705,25 +835,20 @@ app.get('/api/admin/test-connection', async (req, res) => {
     });
 });
 
-// Get available categories
+// Get available categories with Bol.com category IDs
 app.get('/api/admin/categories', (req, res) => {
-    const CATEGORIES = {
-        'televisies': { name: 'Televisies' },
-        'audio': { name: 'Audio & HiFi' },
-        'laptops': { name: 'Laptops' },
-        'smartphones': { name: 'Smartphones' },
-        'wasmachines': { name: 'Wasmachines' },
-        'stofzuigers': { name: 'Stofzuigers' },
-        'smarthome': { name: 'Smart Home' },
-        'matrassen': { name: 'Matrassen' },
-        'airfryers': { name: 'Airfryers' },
-        'koffie': { name: 'Koffie' },
-        'keuken': { name: 'Keukenmachines' },
-        'verzorging': { name: 'Verzorging' }
-    };
+    // Return categories with their Bol.com category IDs
+    const categories = Object.entries(CATEGORY_MAPPING).map(([key, config]) => ({
+        id: key,
+        name: config.displayName,
+        categoryId: config.categoryId,
+        searchTerm: config.searchTerm
+    }));
     
     res.json({
-        categories: Object.entries(CATEGORIES).map(([id, cat]) => ({ id, name: cat.name }))
+        categories,
+        // Also include the raw mapping for clients that need it
+        mapping: CATEGORY_MAPPING
     });
 });
 
@@ -1365,6 +1490,7 @@ app.get('/api/admin/seed-status', async (req, res) => {
 
 // ============================================================================
 // QUICK IMPORT ENDPOINT - Simple product import for SimpleDashboard
+// Uses category IDs with search fallback
 // ============================================================================
 
 app.post('/api/admin/quick-import', async (req, res) => {
@@ -1372,7 +1498,7 @@ app.post('/api/admin/quick-import', async (req, res) => {
     console.log(`[${timestamp}] [QUICK-IMPORT] POST /api/admin/quick-import`);
     
     try {
-        const { categories, limit = 5 } = req.body;
+        const { categories, limit = 5, concurrency = 3 } = req.body;
         
         if (!Array.isArray(categories) || categories.length === 0) {
             return res.status(400).json({ 
@@ -1384,16 +1510,40 @@ app.post('/api/admin/quick-import', async (req, res) => {
         if (!bolSyncService.isConfigured()) {
             return res.status(503).json({ 
                 success: false,
-                message: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in.'
+                message: 'Bol.com API niet geconfigureerd. Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in.',
+                errorCode: 'API_NOT_CONFIGURED'
             });
         }
 
         if (!supabase) {
             return res.status(503).json({
                 success: false,
-                message: 'Database niet beschikbaar'
+                message: 'Database niet beschikbaar',
+                errorCode: 'DATABASE_NOT_CONFIGURED'
             });
         }
+
+        // Map category keys to category configs
+        const categoryConfigs = categories.map(category => {
+            const config = CATEGORY_MAPPING[category.toLowerCase()];
+            if (config) {
+                return {
+                    categoryKey: category,
+                    categoryId: config.categoryId,
+                    searchTerm: config.searchTerm,
+                    displayName: config.displayName
+                };
+            }
+            // Fallback for unknown categories - use as search term
+            return {
+                categoryKey: category,
+                categoryId: null,
+                searchTerm: category,
+                displayName: category
+            };
+        });
+
+        console.log(`[QUICK-IMPORT] Processing ${categoryConfigs.length} categories with limit ${limit}, concurrency ${concurrency}`);
 
         let totalImported = 0;
         let totalUpdated = 0;
@@ -1568,9 +1718,39 @@ app.post('/api/admin/quick-import', async (req, res) => {
 
     } catch (error) {
         console.error('[QUICK-IMPORT] Error:', error);
-        res.status(500).json({ 
+        
+        // Determine the appropriate status code and error message
+        let statusCode = 500;
+        let errorMessage = 'Import mislukt';
+        
+        if (error.message) {
+            if (error.message.includes('400')) {
+                statusCode = 400;
+                errorMessage = getApiErrorMessage(400);
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                statusCode = 401;
+                errorMessage = getApiErrorMessage(401);
+            } else if (error.message.includes('404')) {
+                statusCode = 404;
+                errorMessage = getApiErrorMessage(404);
+            } else if (error.message.includes('406')) {
+                statusCode = 406;
+                errorMessage = getApiErrorMessage(406);
+            } else if (error.message.includes('500')) {
+                statusCode = 500;
+                errorMessage = getApiErrorMessage(500);
+            } else if (error.message.includes('503')) {
+                statusCode = 503;
+                errorMessage = getApiErrorMessage(503);
+            } else {
+                errorMessage = error.message;
+            }
+        }
+        
+        res.status(statusCode).json({ 
             success: false,
-            message: error.message || 'Import mislukt'
+            message: errorMessage,
+            error: error.message || 'Unknown error'
         });
     }
 });
