@@ -500,6 +500,10 @@ const BOL_DEFAULT_CATEGORIES = {
     '15452': 'TV & Audio',
     '15457': 'Huishouden',
     '13640': 'Wonen & Slapen',
+    '12652': 'Speelgoed',
+    '10644': 'Klussen & Gereedschap',
+    '10639': 'Tuin & Klussen',
+    '15654': 'Baby & Kind',
 };
 
 app.use(express.json());
@@ -1605,15 +1609,51 @@ app.post('/api/automation/trigger/:jobId', async (req, res) => {
             }
         }
         
-        // Forward to discover endpoint
-        req.body = {
-            categories: config.categories,
-            limit: config.maxProductsPerRun,
-            filters: config.filters,
-        };
+        // Check if already running
+        if (automationState.isRunning) {
+            return res.status(409).json({ 
+                error: 'Automation already running',
+                currentRunId: automationState.currentRunId,
+            });
+        }
         
-        // Use the discover logic
-        return res.redirect(307, '/api/automation/discover');
+        // Create run record and start discovery
+        const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        
+        if (supabase) {
+            await supabase.from('automation_runs').insert({
+                id: runId,
+                started_at: timestamp,
+                status: 'running',
+                run_type: 'manual',
+                categories: config.categories,
+                filters: config.filters,
+                config: { limit: config.maxProductsPerRun },
+            });
+        }
+        
+        // Set running state
+        automationState.isRunning = true;
+        automationState.currentRunId = runId;
+        automationState.stopRequested = false;
+        
+        // Run discovery in background
+        runProductDiscovery(runId, config.categories, config.maxProductsPerRun, config.filters)
+            .catch(err => console.error('[AUTOMATION] Trigger discovery error:', err))
+            .finally(() => {
+                automationState.isRunning = false;
+                automationState.currentRunId = null;
+            });
+        
+        return res.json({
+            success: true,
+            message: 'Product discovery started',
+            runId,
+            categories: config.categories,
+            maxProducts: config.maxProductsPerRun,
+            filters: config.filters,
+            timestamp,
+        });
     }
     
     res.status(400).json({ error: `Unknown job: ${jobId}` });

@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { BOL_CATEGORIES } from '../services/productDiscoveryService';
 
 // ============================================================================
 // TYPES
@@ -70,21 +71,8 @@ interface AutomationPanelProps {
 }
 
 // ============================================================================
-// BOL.COM CATEGORIES
+// DEFAULT CONFIGURATION
 // ============================================================================
-
-const BOL_CATEGORIES: Record<string, string> = {
-    '11652': 'Elektronica',
-    '13512': 'Computer & Gaming',
-    '21328': 'Telefonie & Navigatie',
-    '15452': 'TV & Audio',
-    '15457': 'Huishouden',
-    '13640': 'Wonen & Slapen',
-    '12652': 'Speelgoed',
-    '10644': 'Klussen & Gereedschap',
-    '10639': 'Tuin & Klussen',
-    '15654': 'Baby & Kind',
-};
 
 const DEFAULT_CONFIG: DiscoveryConfig = {
     enabled: false,
