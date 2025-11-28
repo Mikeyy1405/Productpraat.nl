@@ -1056,6 +1056,152 @@ app.post('/api/bol/track-click', async (req, res) => {
 });
 
 // ============================================================================
+// ADMIN SEED PRODUCTS ENDPOINT
+// ============================================================================
+
+/**
+ * Seed initial products from Bol.com categories
+ * Used to quickly populate the database with products for a new webshop
+ */
+app.post('/api/admin/seed-products', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ADMIN] POST /api/admin/seed-products`);
+    
+    try {
+        // Check if Bol.com API is configured
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Bol.com API niet geconfigureerd',
+                message: 'Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in als environment variabelen',
+                configured: false
+            });
+        }
+        
+        // Check if database is configured
+        if (!supabase) {
+            return res.status(503).json({
+                success: false,
+                error: 'Database niet geconfigureerd',
+                message: 'Stel VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY in als environment variabelen',
+                configured: false
+            });
+        }
+        
+        const { categories, productsPerCategory = 8 } = req.body;
+        
+        // Default categories if none provided (first 6 categories)
+        const targetCategories = categories && Array.isArray(categories) && categories.length > 0
+            ? categories.slice(0, 10) // Max 10 categories at once
+            : Object.keys(BOL_DEFAULT_CATEGORIES).slice(0, 6);
+        
+        console.log(`[ADMIN] Seeding products from ${targetCategories.length} categories, ${productsPerCategory} per category`);
+        
+        const results = [];
+        let totalImported = 0;
+        let totalProcessed = 0;
+        let totalFailed = 0;
+        
+        for (const categoryId of targetCategories) {
+            const categoryName = BOL_DEFAULT_CATEGORIES[categoryId] || categoryId;
+            console.log(`[ADMIN] Processing category: ${categoryName} (${categoryId})`);
+            
+            try {
+                const job = await bolSyncService.syncPopularProducts(categoryId, productsPerCategory);
+                
+                results.push({
+                    categoryId,
+                    categoryName,
+                    status: job.status,
+                    itemsProcessed: job.itemsProcessed || 0,
+                    itemsCreated: job.itemsCreated || 0,
+                    itemsUpdated: job.itemsUpdated || 0,
+                    itemsFailed: job.itemsFailed || 0,
+                    errors: job.errors || []
+                });
+                
+                totalImported += (job.itemsCreated || 0) + (job.itemsUpdated || 0);
+                totalProcessed += job.itemsProcessed || 0;
+                totalFailed += job.itemsFailed || 0;
+                
+                console.log(`[ADMIN] Category ${categoryName}: ${job.itemsCreated} created, ${job.itemsUpdated} updated`);
+                
+            } catch (categoryError) {
+                const errorMsg = categoryError.message || String(categoryError);
+                console.error(`[ADMIN] Category ${categoryName} error:`, errorMsg);
+                
+                results.push({
+                    categoryId,
+                    categoryName,
+                    status: 'failed',
+                    itemsProcessed: 0,
+                    itemsCreated: 0,
+                    itemsUpdated: 0,
+                    itemsFailed: 0,
+                    error: errorMsg
+                });
+            }
+        }
+        
+        res.json({
+            success: totalImported > 0,
+            message: `${totalImported} producten geïmporteerd uit ${targetCategories.length} categorieën`,
+            summary: {
+                categoriesProcessed: targetCategories.length,
+                totalProductsProcessed: totalProcessed,
+                totalProductsImported: totalImported,
+                totalProductsFailed: totalFailed
+            },
+            results,
+            timestamp
+        });
+        
+    } catch (error) {
+        console.error('[ADMIN] Seed products error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Seeding mislukt',
+            message: error.message || String(error),
+            timestamp
+        });
+    }
+});
+
+// Get seed status - check if products exist in database
+app.get('/api/admin/seed-status', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ADMIN] GET /api/admin/seed-status`);
+    
+    try {
+        const status = {
+            bolApiConfigured: bolSyncService.isConfigured(),
+            databaseConfigured: !!supabase,
+            hasProducts: false,
+            productCount: 0,
+            availableCategories: BOL_DEFAULT_CATEGORIES,
+            timestamp
+        };
+        
+        if (supabase) {
+            const { count, error } = await supabase
+                .from('bol_products')
+                .select('*', { count: 'exact', head: true });
+            
+            if (!error) {
+                status.hasProducts = count > 0;
+                status.productCount = count || 0;
+            }
+        }
+        
+        res.json(status);
+        
+    } catch (error) {
+        console.error('[ADMIN] Seed status error:', error);
+        res.status(500).json({ error: 'Failed to get seed status' });
+    }
+});
+
+// ============================================================================
 // PRODUCT DISCOVERY AUTOMATION ENDPOINTS
 // ============================================================================
 

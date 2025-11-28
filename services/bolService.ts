@@ -1,22 +1,32 @@
 /**
  * @deprecated This service is deprecated.
  * 
- * The Bol.com API integration has been fully removed from ProductPraat.
- * All products are now added via URL scraping + AI generation.
+ * The direct Bol.com API integration has been moved to server-side.
  * 
- * For affiliate link generation, use the new affiliateService.ts instead:
+ * For automatic product import:
+ * - Use the "Quick Seed" button in Admin Dashboard to import popular products
+ * - Use the Automation tab for scheduled product discovery
+ * 
+ * For affiliate link generation, use affiliateService.ts instead:
  * - detectNetwork(url) - Detect affiliate network from URL
  * - generateAffiliateLink(url) - Generate tracked affiliate links
  * - trackClick(productId, url) - Track affiliate clicks
  * 
- * @see services/affiliateService.ts for the new affiliate infrastructure
- * @see components/ProductGenerator.tsx for URL-based product import
+ * @see /api/admin/seed-products - Server endpoint for product seeding
+ * @see /api/automation/discover - Server endpoint for product discovery
+ * @see services/affiliateService.ts for affiliate link handling
  */
 
 import { Product } from '../types';
 
-// Log deprecation warning
-console.warn('[DEPRECATED] bolService.ts is deprecated. Use URL-based import via ProductGenerator and affiliateService.ts for affiliate tracking.');
+// Log deprecation warning once
+if (typeof window !== 'undefined') {
+    console.info(
+        '[bolService] Direct Bol.com client-side scraping is deprecated.\n' +
+        '→ For products: Use the "Start je Webshop" button in Admin Dashboard.\n' +
+        '→ For affiliate tracking: Use affiliateService.ts'
+    );
+}
 
 interface BolData {
     title: string;

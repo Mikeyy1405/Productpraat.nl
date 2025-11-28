@@ -244,11 +244,18 @@ const loadFromSupabase = async (): Promise<AutomationConfig | null> => {
             .single();
 
         if (error) {
+            // PGRST116: No rows found (expected for new databases)
             if (error.code === 'PGRST116') {
-                // No rows found, return null
+                console.log('[AutomationConfigService] No config row found, using defaults');
                 return null;
             }
-            console.error('[AutomationConfigService] Error loading from Supabase:', error);
+            // 42P01: Table doesn't exist (database migration not run yet)
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+                console.warn('[AutomationConfigService] automation_config table does not exist, using defaults');
+                return null;
+            }
+            // Other errors - log but continue gracefully
+            console.error('[AutomationConfigService] Error loading from Supabase:', error.message || error);
             return null;
         }
 
@@ -258,7 +265,9 @@ const loadFromSupabase = async (): Promise<AutomationConfig | null> => {
             return config;
         }
     } catch (error) {
-        console.error('[AutomationConfigService] Error in loadFromSupabase:', error);
+        // Handle any unexpected errors gracefully
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error('[AutomationConfigService] Error in loadFromSupabase:', errorMsg);
     }
     return null;
 };
@@ -283,13 +292,19 @@ const saveToSupabase = async (config: AutomationConfig): Promise<boolean> => {
             });
 
         if (error) {
-            console.error('[AutomationConfigService] Error saving to Supabase:', error);
+            // 42P01: Table doesn't exist (database migration not run yet)
+            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+                console.warn('[AutomationConfigService] automation_config table does not exist, saving to localStorage only');
+                return false;
+            }
+            console.error('[AutomationConfigService] Error saving to Supabase:', error.message || error);
             return false;
         }
 
         return true;
     } catch (error) {
-        console.error('[AutomationConfigService] Error in saveToSupabase:', error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error('[AutomationConfigService] Error in saveToSupabase:', errorMsg);
         return false;
     }
 };
