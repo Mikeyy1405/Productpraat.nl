@@ -54,6 +54,13 @@ const escapeForJs = (str) => {
 // ============================================================================
 
 /**
+ * Constants for Bol.com sync
+ */
+const BOL_AVAILABILITY_IN_STOCK = 'IN_STOCK';
+const BOL_AVAILABILITY_LIMITED = 'LIMITED_STOCK';
+const DEAL_THRESHOLD_PERCENTAGE = 15;
+
+/**
  * Bol.com Sync Service for server-side product synchronization
  * Implements the Marketing Catalog API to fetch and sync products to Supabase
  */
@@ -165,8 +172,8 @@ const bolSyncService = {
             strikethrough_price: offer.strikethroughPrice?.value || null,
             discount_percentage: offer.discountPercentage || null,
             delivery_description: offer.delivery?.deliveryDescription || null,
-            in_stock: offer.availability === 'IN_STOCK' || offer.availability === 'LIMITED_STOCK',
-            is_deal: (offer.discountPercentage || 0) >= 15,
+            in_stock: offer.availability === BOL_AVAILABILITY_IN_STOCK || offer.availability === BOL_AVAILABILITY_LIMITED,
+            is_deal: (offer.discountPercentage || 0) >= DEAL_THRESHOLD_PERCENTAGE,
             average_rating: bolProduct.rating?.averageRating || null,
             total_ratings: bolProduct.rating?.totalRatings || 0,
             main_image_url: bolProduct.mainImageUrl || (bolProduct.images && bolProduct.images[0]?.url) || null,
@@ -176,7 +183,7 @@ const bolSyncService = {
     },
     
     /**
-     * Sync products from search term to database
+     * Sync products from search term to database using batch upsert
      */
     async syncFromSearch(searchTerm, limit = 50) {
         if (!supabase) {
@@ -203,50 +210,70 @@ const bolSyncService = {
             const products = await this.searchProducts(searchTerm, limit);
             console.log(`[BolSync] Found ${products.length} products`);
             
-            // Process each product
-            for (const bolProduct of products) {
-                try {
-                    const dbProduct = this.mapProductToDb(bolProduct);
-                    
-                    // Check if product exists
-                    const { data: existing, error: selectError } = await supabase
-                        .from('bol_products')
-                        .select('id, created_at')
-                        .eq('ean', bolProduct.ean)
-                        .single();
-                    
-                    if (selectError && selectError.code !== 'PGRST116') {
-                        // PGRST116 = not found, which is expected for new products
-                        throw selectError;
-                    }
-                    
-                    if (existing) {
-                        // Update existing product
-                        const { error: updateError } = await supabase
-                            .from('bol_products')
-                            .update(dbProduct)
-                            .eq('id', existing.id);
-                        
-                        if (updateError) throw updateError;
-                        job.itemsUpdated++;
-                    } else {
-                        // Insert new product
-                        const { error: insertError } = await supabase
-                            .from('bol_products')
-                            .insert({ ...dbProduct, created_at: new Date().toISOString() });
-                        
-                        if (insertError) throw insertError;
-                        job.itemsCreated++;
-                    }
-                    
-                    job.itemsProcessed++;
-                } catch (error) {
-                    console.error(`[BolSync] Failed to sync product ${bolProduct.ean}:`, error);
-                    job.itemsFailed++;
-                    job.errors.push({ ean: bolProduct.ean, error: error.message });
+            if (products.length === 0) {
+                job.status = 'completed';
+                job.completedAt = new Date().toISOString();
+                return job;
+            }
+            
+            // Map all products to DB format
+            const now = new Date().toISOString();
+            const dbProducts = products.map(bolProduct => ({
+                ...this.mapProductToDb(bolProduct),
+                created_at: now,
+            }));
+            
+            // Get existing products EANs in one query
+            const eans = dbProducts.map(p => p.ean);
+            const { data: existingProducts, error: selectError } = await supabase
+                .from('bol_products')
+                .select('ean')
+                .in('ean', eans);
+            
+            if (selectError) {
+                throw selectError;
+            }
+            
+            const existingEans = new Set((existingProducts || []).map(p => p.ean));
+            
+            // Split into new and existing products
+            const newProducts = dbProducts.filter(p => !existingEans.has(p.ean));
+            const updateProducts = dbProducts.filter(p => existingEans.has(p.ean));
+            
+            // Batch insert new products
+            if (newProducts.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('bol_products')
+                    .insert(newProducts);
+                
+                if (insertError) {
+                    console.error('[BolSync] Batch insert error:', insertError);
+                    job.itemsFailed += newProducts.length;
+                    job.errors.push({ batch: 'insert', error: insertError.message });
+                } else {
+                    job.itemsCreated = newProducts.length;
                 }
             }
             
+            // Batch update existing products using upsert
+            if (updateProducts.length > 0) {
+                // Remove created_at from updates to preserve original
+                const updateData = updateProducts.map(({ created_at, ...rest }) => rest);
+                
+                const { error: upsertError } = await supabase
+                    .from('bol_products')
+                    .upsert(updateData, { onConflict: 'ean' });
+                
+                if (upsertError) {
+                    console.error('[BolSync] Batch upsert error:', upsertError);
+                    job.itemsFailed += updateProducts.length;
+                    job.errors.push({ batch: 'update', error: upsertError.message });
+                } else {
+                    job.itemsUpdated = updateProducts.length;
+                }
+            }
+            
+            job.itemsProcessed = products.length;
             job.status = 'completed';
             job.completedAt = new Date().toISOString();
             console.log(`[BolSync] Completed. Created: ${job.itemsCreated}, Updated: ${job.itemsUpdated}, Failed: ${job.itemsFailed}`);
@@ -261,7 +288,7 @@ const bolSyncService = {
     },
     
     /**
-     * Sync popular products for a category
+     * Sync popular products for a category using batch upsert
      */
     async syncPopularProducts(categoryId, limit = 50) {
         if (!supabase) {
@@ -288,49 +315,70 @@ const bolSyncService = {
             const products = await this.getPopularProducts(categoryId, limit);
             console.log(`[BolSync] Found ${products.length} popular products`);
             
-            // Process each product
-            for (const bolProduct of products) {
-                try {
-                    const dbProduct = this.mapProductToDb(bolProduct);
-                    
-                    // Check if product exists
-                    const { data: existing, error: selectError } = await supabase
-                        .from('bol_products')
-                        .select('id, created_at')
-                        .eq('ean', bolProduct.ean)
-                        .single();
-                    
-                    if (selectError && selectError.code !== 'PGRST116') {
-                        throw selectError;
-                    }
-                    
-                    if (existing) {
-                        // Update existing product
-                        const { error: updateError } = await supabase
-                            .from('bol_products')
-                            .update(dbProduct)
-                            .eq('id', existing.id);
-                        
-                        if (updateError) throw updateError;
-                        job.itemsUpdated++;
-                    } else {
-                        // Insert new product
-                        const { error: insertError } = await supabase
-                            .from('bol_products')
-                            .insert({ ...dbProduct, created_at: new Date().toISOString() });
-                        
-                        if (insertError) throw insertError;
-                        job.itemsCreated++;
-                    }
-                    
-                    job.itemsProcessed++;
-                } catch (error) {
-                    console.error(`[BolSync] Failed to sync product ${bolProduct.ean}:`, error);
-                    job.itemsFailed++;
-                    job.errors.push({ ean: bolProduct.ean, error: error.message });
+            if (products.length === 0) {
+                job.status = 'completed';
+                job.completedAt = new Date().toISOString();
+                return job;
+            }
+            
+            // Map all products to DB format
+            const now = new Date().toISOString();
+            const dbProducts = products.map(bolProduct => ({
+                ...this.mapProductToDb(bolProduct),
+                created_at: now,
+            }));
+            
+            // Get existing products EANs in one query
+            const eans = dbProducts.map(p => p.ean);
+            const { data: existingProducts, error: selectError } = await supabase
+                .from('bol_products')
+                .select('ean')
+                .in('ean', eans);
+            
+            if (selectError) {
+                throw selectError;
+            }
+            
+            const existingEans = new Set((existingProducts || []).map(p => p.ean));
+            
+            // Split into new and existing products
+            const newProducts = dbProducts.filter(p => !existingEans.has(p.ean));
+            const updateProducts = dbProducts.filter(p => existingEans.has(p.ean));
+            
+            // Batch insert new products
+            if (newProducts.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('bol_products')
+                    .insert(newProducts);
+                
+                if (insertError) {
+                    console.error('[BolSync] Batch insert error:', insertError);
+                    job.itemsFailed += newProducts.length;
+                    job.errors.push({ batch: 'insert', error: insertError.message });
+                } else {
+                    job.itemsCreated = newProducts.length;
                 }
             }
             
+            // Batch update existing products using upsert
+            if (updateProducts.length > 0) {
+                // Remove created_at from updates to preserve original
+                const updateData = updateProducts.map(({ created_at, ...rest }) => rest);
+                
+                const { error: upsertError } = await supabase
+                    .from('bol_products')
+                    .upsert(updateData, { onConflict: 'ean' });
+                
+                if (upsertError) {
+                    console.error('[BolSync] Batch upsert error:', upsertError);
+                    job.itemsFailed += updateProducts.length;
+                    job.errors.push({ batch: 'update', error: upsertError.message });
+                } else {
+                    job.itemsUpdated = updateProducts.length;
+                }
+            }
+            
+            job.itemsProcessed = products.length;
             job.status = 'completed';
             job.completedAt = new Date().toISOString();
             console.log(`[BolSync] Completed. Created: ${job.itemsCreated}, Updated: ${job.itemsUpdated}, Failed: ${job.itemsFailed}`);

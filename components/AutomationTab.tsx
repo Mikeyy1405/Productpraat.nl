@@ -129,6 +129,8 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
                 console.error('Failed to fetch automation data:', error);
             }
         };
+        
+        // Initial fetch
         fetchAutomationData();
         fetchBolSyncData();
         
@@ -138,7 +140,8 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             fetchBolSyncData();
         }, 30000);
         return () => clearInterval(interval);
-    }, [fetchBolSyncData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Handle master toggle
     const handleMasterToggle = useCallback(async () => {
