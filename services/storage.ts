@@ -1,7 +1,7 @@
 import { getSupabase } from './supabaseClient';
 import { Product, UserReview, Article } from '../types';
 import { generateSlug, generateArticleSlug } from './urlService';
-import { DEMO_PRODUCTS } from '../data/realProducts';
+import { SAMPLE_PRODUCTS } from '../data/realProducts';
 
 /**
  * Helper function to format error messages consistently
@@ -29,8 +29,8 @@ export const db = {
     getAll: async (): Promise<Product[]> => {
         const supabase = getSupabase();
         if (!supabase) {
-            console.log("📦 Database niet geconfigureerd - demo producten worden gebruikt");
-            return DEMO_PRODUCTS;
+            console.log("ℹ️ Supabase niet geconfigureerd, demo producten worden getoond");
+            return SAMPLE_PRODUCTS;
         }
         try {
             const { data, error } = await supabase
@@ -38,23 +38,20 @@ export const db = {
                 .select('*')
                 .order('created_at', { ascending: false });
             
-            if (error) {
-                console.error("❌ Database fout bij ophalen producten:", formatError(error));
-                console.log("📦 Fallback naar demo producten");
-                return DEMO_PRODUCTS;
-            }
+            if (error) throw error;
             
-            // If no products in database, return demo products
+            // Return sample products if database is empty
             if (!data || data.length === 0) {
-                console.log("📦 Geen producten in database - demo producten worden gebruikt");
-                return DEMO_PRODUCTS;
+                console.log("ℹ️ Geen producten in database, demo producten worden getoond");
+                return SAMPLE_PRODUCTS;
             }
             
             return data as Product[];
         } catch (e) {
-            console.error("❌ Fout bij ophalen producten:", formatError(e));
-            console.log("📦 Fallback naar demo producten");
-            return DEMO_PRODUCTS;
+            console.error("Fetch Error:", formatError(e));
+            // Return sample products as fallback on error
+            console.log("ℹ️ Fout bij ophalen producten, demo producten worden getoond");
+            return SAMPLE_PRODUCTS;
         }
     },
 
@@ -107,7 +104,8 @@ export const db = {
     getByCategory: async (category: string): Promise<Product[]> => {
         const supabase = getSupabase();
         if (!supabase) {
-            return getDemoProductsByCategory(category);
+            // Return sample products filtered by category as fallback
+            return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
         }
         try {
             const { data, error } = await supabase
@@ -116,20 +114,17 @@ export const db = {
                 .eq('category', category.toLowerCase())
                 .order('score', { ascending: false });
             
-            if (error) {
-                console.error("GetByCategory Error:", formatError(error));
-                return getDemoProductsByCategory(category);
-            }
+            if (error) throw error;
             
-            // If no products in category, return demo products for that category
+            // Return sample products for this category if database is empty
             if (!data || data.length === 0) {
-                return getDemoProductsByCategory(category);
+                return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
             }
             
             return data as Product[];
         } catch (e) {
             console.error("GetByCategory Error:", formatError(e));
-            return getDemoProductsByCategory(category);
+            return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
         }
     },
 

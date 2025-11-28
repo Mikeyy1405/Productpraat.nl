@@ -1,87 +1,90 @@
 
 import { Product } from '../types';
 
-// Demo producten voor wanneer de database niet beschikbaar is
-// Deze producten worden getoond als fallback op de homepage
-export const DEMO_PRODUCTS: Product[] = [
+/**
+ * Sample products voor demo/fallback wanneer Supabase niet beschikbaar is.
+ * Deze worden getoond op de homepage als de database geen producten kan ophalen.
+ */
+export const SAMPLE_PRODUCTS: Product[] = [
     {
-        id: 'demo-1',
+        id: 'sample-1',
         brand: 'Samsung',
-        model: 'Galaxy S24 Ultra',
-        price: 1349,
-        score: 9.2,
-        category: 'smartphones',
-        image: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&h=400&fit=crop',
-        slug: 'samsung-galaxy-s24-ultra-review',
+        model: 'EcoBubble WW90T534DAW',
+        price: 599,
+        score: 8.7,
+        category: 'wasmachines',
+        image: 'https://media.s-bol.com/gBPzYgzV46RA/550x730.jpg',
+        slug: 'samsung-ecobubble-ww90t534daw',
         specs: {
-            'Schermgrootte': '6.8 inch',
-            'Camera (MP)': '200 MP',
-            'Opslag': '256 GB',
-            'Batterij': '5000 mAh'
+            'Vulgewicht': '9 kg',
+            'Toerental': '1400 tpm',
+            'Energieklasse': 'A',
+            'Geluidsniveau': '73 dB'
         },
-        pros: ['Uitstekende camera', 'Lange batterijduur', 'Krachtige processor'],
-        cons: ['Hoge prijs', 'Groot en zwaar'],
-        description: 'De Samsung Galaxy S24 Ultra is de ultieme smartphone voor veeleisende gebruikers.',
-        affiliateUrl: 'https://www.bol.com/nl/p/samsung-galaxy-s24-ultra/'
+        pros: ['Uitstekende wasresultaten', 'Energiezuinig', 'Stil in gebruik'],
+        cons: ['Hogere aanschafprijs', 'App kan soms haperen'],
+        description: 'De Samsung EcoBubble is een premium wasmachine met uitstekende wasresultaten en moderne functies.',
+        affiliateUrl: 'https://www.bol.com/nl/nl/p/samsung-ww90t534daw-ecobubble-wasmachine-9-kg/9300000030548674/'
     },
     {
-        id: 'demo-2',
-        brand: 'Apple',
-        model: 'MacBook Pro 14"',
-        price: 2499,
-        score: 9.4,
-        category: 'laptops',
-        image: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400&h=400&fit=crop',
-        slug: 'apple-macbook-pro-14-review',
-        specs: {
-            'Processor': 'Apple M3 Pro',
-            'RAM geheugen': '18 GB',
-            'Opslag': '512 GB SSD',
-            'Scherm': '14.2 inch Liquid Retina XDR'
-        },
-        pros: ['Enorme prestaties', 'Prachtig scherm', 'Uitstekende batterij'],
-        cons: ['Premium prijs', 'Beperkte poorten'],
-        description: 'De MacBook Pro 14" met M3 Pro chip biedt ongekende prestaties voor professionals.',
-        affiliateUrl: 'https://www.bol.com/nl/p/apple-macbook-pro-14/'
-    },
-    {
-        id: 'demo-3',
-        brand: 'Philips',
-        model: 'Airfryer XXL HD9285',
-        price: 229,
-        score: 8.8,
-        category: 'airfryers',
-        image: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=400&h=400&fit=crop',
-        slug: 'philips-airfryer-xxl-hd9285-review',
-        specs: {
-            'Laadvermogen (kg)': '1.4 kg',
-            'Programmas': '7 programmas',
-            'Vaatwasserbestendig': 'Ja'
-        },
-        pros: ['Grote capaciteit', 'Eenvoudig te reinigen', 'Snelle opwarming'],
-        cons: ['Neemt veel ruimte in', 'Kan luidruchtig zijn'],
-        description: 'De Philips Airfryer XXL is ideaal voor gezinnen en kookt snel en gezond.',
-        affiliateUrl: 'https://www.bol.com/nl/p/philips-airfryer-xxl/'
-    },
-    {
-        id: 'demo-4',
+        id: 'sample-2',
         brand: 'LG',
-        model: 'OLED C3 55"',
+        model: 'OLED55C3',
         price: 1299,
-        score: 9.1,
+        score: 9.2,
         category: 'televisies',
-        image: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=400&h=400&fit=crop',
-        slug: 'lg-oled-c3-55-review',
+        image: 'https://media.s-bol.com/gO7vJVQpAYNr/550x412.jpg',
+        slug: 'lg-oled55c3',
         specs: {
             'Schermdiagonaal': '55 inch',
             'Type scherm': 'OLED',
-            'Verversing (Hz)': '120 Hz',
+            'Verversing': '120 Hz',
             'HDMI 2.1': 'Ja'
         },
-        pros: ['Perfecte zwartwaarden', 'Oneindig contrast', 'Geweldig voor gaming'],
-        cons: ['Risico op inbranden', 'Niet de helderste'],
-        description: 'De LG OLED C3 biedt een ongeëvenaarde kijkervaring met perfecte zwartwaarden.',
-        affiliateUrl: 'https://www.bol.com/nl/p/lg-oled-c3-55/'
+        pros: ['Perfect zwart', 'Geweldige kleuren', 'Ideaal voor gaming'],
+        cons: ['Burn-in risico bij statische beelden', 'Niet het helderst voor lichte kamers'],
+        description: 'De LG OLED55C3 is een top-tier OLED televisie met perfecte zwartniveaus en gaming features.',
+        affiliateUrl: 'https://www.bol.com/nl/nl/p/lg-oled55c36lc-55-inch-oled-tv/9300000147520867/'
+    },
+    {
+        id: 'sample-3',
+        brand: 'Dyson',
+        model: 'V15 Detect',
+        price: 749,
+        score: 9.0,
+        category: 'stofzuigers',
+        image: 'https://media.s-bol.com/g1z0r2W0mxWL/550x478.jpg',
+        slug: 'dyson-v15-detect',
+        specs: {
+            'Type': 'Snoerloos',
+            'Gebruiksduur': '60 minuten',
+            'Geluidsniveau': '78 dB',
+            'Gewicht': '3.1 kg'
+        },
+        pros: ['Krachtige zuigkracht', 'Laser toont stof', 'Lange batterijduur'],
+        cons: ['Hoge prijs', 'Stofbak relatief klein'],
+        description: 'De Dyson V15 Detect is de meest geavanceerde snoerloze stofzuiger met innovatieve lasertechnologie.',
+        affiliateUrl: 'https://www.bol.com/nl/nl/p/dyson-v15-detect-absolute-snoerloze-stofzuiger/9300000030769743/'
+    },
+    {
+        id: 'sample-4',
+        brand: 'Apple',
+        model: 'MacBook Air M3',
+        price: 1299,
+        score: 9.1,
+        category: 'laptops',
+        image: 'https://media.s-bol.com/gOzNn2AVkVNk/550x366.jpg',
+        slug: 'apple-macbook-air-m3',
+        specs: {
+            'Processor': 'Apple M3',
+            'RAM geheugen': '8 GB',
+            'Opslag': '256 GB SSD',
+            'Scherm': '13.6 inch Liquid Retina'
+        },
+        pros: ['Razendsnelle M3 chip', 'Fantastische batterijduur', 'Stijlvol design'],
+        cons: ['Beperkte opslag in basismodel', 'Geen touchscreen'],
+        description: 'De nieuwe MacBook Air met M3 chip biedt ongekende prestaties in een dun en licht ontwerp.',
+        affiliateUrl: 'https://www.bol.com/nl/nl/p/apple-macbook-air-13-3-inch-m3-8gb-256gb-spacegrijs/9300000177469534/'
     }
 ];
 
