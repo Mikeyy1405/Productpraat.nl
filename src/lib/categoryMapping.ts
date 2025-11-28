@@ -173,5 +173,3 @@ export function getCategoryKeyFromDisplayName(displayName: string): string | und
     
     return undefined;
 }
-
-export default CATEGORY_MAPPING;

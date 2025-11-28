@@ -19,10 +19,10 @@
  * @module scripts/find-bol-categories
  */
 
-import * as dotenv from 'dotenv';
+import { config } from 'dotenv';
 
 // Load environment variables
-dotenv.config();
+config();
 
 // ============================================================================
 // CONFIGURATION
