@@ -128,11 +128,11 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                                     key={key}
                                     onClick={() => toggleCategory(key)}
                                     disabled={isImporting}
-                                    className={`p-3 rounded-lg border transition ${{
+                                    className={`p-3 rounded-lg border transition ${
                                         selectedCategories.includes(key)
                                             ? 'bg-blue-600/30 border-blue-500 text-blue-200'
                                             : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                                    }} disabled:opacity-50`}
+                                    } disabled:opacity-50`}
                                 >
                                     <div className="text-sm font-medium">{cat.name}</div>
                                 </button>
@@ -179,15 +179,15 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                     </button>
 
                     {importStatus && (
-                        <div className={`mt-4 p-4 rounded-lg border text-center font-medium ${{
+                        <div className={`mt-4 p-4 rounded-lg border text-center font-medium ${
                             importStatus.startsWith('✅') 
                                 ? 'bg-green-900/30 border-green-500/30 text-green-400'
                                 : importStatus.startsWith('❌')
                                 ? 'bg-red-900/30 border-red-500/30 text-red-400'
                                 : 'bg-blue-900/30 border-blue-500/30 text-blue-400'
-                        }}`}> {
-                            importStatus
-                        }</div>
+                        }`}>
+                            {importStatus}
+                        </div>
                     )}
                 </div>
 
