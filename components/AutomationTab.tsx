@@ -748,7 +748,14 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
     automationStatus,
     automationLoading,
     onTriggerJob
-}) => (
+}) => {
+    // Defensive checks - use imported DEFAULT_CONFIG for consistency
+    const productGen = automationConfig.productGeneration || DEFAULT_CONFIG.productGeneration;
+    const contentGen = automationConfig.contentGeneration || DEFAULT_CONFIG.contentGeneration;
+    const linkMon = automationConfig.linkMonitoring || DEFAULT_CONFIG.linkMonitoring;
+    const commTrack = automationConfig.commissionTracking || DEFAULT_CONFIG.commissionTracking;
+
+    return (
     <div className="space-y-6">
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -758,7 +765,7 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
                         <i className="fas fa-box-open text-purple-400"></i>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-white">{automationConfig.productGeneration.productsPerDay}</div>
+                        <div className="text-2xl font-bold text-white">{productGen.productsPerDay}</div>
                         <div className="text-xs text-slate-400">Producten/dag</div>
                     </div>
                 </div>
@@ -769,7 +776,7 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
                         <i className="fas fa-file-alt text-green-400"></i>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-white">{automationConfig.contentGeneration.postsPerWeek}</div>
+                        <div className="text-2xl font-bold text-white">{contentGen.postsPerWeek}</div>
                         <div className="text-xs text-slate-400">Posts/week</div>
                     </div>
                 </div>
@@ -780,7 +787,7 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
                         <i className="fas fa-tags text-blue-400"></i>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-white">{automationConfig.productGeneration.categories.length}</div>
+                        <div className="text-2xl font-bold text-white">{(productGen.categories || []).length}</div>
                         <div className="text-xs text-slate-400">Categorieën</div>
                     </div>
                 </div>
@@ -791,7 +798,7 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
                         <i className="fas fa-network-wired text-yellow-400"></i>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-white">{automationConfig.commissionTracking.networks.length}</div>
+                        <div className="text-2xl font-bold text-white">{(commTrack.networks || []).length}</div>
                         <div className="text-xs text-slate-400">Netwerken</div>
                     </div>
                 </div>
@@ -805,36 +812,36 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
                     id: 'productGeneration', 
                     name: 'Product Generatie', 
                     icon: 'fa-box-open',
-                    enabled: automationConfig.productGeneration.enabled,
-                    schedule: automationConfig.productGeneration.preferredTime,
-                    description: `${automationConfig.productGeneration.productsPerDay} producten per dag`,
+                    enabled: productGen.enabled,
+                    schedule: productGen.preferredTime,
+                    description: `${productGen.productsPerDay} producten per dag`,
                     colorClass: 'purple'
                 },
                 { 
                     id: 'contentGeneration', 
                     name: 'Content Generatie', 
                     icon: 'fa-file-alt',
-                    enabled: automationConfig.contentGeneration.enabled,
-                    schedule: automationConfig.contentGeneration.frequency,
-                    description: `${automationConfig.contentGeneration.postsPerWeek} posts per week`,
+                    enabled: contentGen.enabled,
+                    schedule: contentGen.frequency,
+                    description: `${contentGen.postsPerWeek} posts per week`,
                     colorClass: 'green'
                 },
                 { 
                     id: 'linkHealthCheck', 
                     name: 'Link Monitoring', 
                     icon: 'fa-heartbeat',
-                    enabled: automationConfig.linkMonitoring.enabled,
-                    schedule: automationConfig.linkMonitoring.checkFrequency,
-                    description: automationConfig.linkMonitoring.autoFix ? 'Met auto-fix' : 'Alleen monitoring',
+                    enabled: linkMon.enabled,
+                    schedule: linkMon.checkFrequency,
+                    description: linkMon.autoFix ? 'Met auto-fix' : 'Alleen monitoring',
                     colorClass: 'blue'
                 },
                 { 
                     id: 'commissionSync', 
                     name: 'Commissie Tracking', 
                     icon: 'fa-chart-line',
-                    enabled: automationConfig.commissionTracking.enabled,
-                    schedule: automationConfig.commissionTracking.syncFrequency,
-                    description: `${automationConfig.commissionTracking.networks.length} netwerken`,
+                    enabled: commTrack.enabled,
+                    schedule: commTrack.syncFrequency,
+                    description: `${(commTrack.networks || []).length} netwerken`,
                     colorClass: 'yellow'
                 }
             ].map(job => {
@@ -887,10 +894,14 @@ const OverviewSection: React.FC<OverviewSectionProps> = ({
             })}
         </div>
     </div>
-);
+    );
+};
 
 const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
+    
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const productGen = automationConfig.productGeneration || DEFAULT_CONFIG.productGeneration;
     
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -903,16 +914,16 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                         onClick={() => setAutomationConfig({
                             ...automationConfig,
                             productGeneration: {
-                                ...automationConfig.productGeneration,
-                                enabled: !automationConfig.productGeneration.enabled
+                                ...productGen,
+                                enabled: !productGen.enabled
                             }
                         })}
                         className={`relative w-12 h-6 rounded-full transition-all ${
-                            automationConfig.productGeneration.enabled ? 'bg-purple-500' : 'bg-slate-700'
+                            productGen.enabled ? 'bg-purple-500' : 'bg-slate-700'
                         }`}
                     >
                         <div className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow ${
-                            automationConfig.productGeneration.enabled ? 'left-7' : 'left-1'
+                            productGen.enabled ? 'left-7' : 'left-1'
                         }`}></div>
                     </button>
                 </div>
@@ -921,17 +932,17 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                 {/* Products Per Day Slider */}
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-3">
-                        Producten per dag: <span className="text-purple-400 font-bold">{automationConfig.productGeneration.productsPerDay}</span>
+                        Producten per dag: <span className="text-purple-400 font-bold">{productGen.productsPerDay}</span>
                     </label>
                     <input
                         type="range"
                         min="0"
                         max="10"
-                        value={automationConfig.productGeneration.productsPerDay}
+                        value={productGen.productsPerDay}
                         onChange={(e) => setAutomationConfig({
                             ...automationConfig,
                             productGeneration: {
-                                ...automationConfig.productGeneration,
+                                ...productGen,
                                 productsPerDay: parseInt(e.target.value)
                             }
                         })}
@@ -949,11 +960,11 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                     <label className="block text-sm font-medium text-slate-300 mb-2">Uitvoer tijd</label>
                     <input
                         type="time"
-                        value={automationConfig.productGeneration.preferredTime}
+                        value={productGen.preferredTime}
                         onChange={(e) => setAutomationConfig({
                             ...automationConfig,
                             productGeneration: {
-                                ...automationConfig.productGeneration,
+                                ...productGen,
                                 preferredTime: e.target.value
                             }
                         })}
@@ -969,22 +980,22 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                             <label
                                 key={key}
                                 className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition ${
-                                    automationConfig.productGeneration.categories.includes(key)
+                                    (productGen.categories || []).includes(key)
                                         ? 'bg-purple-600/20 border-purple-500/50 text-purple-300'
                                         : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                                 }`}
                             >
                                 <input
                                     type="checkbox"
-                                    checked={automationConfig.productGeneration.categories.includes(key)}
+                                    checked={(productGen.categories || []).includes(key)}
                                     onChange={(e) => {
                                         const cats = e.target.checked
-                                            ? [...automationConfig.productGeneration.categories, key]
-                                            : automationConfig.productGeneration.categories.filter(c => c !== key);
+                                            ? [...(productGen.categories || []), key]
+                                            : (productGen.categories || []).filter(c => c !== key);
                                         setAutomationConfig({
                                             ...automationConfig,
                                             productGeneration: {
-                                                ...automationConfig.productGeneration,
+                                                ...productGen,
                                                 categories: cats
                                             }
                                         });
@@ -1004,6 +1015,9 @@ const ProductGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
 const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const contentGen = automationConfig.contentGeneration || DEFAULT_CONFIG.contentGeneration;
+    
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-green-900/30 to-slate-900 p-4 border-b border-slate-800">
@@ -1015,16 +1029,16 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                         onClick={() => setAutomationConfig({
                             ...automationConfig,
                             contentGeneration: {
-                                ...automationConfig.contentGeneration,
-                                enabled: !automationConfig.contentGeneration.enabled
+                                ...contentGen,
+                                enabled: !contentGen.enabled
                             }
                         })}
                         className={`relative w-12 h-6 rounded-full transition-all ${
-                            automationConfig.contentGeneration.enabled ? 'bg-green-500' : 'bg-slate-700'
+                            contentGen.enabled ? 'bg-green-500' : 'bg-slate-700'
                         }`}
                     >
                         <div className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow ${
-                            automationConfig.contentGeneration.enabled ? 'left-7' : 'left-1'
+                            contentGen.enabled ? 'left-7' : 'left-1'
                         }`}></div>
                     </button>
                 </div>
@@ -1034,11 +1048,11 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Frequentie</label>
                     <select
-                        value={automationConfig.contentGeneration.frequency}
+                        value={contentGen.frequency}
                         onChange={(e) => setAutomationConfig({
                             ...automationConfig,
                             contentGeneration: {
-                                ...automationConfig.contentGeneration,
+                                ...contentGen,
                                 frequency: e.target.value as any
                             }
                         })}
@@ -1054,17 +1068,17 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                 {/* Posts Per Week Slider */}
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-3">
-                        Posts per week: <span className="text-green-400 font-bold">{automationConfig.contentGeneration.postsPerWeek}</span>
+                        Posts per week: <span className="text-green-400 font-bold">{contentGen.postsPerWeek}</span>
                     </label>
                     <input
                         type="range"
                         min="1"
                         max="7"
-                        value={automationConfig.contentGeneration.postsPerWeek}
+                        value={contentGen.postsPerWeek}
                         onChange={(e) => setAutomationConfig({
                             ...automationConfig,
                             contentGeneration: {
-                                ...automationConfig.contentGeneration,
+                                ...contentGen,
                                 postsPerWeek: parseInt(e.target.value)
                             }
                         })}
@@ -1090,22 +1104,22 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                             <label
                                 key={type.id}
                                 className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition ${
-                                    automationConfig.contentGeneration.contentTypes.includes(type.id)
+                                    (contentGen.contentTypes || []).includes(type.id)
                                         ? 'bg-green-600/20 border-green-500/50 text-green-300'
                                         : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                                 }`}
                             >
                                 <input
                                     type="checkbox"
-                                    checked={automationConfig.contentGeneration.contentTypes.includes(type.id)}
+                                    checked={(contentGen.contentTypes || []).includes(type.id)}
                                     onChange={(e) => {
                                         const types = e.target.checked
-                                            ? [...automationConfig.contentGeneration.contentTypes, type.id]
-                                            : automationConfig.contentGeneration.contentTypes.filter(t => t !== type.id);
+                                            ? [...(contentGen.contentTypes || []), type.id]
+                                            : (contentGen.contentTypes || []).filter(t => t !== type.id);
                                         setAutomationConfig({
                                             ...automationConfig,
                                             contentGeneration: {
-                                                ...automationConfig.contentGeneration,
+                                                ...contentGen,
                                                 contentTypes: types
                                             }
                                         });
@@ -1127,19 +1141,19 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
                             <button
                                 key={idx}
                                 onClick={() => {
-                                    const days = automationConfig.contentGeneration.preferredDays.includes(idx)
-                                        ? automationConfig.contentGeneration.preferredDays.filter(d => d !== idx)
-                                        : [...automationConfig.contentGeneration.preferredDays, idx];
+                                    const days = (contentGen.preferredDays || []).includes(idx)
+                                        ? (contentGen.preferredDays || []).filter(d => d !== idx)
+                                        : [...(contentGen.preferredDays || []), idx];
                                     setAutomationConfig({
                                         ...automationConfig,
                                         contentGeneration: {
-                                            ...automationConfig.contentGeneration,
+                                            ...contentGen,
                                             preferredDays: days.sort()
                                         }
                                     });
                                 }}
                                 className={`w-12 h-12 rounded-lg font-medium transition ${
-                                    automationConfig.contentGeneration.preferredDays.includes(idx)
+                                    (contentGen.preferredDays || []).includes(idx)
                                         ? 'bg-green-600 text-white'
                                         : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                 }`}
@@ -1157,6 +1171,11 @@ const ContentGenerationSection: React.FC<SectionProps> = ({ automationConfig, se
 const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
     
+    // Defensive checks - use imported DEFAULT_CONFIG for consistency
+    const linkMon = automationConfig.linkMonitoring || DEFAULT_CONFIG.linkMonitoring;
+    const commTrack = automationConfig.commissionTracking || DEFAULT_CONFIG.commissionTracking;
+    const perf = automationConfig.performance || DEFAULT_CONFIG.performance;
+    
     return (
         <div className="space-y-6">
             {/* Link Monitoring */}
@@ -1170,16 +1189,16 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                             onClick={() => setAutomationConfig({
                                 ...automationConfig,
                                 linkMonitoring: {
-                                    ...automationConfig.linkMonitoring,
-                                    enabled: !automationConfig.linkMonitoring.enabled
+                                    ...linkMon,
+                                    enabled: !linkMon.enabled
                                 }
                             })}
                             className={`relative w-12 h-6 rounded-full transition-all ${
-                                automationConfig.linkMonitoring.enabled ? 'bg-blue-500' : 'bg-slate-700'
+                                linkMon.enabled ? 'bg-blue-500' : 'bg-slate-700'
                             }`}
                         >
                             <div className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow ${
-                                automationConfig.linkMonitoring.enabled ? 'left-7' : 'left-1'
+                                linkMon.enabled ? 'left-7' : 'left-1'
                             }`}></div>
                         </button>
                     </div>
@@ -1189,11 +1208,11 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-2">Check Frequentie</label>
                             <select
-                                value={automationConfig.linkMonitoring.checkFrequency}
+                                value={linkMon.checkFrequency}
                                 onChange={(e) => setAutomationConfig({
                                     ...automationConfig,
                                     linkMonitoring: {
-                                        ...automationConfig.linkMonitoring,
+                                        ...linkMon,
                                         checkFrequency: e.target.value as CheckFrequency
                                     }
                                 })}
@@ -1208,11 +1227,11 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    checked={automationConfig.linkMonitoring.autoFix}
+                                    checked={linkMon.autoFix}
                                     onChange={(e) => setAutomationConfig({
                                         ...automationConfig,
                                         linkMonitoring: {
-                                            ...automationConfig.linkMonitoring,
+                                            ...linkMon,
                                             autoFix: e.target.checked
                                         }
                                     })}
@@ -1223,11 +1242,11 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    checked={automationConfig.linkMonitoring.notifications}
+                                    checked={linkMon.notifications}
                                     onChange={(e) => setAutomationConfig({
                                         ...automationConfig,
                                         linkMonitoring: {
-                                            ...automationConfig.linkMonitoring,
+                                            ...linkMon,
                                             notifications: e.target.checked
                                         }
                                     })}
@@ -1251,16 +1270,16 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                             onClick={() => setAutomationConfig({
                                 ...automationConfig,
                                 commissionTracking: {
-                                    ...automationConfig.commissionTracking,
-                                    enabled: !automationConfig.commissionTracking.enabled
+                                    ...commTrack,
+                                    enabled: !commTrack.enabled
                                 }
                             })}
                             className={`relative w-12 h-6 rounded-full transition-all ${
-                                automationConfig.commissionTracking.enabled ? 'bg-yellow-500' : 'bg-slate-700'
+                                commTrack.enabled ? 'bg-yellow-500' : 'bg-slate-700'
                             }`}
                         >
                             <div className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow ${
-                                automationConfig.commissionTracking.enabled ? 'left-7' : 'left-1'
+                                commTrack.enabled ? 'left-7' : 'left-1'
                             }`}></div>
                         </button>
                     </div>
@@ -1269,11 +1288,11 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Sync Frequentie</label>
                         <select
-                            value={automationConfig.commissionTracking.syncFrequency}
+                            value={commTrack.syncFrequency}
                             onChange={(e) => setAutomationConfig({
                                 ...automationConfig,
                                 commissionTracking: {
-                                    ...automationConfig.commissionTracking,
+                                    ...commTrack,
                                     syncFrequency: e.target.value as SyncFrequency
                                 }
                             })}
@@ -1298,22 +1317,22 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                                 <label
                                     key={network.id}
                                     className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition ${
-                                        automationConfig.commissionTracking.networks.includes(network.id)
+                                        (commTrack.networks || []).includes(network.id)
                                             ? 'bg-yellow-600/20 border-yellow-500/50 text-yellow-300'
                                             : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                                     }`}
                                 >
                                     <input
                                         type="checkbox"
-                                        checked={automationConfig.commissionTracking.networks.includes(network.id)}
+                                        checked={(commTrack.networks || []).includes(network.id)}
                                         onChange={(e) => {
                                             const nets = e.target.checked
-                                                ? [...automationConfig.commissionTracking.networks, network.id]
-                                                : automationConfig.commissionTracking.networks.filter(n => n !== network.id);
+                                                ? [...(commTrack.networks || []), network.id]
+                                                : (commTrack.networks || []).filter(n => n !== network.id);
                                             setAutomationConfig({
                                                 ...automationConfig,
                                                 commissionTracking: {
-                                                    ...automationConfig.commissionTracking,
+                                                    ...commTrack,
                                                     networks: nets
                                                 }
                                             });
@@ -1340,10 +1359,10 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                         <label className="flex items-center gap-3 p-3 bg-slate-950 rounded-lg cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={automationConfig.performance.enableCaching}
+                                checked={perf.enableCaching}
                                 onChange={(e) => setAutomationConfig({
                                     ...automationConfig,
-                                    performance: { ...automationConfig.performance, enableCaching: e.target.checked }
+                                    performance: { ...perf, enableCaching: e.target.checked }
                                 })}
                                 className="rounded border-slate-600 bg-slate-800 text-cyan-600 focus:ring-cyan-500"
                             />
@@ -1352,10 +1371,10 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                         <label className="flex items-center gap-3 p-3 bg-slate-950 rounded-lg cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={automationConfig.performance.enableLazyLoading}
+                                checked={perf.enableLazyLoading}
                                 onChange={(e) => setAutomationConfig({
                                     ...automationConfig,
-                                    performance: { ...automationConfig.performance, enableLazyLoading: e.target.checked }
+                                    performance: { ...perf, enableLazyLoading: e.target.checked }
                                 })}
                                 className="rounded border-slate-600 bg-slate-800 text-cyan-600 focus:ring-cyan-500"
                             />
@@ -1364,10 +1383,10 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                         <label className="flex items-center gap-3 p-3 bg-slate-950 rounded-lg cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={automationConfig.performance.enableImageOptimization}
+                                checked={perf.enableImageOptimization}
                                 onChange={(e) => setAutomationConfig({
                                     ...automationConfig,
-                                    performance: { ...automationConfig.performance, enableImageOptimization: e.target.checked }
+                                    performance: { ...perf, enableImageOptimization: e.target.checked }
                                 })}
                                 className="rounded border-slate-600 bg-slate-800 text-cyan-600 focus:ring-cyan-500"
                             />
@@ -1376,10 +1395,10 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                         <label className="flex items-center gap-3 p-3 bg-slate-950 rounded-lg cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={automationConfig.performance.autoRemoveLowPerformers}
+                                checked={perf.autoRemoveLowPerformers}
                                 onChange={(e) => setAutomationConfig({
                                     ...automationConfig,
-                                    performance: { ...automationConfig.performance, autoRemoveLowPerformers: e.target.checked }
+                                    performance: { ...perf, autoRemoveLowPerformers: e.target.checked }
                                 })}
                                 className="rounded border-slate-600 bg-slate-800 text-cyan-600 focus:ring-cyan-500"
                             />
@@ -1388,18 +1407,18 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-3">
-                            Minimum conversie rate: <span className="text-cyan-400 font-bold">{automationConfig.performance.minConversionRate}%</span>
+                            Minimum conversie rate: <span className="text-cyan-400 font-bold">{perf.minConversionRate}%</span>
                         </label>
                         <input
                             type="range"
                             min="0"
                             max="10"
                             step="0.5"
-                            value={automationConfig.performance.minConversionRate}
+                            value={perf.minConversionRate}
                             onChange={(e) => setAutomationConfig({
                                 ...automationConfig,
                                 performance: {
-                                    ...automationConfig.performance,
+                                    ...perf,
                                     minConversionRate: parseFloat(e.target.value)
                                 }
                             })}
@@ -1414,6 +1433,9 @@ const MonitoringSection: React.FC<SectionProps> = ({ automationConfig, setAutoma
 
 const NotificationsSection: React.FC<SectionProps> = ({ automationConfig, setAutomationConfig }) => {
     if (!setAutomationConfig) return null;
+    
+    // Defensive check - use imported DEFAULT_CONFIG for consistency
+    const notif = automationConfig.notifications || DEFAULT_CONFIG.notifications;
     
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
@@ -1433,16 +1455,16 @@ const NotificationsSection: React.FC<SectionProps> = ({ automationConfig, setAut
                         onClick={() => setAutomationConfig({
                             ...automationConfig,
                             notifications: {
-                                ...automationConfig.notifications,
-                                emailEnabled: !automationConfig.notifications.emailEnabled
+                                ...notif,
+                                emailEnabled: !notif.emailEnabled
                             }
                         })}
                         className={`relative w-12 h-6 rounded-full transition-all ${
-                            automationConfig.notifications.emailEnabled ? 'bg-yellow-500' : 'bg-slate-700'
+                            notif.emailEnabled ? 'bg-yellow-500' : 'bg-slate-700'
                         }`}
                     >
                         <div className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-all shadow ${
-                            automationConfig.notifications.emailEnabled ? 'left-7' : 'left-1'
+                            notif.emailEnabled ? 'left-7' : 'left-1'
                         }`}></div>
                     </button>
                 </div>
@@ -1452,11 +1474,11 @@ const NotificationsSection: React.FC<SectionProps> = ({ automationConfig, setAut
                     <label className="block text-sm font-medium text-slate-300 mb-2">E-mailadres</label>
                     <input
                         type="email"
-                        value={automationConfig.notifications.email}
+                        value={notif.email}
                         onChange={(e) => setAutomationConfig({
                             ...automationConfig,
                             notifications: {
-                                ...automationConfig.notifications,
+                                ...notif,
                                 email: e.target.value
                             }
                         })}
@@ -1480,22 +1502,22 @@ const NotificationsSection: React.FC<SectionProps> = ({ automationConfig, setAut
                             <label
                                 key={alert.id}
                                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
-                                    automationConfig.notifications.alertTypes.includes(alert.id)
+                                    (notif.alertTypes || []).includes(alert.id)
                                         ? 'bg-yellow-600/20 border-yellow-500/50 text-yellow-300'
                                         : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
                                 }`}
                             >
                                 <input
                                     type="checkbox"
-                                    checked={automationConfig.notifications.alertTypes.includes(alert.id)}
+                                    checked={(notif.alertTypes || []).includes(alert.id)}
                                     onChange={(e) => {
                                         const types = e.target.checked
-                                            ? [...automationConfig.notifications.alertTypes, alert.id]
-                                            : automationConfig.notifications.alertTypes.filter(t => t !== alert.id);
+                                            ? [...(notif.alertTypes || []), alert.id]
+                                            : (notif.alertTypes || []).filter(t => t !== alert.id);
                                         setAutomationConfig({
                                             ...automationConfig,
                                             notifications: {
-                                                ...automationConfig.notifications,
+                                                ...notif,
                                                 alertTypes: types
                                             }
                                         });
