@@ -191,7 +191,7 @@ export const App: React.FC = () => {
             <Header onNavigate={handleNavigate} onSelectCategory={handleCategorySelect} activeView={view} />
             <main className="flex-1 flex flex-col">
                 {view === 'home' && <HomeView products={products} articles={articles} searchTerm={searchTerm} setSearchTerm={setSearchTerm} onSearch={handleSearch} onSelectCategory={handleCategorySelect} onOpenProduct={handleOpenProduct} onOpenArticle={handleOpenArticle} onNavigateToArticles={() => handleNavigate('artikelen')} />}
-                {view === 'admin' && isAuthenticated && <AdminPanel customProducts={products} articles={articles} setArticles={setArticles} onAddProduct={handleAddProduct} onDeleteProduct={handleDeleteProduct} onLogout={handleLogout} />}
+               {view === 'admin' && isAuthenticated && <SimpleDashboard products={products} onLogout={handleLogout} />}
                 {view === 'login' && <div className="py-20"><Login onLoginSuccess={handleLoginSuccess} /></div>}
                 {view === 'product' && selectedProduct && <ProductView product={selectedProduct} onNavigateHome={() => handleNavigate('home')} onNavigateCategory={handleCategorySelect} />}
                 {view === 'category' && (
