@@ -1,6 +1,26 @@
 import React, { useState } from 'react';
 import { Product, CATEGORIES } from '../types';
 
+interface CategoryResult {
+    category: string;
+    categoryId?: string;
+    found?: number;
+    imported?: number;
+    usedFallback?: boolean;
+    status: 'success' | 'failed' | 'pending' | 'loading';
+    error?: string;
+}
+
+interface ImportResult {
+    success: boolean;
+    imported: number;
+    updated?: number;
+    totalProducts?: number;
+    message: string;
+    details?: CategoryResult[];
+    categoryErrors?: Array<{ category: string; error: string }>;
+}
+
 interface SimpleDashboardProps {
     products: Product[];
     onLogout: () => void;
@@ -12,10 +32,12 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
 }) => {
     const [isImporting, setIsImporting] = useState(false);
     const [importStatus, setImportStatus] = useState<string>('');
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([
         'televisies', 'laptops', 'smartphones'
     ]);
     const [productsPerCategory, setProductsPerCategory] = useState(5);
+    const [categoryProgress, setCategoryProgress] = useState<CategoryResult[]>([]);
 
     const handleImport = async () => {
         console.log('[SimpleDashboard] Starting import:', {
@@ -30,6 +52,13 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
 
         setIsImporting(true);
         setImportStatus('🔄 Producten ophalen van Bol.com...');
+        setImportResult(null);
+        
+        // Initialize category progress
+        setCategoryProgress(selectedCategories.map(cat => ({
+            category: cat,
+            status: 'pending' as const
+        })));
         
         try {
             const response = await fetch('/api/admin/quick-import', {
@@ -37,29 +66,60 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     categories: selectedCategories,
-                    limit: productsPerCategory
+                    limit: productsPerCategory,
+                    concurrency: 3
                 })
             });
 
             // Check if response is OK first
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Server error: ${response.status} - ${errorText}`);
+                let errorMessage = `Server error: ${response.status}`;
+                
+                // Try to parse JSON error
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorMessage;
+                } catch {
+                    // Use raw text if not JSON
+                    if (errorText) {
+                        errorMessage = errorText;
+                    }
+                }
+                
+                throw new Error(errorMessage);
             }
 
-            const result = await response.json();
+            const result: ImportResult = await response.json();
             console.log('[SimpleDashboard] Import result:', result);
             
+            // Update import result for display
+            setImportResult(result);
+            
+            // Update category progress from result details
+            if (result.details) {
+                setCategoryProgress(result.details.map(d => ({
+                    category: d.category,
+                    categoryId: d.categoryId,
+                    found: d.found,
+                    usedFallback: d.usedFallback,
+                    status: d.status,
+                    error: d.error
+                })));
+            }
+            
             // Better success checking
-            if (result.success && result.imported > 0) {
-                setImportStatus(`✅ ${result.imported} producten geïmporteerd!`);
+            const totalImported = (result.imported || 0) + (result.updated || 0);
+            
+            if (result.success && totalImported > 0) {
+                setImportStatus(`✅ ${result.imported} nieuwe producten, ${result.updated || 0} geüpdatet!`);
                 // Reload after 2 seconds to show imported products
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else if (result.success && result.imported === 0) {
+            } else if (result.success && totalImported === 0) {
                 // Import succeeded but no products found
-                setImportStatus('⚠️ Geen producten gevonden. Probeer andere categorieën.');
+                setImportStatus('⚠️ Geen producten gevonden in de geselecteerde categorieën.');
                 setIsImporting(false);
             } else {
                 // Import failed
@@ -69,11 +129,15 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
         } catch (err) {
             console.error('Import error:', err);
             const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
-            setImportStatus(`❌ Fout: ${errorMessage}`);
+            setImportStatus(`❌ ${errorMessage}`);
             setIsImporting(false);
             
-            // DON'T reload on error - this was causing logout
-            // Just show the error message
+            // Mark all categories as failed
+            setCategoryProgress(prev => prev.map(p => ({
+                ...p,
+                status: 'failed' as const,
+                error: errorMessage
+            })));
         }
     };
 
@@ -83,9 +147,16 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 ? prev.filter(c => c !== cat)
                 : [...prev, cat]
         );
+        // Reset progress when categories change
+        setCategoryProgress([]);
+        setImportResult(null);
     };
 
     const uniqueCategories = new Set(products.map(p => p.category));
+    
+    // Count category failures
+    const categoryFailures = categoryProgress.filter(c => c.status === 'failed').length;
+    const categorySuccesses = categoryProgress.filter(c => c.status === 'success').length;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 md:p-8">
@@ -204,6 +275,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                         )}
                     </button>
 
+                    {/* Import Status Message */}
                     {importStatus && (
                         <div className={`mt-4 p-4 rounded-lg border text-center font-medium ${
                             importStatus.startsWith('✅') 
@@ -215,6 +287,101 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                                 : 'bg-blue-900/30 border-blue-500/30 text-blue-400'
                         }`}>
                             {importStatus}
+                        </div>
+                    )}
+
+                    {/* Per-Category Progress/Results */}
+                    {categoryProgress.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            <div className="text-sm font-medium text-slate-300 mb-2">
+                                <i className="fas fa-list-check mr-2"></i>
+                                Categorie Status:
+                                {categorySuccesses > 0 && (
+                                    <span className="ml-2 text-green-400">
+                                        {categorySuccesses} geslaagd
+                                    </span>
+                                )}
+                                {categoryFailures > 0 && (
+                                    <span className="ml-2 text-red-400">
+                                        {categoryFailures} mislukt
+                                    </span>
+                                )}
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {categoryProgress.map((cp, idx) => (
+                                    <div 
+                                        key={idx}
+                                        className={`p-3 rounded-lg border text-sm ${
+                                            cp.status === 'success' 
+                                                ? 'bg-green-900/20 border-green-500/30'
+                                                : cp.status === 'failed'
+                                                ? 'bg-red-900/20 border-red-500/30'
+                                                : cp.status === 'loading'
+                                                ? 'bg-blue-900/20 border-blue-500/30'
+                                                : 'bg-slate-800/50 border-slate-700'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="flex items-center gap-2">
+                                                {cp.status === 'loading' && (
+                                                    <i className="fas fa-circle-notch fa-spin text-blue-400"></i>
+                                                )}
+                                                {cp.status === 'success' && (
+                                                    <i className="fas fa-check-circle text-green-400"></i>
+                                                )}
+                                                {cp.status === 'failed' && (
+                                                    <i className="fas fa-times-circle text-red-400"></i>
+                                                )}
+                                                {cp.status === 'pending' && (
+                                                    <i className="fas fa-clock text-slate-400"></i>
+                                                )}
+                                                <span className={
+                                                    cp.status === 'success' ? 'text-green-300' :
+                                                    cp.status === 'failed' ? 'text-red-300' :
+                                                    'text-slate-300'
+                                                }>
+                                                    {CATEGORIES[cp.category]?.name || cp.category}
+                                                </span>
+                                            </span>
+                                            
+                                            {cp.found !== undefined && (
+                                                <span className="text-xs text-slate-400">
+                                                    {cp.found} gevonden
+                                                    {cp.usedFallback && (
+                                                        <span className="ml-1 text-yellow-400" title="Via zoekfunctie">
+                                                            <i className="fas fa-search"></i>
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            )}
+                                        </div>
+                                        
+                                        {cp.error && (
+                                            <div className="mt-1 text-xs text-red-400 truncate">
+                                                {cp.error}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Category Errors Summary */}
+                    {importResult?.categoryErrors && importResult.categoryErrors.length > 0 && (
+                        <div className="mt-4 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-400 font-medium mb-2">
+                                <i className="fas fa-exclamation-triangle"></i>
+                                Sommige categorieën konden niet worden geladen:
+                            </div>
+                            <ul className="text-sm text-red-300 space-y-1">
+                                {importResult.categoryErrors.map((err, idx) => (
+                                    <li key={idx}>
+                                        <strong>{CATEGORIES[err.category]?.name || err.category}:</strong> {err.error}
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
                     )}
                 </div>
