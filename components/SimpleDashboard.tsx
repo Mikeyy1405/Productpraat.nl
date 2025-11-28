@@ -18,6 +18,11 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
     const [productsPerCategory, setProductsPerCategory] = useState(5);
 
     const handleImport = async () => {
+        console.log('[SimpleDashboard] Starting import:', {
+            categories: selectedCategories,
+            limit: productsPerCategory
+        });
+
         if (selectedCategories.length === 0) {
             setImportStatus('❌ Selecteer minimaal 1 categorie');
             return;
@@ -36,18 +41,39 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 })
             });
 
+            // Check if response is OK first
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Server error: ${response.status} - ${errorText}`);
+            }
+
             const result = await response.json();
+            console.log('[SimpleDashboard] Import result:', result);
             
-            if (result.success) {
+            // Better success checking
+            if (result.success && result.imported > 0) {
                 setImportStatus(`✅ ${result.imported} producten geïmporteerd!`);
-                setTimeout(() => window.location.reload(), 2000);
+                // Reload after 2 seconds to show imported products
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else if (result.success && result.imported === 0) {
+                // Import succeeded but no products found
+                setImportStatus('⚠️ Geen producten gevonden. Probeer andere categorieën.');
+                setIsImporting(false);
             } else {
+                // Import failed
                 setImportStatus(`❌ ${result.message || 'Import mislukt'}`);
                 setIsImporting(false);
             }
         } catch (err) {
-            setImportStatus(`❌ Fout: ${err instanceof Error ? err.message : 'Onbekende fout'}`);
+            console.error('Import error:', err);
+            const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
+            setImportStatus(`❌ Fout: ${errorMessage}`);
             setIsImporting(false);
+            
+            // DON'T reload on error - this was causing logout
+            // Just show the error message
         }
     };
 
@@ -184,6 +210,8 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                                 ? 'bg-green-900/30 border-green-500/30 text-green-400'
                                 : importStatus.startsWith('❌')
                                 ? 'bg-red-900/30 border-red-500/30 text-red-400'
+                                : importStatus.startsWith('⚠️')
+                                ? 'bg-yellow-900/30 border-yellow-500/30 text-yellow-400'
                                 : 'bg-blue-900/30 border-blue-500/30 text-blue-400'
                         }`}>
                             {importStatus}
