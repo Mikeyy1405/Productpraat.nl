@@ -21,7 +21,7 @@ const formatError = (e: unknown): string => {
  * Helper function to get demo products filtered by category
  */
 const getDemoProductsByCategory = (category: string): Product[] => {
-    return DEMO_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
+    return SAMPLE_PRODUCTS.filter(p => p.category.toLowerCase() === category.toLowerCase());
 };
 
 export const db = {
