@@ -24,6 +24,7 @@ import {
     resetAutomationConfig,
     DEFAULT_CONFIG
 } from '../services/automationConfigService';
+import { AutomationPanel } from './AutomationPanel';
 
 // ============================================================================
 // TYPES
@@ -65,7 +66,7 @@ interface SyncJob {
     errorMessage?: string;
 }
 
-type SubTab = 'overview' | 'bolshop' | 'products' | 'content' | 'monitoring' | 'notifications';
+type SubTab = 'overview' | 'discovery' | 'bolshop' | 'products' | 'content' | 'monitoring' | 'notifications';
 
 // ============================================================================
 // COMPONENT
@@ -283,6 +284,7 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             <div className="flex flex-wrap gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
                 {[
                     { id: 'overview' as SubTab, icon: 'fa-th-large', label: 'Overzicht' },
+                    { id: 'discovery' as SubTab, icon: 'fa-robot', label: 'Product Discovery' },
                     { id: 'bolshop' as SubTab, icon: 'fa-shopping-bag', label: 'Bol.com Shop', badge: bolSyncStats?.totalProducts },
                     { id: 'products' as SubTab, icon: 'fa-box-open', label: 'Product Generatie' },
                     { id: 'content' as SubTab, icon: 'fa-file-alt', label: 'Content Generatie' },
@@ -331,6 +333,11 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
                     automationLoading={automationLoading}
                     onTriggerJob={handleTriggerJob}
                 />
+            )}
+
+            {/* Product Discovery Tab */}
+            {automationSubTab === 'discovery' && (
+                <AutomationPanel showToast={showToast} />
             )}
 
             {/* Bol.com Shop Sync Tab */}

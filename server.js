@@ -1051,6 +1051,756 @@ app.post('/api/bol/track-click', async (req, res) => {
     }
 });
 
+// ============================================================================
+// PRODUCT DISCOVERY AUTOMATION ENDPOINTS
+// ============================================================================
+
+// Automation state (in-memory for this instance)
+const automationState = {
+    isRunning: false,
+    currentRunId: null,
+    schedulerEnabled: false,
+    schedulerInterval: null, // setInterval reference
+    stopRequested: false,
+};
+
+// Rate limiting: delay between API requests (in ms)
+const RATE_LIMIT_DELAY = 2000;
+
+/**
+ * Helper to delay execution
+ */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Get automation status
+ */
+app.get('/api/automation/status', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/status`);
+    
+    try {
+        // Get stats from database if available
+        let stats = {
+            totalProcessed: 0,
+            successfulImports: 0,
+            failedImports: 0,
+            skippedProducts: 0,
+        };
+        let lastRun = null;
+        let config = null;
+        
+        if (supabase) {
+            // Get config
+            const { data: configData } = await supabase
+                .from('discovery_config')
+                .select('*')
+                .eq('id', 'default')
+                .single();
+            
+            if (configData) {
+                config = {
+                    enabled: configData.enabled,
+                    scheduleInterval: configData.schedule_interval,
+                    categories: configData.categories || [],
+                    filters: configData.filters || {},
+                    maxProductsPerRun: configData.max_products_per_run || 10,
+                    lastRunAt: configData.last_run_at,
+                    nextScheduledRun: configData.next_scheduled_run,
+                };
+            }
+            
+            // Get last completed run
+            const { data: lastRunData } = await supabase
+                .from('automation_runs')
+                .select('*')
+                .neq('status', 'running')
+                .order('started_at', { ascending: false })
+                .limit(1);
+            
+            if (lastRunData && lastRunData.length > 0) {
+                const run = lastRunData[0];
+                lastRun = {
+                    id: run.id,
+                    startedAt: run.started_at,
+                    completedAt: run.completed_at,
+                    status: run.status,
+                    runType: run.run_type,
+                    productsProcessed: run.products_processed,
+                    productsImported: run.products_imported,
+                    productsSkipped: run.products_skipped,
+                    productsFailed: run.products_failed,
+                };
+            }
+            
+            // Get aggregate stats from last 30 days
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
+            const { data: recentRuns } = await supabase
+                .from('automation_runs')
+                .select('products_processed, products_imported, products_skipped, products_failed')
+                .gte('started_at', thirtyDaysAgo.toISOString());
+            
+            if (recentRuns) {
+                for (const run of recentRuns) {
+                    stats.totalProcessed += run.products_processed || 0;
+                    stats.successfulImports += run.products_imported || 0;
+                    stats.failedImports += run.products_failed || 0;
+                    stats.skippedProducts += run.products_skipped || 0;
+                }
+            }
+        }
+        
+        res.json({
+            isRunning: automationState.isRunning,
+            currentRunId: automationState.currentRunId,
+            schedulerEnabled: automationState.schedulerEnabled,
+            lastRun,
+            config,
+            stats,
+            bolSyncConfigured: bolSyncService.isConfigured(),
+            timestamp,
+        });
+    } catch (error) {
+        console.error('[AUTOMATION] Status error:', error);
+        res.status(500).json({ error: 'Failed to get automation status' });
+    }
+});
+
+/**
+ * Get automation history
+ */
+app.get('/api/automation/history', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/history`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        
+        const { data, error } = await supabase
+            .from('automation_runs')
+            .select('*')
+            .order('started_at', { ascending: false })
+            .limit(limit);
+        
+        if (error) {
+            console.error('[AUTOMATION] History error:', error);
+            return res.status(500).json({ error: 'Failed to fetch history' });
+        }
+        
+        const runs = (data || []).map(run => ({
+            id: run.id,
+            startedAt: run.started_at,
+            completedAt: run.completed_at,
+            status: run.status,
+            runType: run.run_type,
+            categories: run.categories,
+            filters: run.filters,
+            productsProcessed: run.products_processed,
+            productsImported: run.products_imported,
+            productsSkipped: run.products_skipped,
+            productsFailed: run.products_failed,
+            errorMessage: run.error_message,
+        }));
+        
+        res.json({ runs, timestamp });
+    } catch (error) {
+        console.error('[AUTOMATION] History error:', error);
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
+
+/**
+ * Get discovery configuration
+ */
+app.get('/api/automation/config', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] GET /api/automation/config`);
+    
+    try {
+        if (!supabase) {
+            // Return default config
+            return res.json({
+                config: {
+                    enabled: false,
+                    scheduleInterval: 'daily',
+                    categories: ['11652', '13512', '21328'],
+                    filters: { minRating: 4.0, minReviews: 10, inStockOnly: true },
+                    maxProductsPerRun: 10,
+                },
+                availableCategories: BOL_DEFAULT_CATEGORIES,
+                timestamp,
+            });
+        }
+        
+        const { data, error } = await supabase
+            .from('discovery_config')
+            .select('*')
+            .eq('id', 'default')
+            .single();
+        
+        if (error && error.code !== 'PGRST116') {
+            console.error('[AUTOMATION] Config error:', error);
+            return res.status(500).json({ error: 'Failed to fetch config' });
+        }
+        
+        const config = data ? {
+            enabled: data.enabled,
+            scheduleInterval: data.schedule_interval,
+            categories: data.categories || [],
+            filters: data.filters || { minRating: 4.0, minReviews: 10, inStockOnly: true },
+            maxProductsPerRun: data.max_products_per_run || 10,
+            lastRunAt: data.last_run_at,
+            nextScheduledRun: data.next_scheduled_run,
+        } : {
+            enabled: false,
+            scheduleInterval: 'daily',
+            categories: ['11652', '13512', '21328'],
+            filters: { minRating: 4.0, minReviews: 10, inStockOnly: true },
+            maxProductsPerRun: 10,
+        };
+        
+        res.json({ config, availableCategories: BOL_DEFAULT_CATEGORIES, timestamp });
+    } catch (error) {
+        console.error('[AUTOMATION] Config error:', error);
+        res.status(500).json({ error: 'Failed to fetch config' });
+    }
+});
+
+/**
+ * Save discovery configuration
+ */
+app.post('/api/automation/config', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/config`);
+    
+    try {
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const { enabled, scheduleInterval, categories, filters, maxProductsPerRun } = req.body;
+        
+        // Validate
+        if (categories && !Array.isArray(categories)) {
+            return res.status(400).json({ error: 'categories must be an array' });
+        }
+        
+        if (scheduleInterval && !['hourly', 'daily', 'weekly'].includes(scheduleInterval)) {
+            return res.status(400).json({ error: 'Invalid schedule interval' });
+        }
+        
+        const { error } = await supabase
+            .from('discovery_config')
+            .upsert({
+                id: 'default',
+                enabled: enabled ?? false,
+                schedule_interval: scheduleInterval || 'daily',
+                categories: categories || [],
+                filters: filters || { minRating: 4.0, minReviews: 10, inStockOnly: true },
+                max_products_per_run: maxProductsPerRun || 10,
+                updated_at: timestamp,
+            });
+        
+        if (error) {
+            console.error('[AUTOMATION] Save config error:', error);
+            return res.status(500).json({ error: 'Failed to save config' });
+        }
+        
+        console.log('[AUTOMATION] Configuration saved');
+        res.json({ success: true, message: 'Configuration saved', timestamp });
+    } catch (error) {
+        console.error('[AUTOMATION] Save config error:', error);
+        res.status(500).json({ error: 'Failed to save config' });
+    }
+});
+
+/**
+ * Start product discovery
+ */
+app.post('/api/automation/discover', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/discover`);
+    
+    try {
+        if (automationState.isRunning) {
+            return res.status(409).json({ 
+                error: 'Automation already running',
+                currentRunId: automationState.currentRunId,
+            });
+        }
+        
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                error: 'Bol.com API not configured',
+                message: 'Set BOL_CLIENT_ID and BOL_CLIENT_SECRET environment variables',
+            });
+        }
+        
+        if (!supabase) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+        
+        const { categories, limit, filters } = req.body;
+        
+        // Validate input
+        if (!categories || !Array.isArray(categories) || categories.length === 0) {
+            return res.status(400).json({ error: 'At least one category is required' });
+        }
+        
+        const maxProducts = Math.min(limit || 10, 50); // Max 50 products per run
+        const productFilters = {
+            minRating: filters?.minRating ?? 0,
+            minReviews: filters?.minReviews ?? 0,
+            inStockOnly: filters?.inStockOnly ?? true,
+        };
+        
+        // Create run record
+        const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        
+        const { error: insertError } = await supabase
+            .from('automation_runs')
+            .insert({
+                id: runId,
+                started_at: timestamp,
+                status: 'running',
+                run_type: 'manual',
+                categories: categories,
+                filters: productFilters,
+                config: { limit: maxProducts },
+            });
+        
+        if (insertError) {
+            console.error('[AUTOMATION] Error creating run:', insertError);
+            return res.status(500).json({ error: 'Failed to create run record' });
+        }
+        
+        // Set running state
+        automationState.isRunning = true;
+        automationState.currentRunId = runId;
+        automationState.stopRequested = false;
+        
+        // Run discovery in background
+        runProductDiscovery(runId, categories, maxProducts, productFilters)
+            .catch(err => {
+                console.error('[AUTOMATION] Discovery error:', err);
+            })
+            .finally(() => {
+                automationState.isRunning = false;
+                automationState.currentRunId = null;
+            });
+        
+        res.json({
+            success: true,
+            message: 'Product discovery started',
+            runId,
+            categories,
+            maxProducts,
+            filters: productFilters,
+            timestamp,
+        });
+    } catch (error) {
+        console.error('[AUTOMATION] Discover error:', error);
+        automationState.isRunning = false;
+        automationState.currentRunId = null;
+        res.status(500).json({ error: 'Failed to start discovery' });
+    }
+});
+
+/**
+ * Stop running automation
+ */
+app.post('/api/automation/stop', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/stop`);
+    
+    if (!automationState.isRunning) {
+        return res.json({ success: true, message: 'No automation running' });
+    }
+    
+    automationState.stopRequested = true;
+    console.log('[AUTOMATION] Stop requested');
+    
+    res.json({
+        success: true,
+        message: 'Stop requested, current run will complete current product and stop',
+        runId: automationState.currentRunId,
+    });
+});
+
+/**
+ * Start scheduled automation
+ */
+app.post('/api/automation/start-schedule', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/start-schedule`);
+    
+    try {
+        const { interval, categories, maxProductsPerRun } = req.body;
+        
+        // Validate
+        if (!['hourly', 'daily', 'weekly'].includes(interval)) {
+            return res.status(400).json({ error: 'Invalid interval. Use hourly, daily, or weekly' });
+        }
+        
+        if (!categories || !Array.isArray(categories) || categories.length === 0) {
+            return res.status(400).json({ error: 'At least one category is required' });
+        }
+        
+        // Stop existing scheduler if any
+        if (automationState.schedulerInterval) {
+            clearInterval(automationState.schedulerInterval);
+        }
+        
+        // Calculate interval in milliseconds
+        const intervalMs = {
+            hourly: 60 * 60 * 1000,      // 1 hour
+            daily: 24 * 60 * 60 * 1000,   // 24 hours
+            weekly: 7 * 24 * 60 * 60 * 1000, // 7 days
+        }[interval];
+        
+        // Save config to database
+        if (supabase) {
+            const nextRun = new Date(Date.now() + intervalMs);
+            
+            await supabase
+                .from('discovery_config')
+                .upsert({
+                    id: 'default',
+                    enabled: true,
+                    schedule_interval: interval,
+                    categories: categories,
+                    max_products_per_run: maxProductsPerRun || 10,
+                    next_scheduled_run: nextRun.toISOString(),
+                    updated_at: timestamp,
+                });
+        }
+        
+        // Start scheduler
+        automationState.schedulerEnabled = true;
+        automationState.schedulerInterval = setInterval(async () => {
+            if (!automationState.isRunning && bolSyncService.isConfigured()) {
+                console.log('[AUTOMATION] Scheduled run triggered');
+                
+                const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                
+                if (supabase) {
+                    await supabase.from('automation_runs').insert({
+                        id: runId,
+                        started_at: new Date().toISOString(),
+                        status: 'running',
+                        run_type: 'scheduled',
+                        categories: categories,
+                        filters: { minRating: 4.0, minReviews: 10, inStockOnly: true },
+                        config: { maxProducts: maxProductsPerRun || 10 },
+                    });
+                }
+                
+                automationState.isRunning = true;
+                automationState.currentRunId = runId;
+                
+                runProductDiscovery(runId, categories, maxProductsPerRun || 10, {
+                    minRating: 4.0,
+                    minReviews: 10,
+                    inStockOnly: true,
+                })
+                    .finally(() => {
+                        automationState.isRunning = false;
+                        automationState.currentRunId = null;
+                    });
+            }
+        }, intervalMs);
+        
+        console.log(`[AUTOMATION] Scheduler started: ${interval}`);
+        
+        res.json({
+            success: true,
+            message: `Scheduled automation started (${interval})`,
+            interval,
+            categories,
+            maxProductsPerRun: maxProductsPerRun || 10,
+            nextRun: new Date(Date.now() + intervalMs).toISOString(),
+        });
+    } catch (error) {
+        console.error('[AUTOMATION] Start schedule error:', error);
+        res.status(500).json({ error: 'Failed to start scheduled automation' });
+    }
+});
+
+/**
+ * Stop scheduled automation
+ */
+app.post('/api/automation/stop-schedule', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/stop-schedule`);
+    
+    if (automationState.schedulerInterval) {
+        clearInterval(automationState.schedulerInterval);
+        automationState.schedulerInterval = null;
+    }
+    automationState.schedulerEnabled = false;
+    
+    // Update config in database
+    if (supabase) {
+        await supabase
+            .from('discovery_config')
+            .update({
+                enabled: false,
+                next_scheduled_run: null,
+                updated_at: timestamp,
+            })
+            .eq('id', 'default');
+    }
+    
+    console.log('[AUTOMATION] Scheduler stopped');
+    
+    res.json({
+        success: true,
+        message: 'Scheduled automation stopped',
+        timestamp,
+    });
+});
+
+/**
+ * Trigger a specific automation job
+ */
+app.post('/api/automation/trigger/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [AUTOMATION] POST /api/automation/trigger/${jobId}`);
+    
+    // For now, only support product discovery
+    if (jobId === 'productGeneration' || jobId === 'productDiscovery') {
+        // Load config and trigger discovery
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                error: 'Bol.com API not configured',
+            });
+        }
+        
+        let config = {
+            categories: ['11652', '13512', '21328'],
+            maxProductsPerRun: 10,
+            filters: { minRating: 4.0, minReviews: 10, inStockOnly: true },
+        };
+        
+        if (supabase) {
+            const { data } = await supabase
+                .from('discovery_config')
+                .select('*')
+                .eq('id', 'default')
+                .single();
+            
+            if (data) {
+                config = {
+                    categories: data.categories || config.categories,
+                    maxProductsPerRun: data.max_products_per_run || 10,
+                    filters: data.filters || config.filters,
+                };
+            }
+        }
+        
+        // Forward to discover endpoint
+        req.body = {
+            categories: config.categories,
+            limit: config.maxProductsPerRun,
+            filters: config.filters,
+        };
+        
+        // Use the discover logic
+        return res.redirect(307, '/api/automation/discover');
+    }
+    
+    res.status(400).json({ error: `Unknown job: ${jobId}` });
+});
+
+/**
+ * Background product discovery process
+ */
+async function runProductDiscovery(runId, categories, maxProducts, filters) {
+    console.log(`[AUTOMATION] Starting discovery run ${runId}`);
+    console.log(`[AUTOMATION] Categories: ${categories.join(', ')}, Max: ${maxProducts}`);
+    
+    let productsProcessed = 0;
+    let productsImported = 0;
+    let productsSkipped = 0;
+    let productsFailed = 0;
+    const errors = [];
+    
+    try {
+        const productsPerCategory = Math.ceil(maxProducts / categories.length);
+        
+        for (const categoryId of categories) {
+            if (automationState.stopRequested) {
+                console.log('[AUTOMATION] Stop requested, aborting');
+                break;
+            }
+            
+            console.log(`[AUTOMATION] Processing category ${categoryId}`);
+            
+            try {
+                // Fetch products from Bol.com
+                const products = await bolSyncService.getPopularProducts(categoryId, productsPerCategory);
+                console.log(`[AUTOMATION] Found ${products.length} products in category ${categoryId}`);
+                
+                for (const bolProduct of products) {
+                    if (automationState.stopRequested) {
+                        break;
+                    }
+                    
+                    productsProcessed++;
+                    
+                    try {
+                        // Apply filters
+                        const rating = bolProduct.rating?.averageRating || 0;
+                        const reviewCount = bolProduct.rating?.totalRatings || 0;
+                        const inStock = bolProduct.bestOffer?.availability === 'IN_STOCK' || 
+                                       bolProduct.bestOffer?.availability === 'LIMITED_STOCK';
+                        
+                        if (filters.minRating && rating < filters.minRating) {
+                            productsSkipped++;
+                            await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'skipped', `Rating ${rating} below minimum ${filters.minRating}`);
+                            continue;
+                        }
+                        
+                        if (filters.minReviews && reviewCount < filters.minReviews) {
+                            productsSkipped++;
+                            await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'skipped', `Reviews ${reviewCount} below minimum ${filters.minReviews}`);
+                            continue;
+                        }
+                        
+                        if (filters.inStockOnly && !inStock) {
+                            productsSkipped++;
+                            await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'skipped', 'Out of stock');
+                            continue;
+                        }
+                        
+                        // Check if product already exists
+                        if (supabase) {
+                            const { data: existing } = await supabase
+                                .from('bol_products')
+                                .select('ean')
+                                .eq('ean', bolProduct.ean)
+                                .single();
+                            
+                            if (existing) {
+                                productsSkipped++;
+                                await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'skipped', 'Already exists');
+                                continue;
+                            }
+                        }
+                        
+                        // Map and insert product
+                        const dbProduct = bolSyncService.mapProductToDb(bolProduct);
+                        
+                        if (supabase) {
+                            const { error: insertError } = await supabase
+                                .from('bol_products')
+                                .insert({
+                                    ...dbProduct,
+                                    created_at: new Date().toISOString(),
+                                });
+                            
+                            if (insertError) {
+                                throw new Error(`Insert failed: ${insertError.message}`);
+                            }
+                        }
+                        
+                        productsImported++;
+                        await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'imported', null);
+                        console.log(`[AUTOMATION] Imported: ${bolProduct.title?.substring(0, 50)}...`);
+                        
+                        // Rate limiting
+                        await delay(RATE_LIMIT_DELAY);
+                        
+                    } catch (productError) {
+                        const errorMsg = productError.message || String(productError);
+                        productsFailed++;
+                        errors.push(`${bolProduct.ean}: ${errorMsg}`);
+                        await logProductImportToDb(runId, bolProduct.ean, bolProduct.bolProductId, bolProduct.title, 'failed', null, errorMsg);
+                        console.error(`[AUTOMATION] Failed: ${bolProduct.ean}:`, errorMsg);
+                    }
+                }
+                
+            } catch (categoryError) {
+                const errorMsg = categoryError.message || String(categoryError);
+                errors.push(`Category ${categoryId}: ${errorMsg}`);
+                console.error(`[AUTOMATION] Category ${categoryId} error:`, errorMsg);
+            }
+            
+            // Rate limiting between categories
+            await delay(RATE_LIMIT_DELAY);
+        }
+        
+        // Update run record
+        const finalStatus = automationState.stopRequested ? 'cancelled' : 'completed';
+        
+        if (supabase) {
+            await supabase
+                .from('automation_runs')
+                .update({
+                    status: finalStatus,
+                    completed_at: new Date().toISOString(),
+                    products_processed: productsProcessed,
+                    products_imported: productsImported,
+                    products_skipped: productsSkipped,
+                    products_failed: productsFailed,
+                    error_message: errors.length > 0 ? errors.slice(0, 10).join('; ') : null,
+                })
+                .eq('id', runId);
+        }
+        
+        console.log(`[AUTOMATION] Run ${runId} ${finalStatus}: processed=${productsProcessed}, imported=${productsImported}, skipped=${productsSkipped}, failed=${productsFailed}`);
+        
+    } catch (error) {
+        const errorMsg = error.message || String(error);
+        console.error(`[AUTOMATION] Run ${runId} failed:`, errorMsg);
+        
+        if (supabase) {
+            await supabase
+                .from('automation_runs')
+                .update({
+                    status: 'failed',
+                    completed_at: new Date().toISOString(),
+                    products_processed: productsProcessed,
+                    products_imported: productsImported,
+                    products_skipped: productsSkipped,
+                    products_failed: productsFailed,
+                    error_message: errorMsg,
+                })
+                .eq('id', runId);
+        }
+    }
+}
+
+/**
+ * Log product import to database
+ */
+async function logProductImportToDb(runId, ean, bolProductId, title, status, skipReason, errorMessage) {
+    if (!supabase) return;
+    
+    try {
+        await supabase
+            .from('product_import_logs')
+            .insert({
+                run_id: runId,
+                ean: ean,
+                bol_product_id: bolProductId,
+                product_title: title?.substring(0, 500),
+                status: status,
+                skip_reason: skipReason,
+                error_message: errorMessage,
+            });
+    } catch (error) {
+        console.error('[AUTOMATION] Failed to log import:', error);
+    }
+}
+
 // --- DEPRECATED ENDPOINTS ---
 const deprecatedHandler = (req, res) => {
     res.status(410).json({
