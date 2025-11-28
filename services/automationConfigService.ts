@@ -250,7 +250,8 @@ const loadFromSupabase = async (): Promise<AutomationConfig | null> => {
                 return null;
             }
             // 42P01: Table doesn't exist (database migration not run yet)
-            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            // PostgreSQL error codes: https://www.postgresql.org/docs/current/errcodes-appendix.html
+            if (error.code === '42P01') {
                 console.warn('[AutomationConfigService] automation_config table does not exist, using defaults');
                 return null;
             }
@@ -293,7 +294,8 @@ const saveToSupabase = async (config: AutomationConfig): Promise<boolean> => {
 
         if (error) {
             // 42P01: Table doesn't exist (database migration not run yet)
-            if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            // PostgreSQL error codes: https://www.postgresql.org/docs/current/errcodes-appendix.html
+            if (error.code === '42P01') {
                 console.warn('[AutomationConfigService] automation_config table does not exist, saving to localStorage only');
                 return false;
             }

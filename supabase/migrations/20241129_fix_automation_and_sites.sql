@@ -135,8 +135,8 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS product_import_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    run_id TEXT NOT NULL,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    run_id TEXT NOT NULL REFERENCES automation_runs(id) ON DELETE CASCADE,
     ean TEXT,
     bol_product_id TEXT,
     product_title TEXT,

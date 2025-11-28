@@ -1059,6 +1059,11 @@ app.post('/api/bol/track-click', async (req, res) => {
 // ADMIN SEED PRODUCTS ENDPOINT
 // ============================================================================
 
+// Constants for seed products endpoint
+const MAX_CATEGORIES_PER_REQUEST = 10;
+const DEFAULT_SEED_CATEGORIES_COUNT = 6;
+const DEFAULT_PRODUCTS_PER_CATEGORY = 8;
+
 /**
  * Seed initial products from Bol.com categories
  * Used to quickly populate the database with products for a new webshop
@@ -1088,12 +1093,12 @@ app.post('/api/admin/seed-products', async (req, res) => {
             });
         }
         
-        const { categories, productsPerCategory = 8 } = req.body;
+        const { categories, productsPerCategory = DEFAULT_PRODUCTS_PER_CATEGORY } = req.body;
         
-        // Default categories if none provided (first 6 categories)
+        // Default categories if none provided
         const targetCategories = categories && Array.isArray(categories) && categories.length > 0
-            ? categories.slice(0, 10) // Max 10 categories at once
-            : Object.keys(BOL_DEFAULT_CATEGORIES).slice(0, 6);
+            ? categories.slice(0, MAX_CATEGORIES_PER_REQUEST)
+            : Object.keys(BOL_DEFAULT_CATEGORIES).slice(0, DEFAULT_SEED_CATEGORIES_COUNT);
         
         console.log(`[ADMIN] Seeding products from ${targetCategories.length} categories, ${productsPerCategory} per category`);
         
