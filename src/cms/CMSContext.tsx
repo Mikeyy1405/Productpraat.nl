@@ -160,7 +160,7 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
                             const defaultConfig = createDefaultSiteConfig('WritgoCMS', 'shop');
                             const fullConfig: SiteConfig = {
                                 ...defaultConfig,
-                                id: `site-${Date.now()}`,
+                                id: crypto.randomUUID(),
                                 createdAt: new Date().toISOString(),
                                 updatedAt: new Date().toISOString(),
                                 migratedFromProductpraat: false,
@@ -214,7 +214,7 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
                 const defaultConfig = createDefaultSiteConfig('WritgoCMS', 'shop');
                 const fullConfig: SiteConfig = {
                     ...defaultConfig,
-                    id: `site-${Date.now()}`,
+                    id: crypto.randomUUID(),
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     migratedFromProductpraat: false,
@@ -408,7 +408,7 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         const defaultConfig = createDefaultSiteConfig('WritgoCMS', 'shop');
         const fullConfig: SiteConfig = {
             ...defaultConfig,
-            id: siteConfig?.id || `site-${Date.now()}`,
+            id: siteConfig?.id || crypto.randomUUID(),
             createdAt: siteConfig?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
@@ -420,7 +420,7 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         const fullConfig: SiteConfig = {
             ...(siteConfig || createDefaultSiteConfig('WritgoCMS', 'shop')),
             ...config,
-            id: siteConfig?.id || `site-${Date.now()}`,
+            id: siteConfig?.id || crypto.randomUUID(),
             createdAt: siteConfig?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         } as SiteConfig;
@@ -461,7 +461,7 @@ export const CMSProvider: React.FC<CMSProviderProps> = ({ children }) => {
         const shopConfig = createDefaultSiteConfig('ProductPraat', 'shop');
         const fullConfig: SiteConfig = {
             ...shopConfig,
-            id: siteConfig?.id || `site-${Date.now()}`,
+            id: siteConfig?.id || crypto.randomUUID(),
             name: 'ProductPraat',
             description: 'AI Powered Affiliate Platform',
             createdAt: siteConfig?.createdAt || new Date().toISOString(),

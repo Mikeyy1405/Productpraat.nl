@@ -116,6 +116,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
 
     // --- TOAST NOTIFICATIONS ---
     const [toasts, setToasts] = useState<Toast[]>([]);
+    
+    // --- STATE: BOL.COM PRODUCT SEEDING ---
+    const [isSeeding, setIsSeeding] = useState(false);
+    const [seedStatus, setSeedStatus] = useState<{
+        bolApiConfigured: boolean;
+        databaseConfigured: boolean;
+        hasProducts: boolean;
+        productCount: number;
+    } | null>(null);
 
     // Toast notification system
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -129,6 +138,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
     const removeToast = useCallback((id: string) => {
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
+
+    // Check seed status on mount
+    useEffect(() => {
+        const checkSeedStatus = async () => {
+            try {
+                const response = await fetch('/api/admin/seed-status');
+                if (response.ok) {
+                    const status = await response.json();
+                    setSeedStatus(status);
+                }
+            } catch (err) {
+                console.error('[AdminPanel] Failed to check seed status:', err);
+            }
+        };
+        checkSeedStatus();
+    }, [customProducts.length]); // Re-check when product count changes
+
+    // Handle quick seed for Bol.com products
+    const handleQuickSeed = async () => {
+        setIsSeeding(true);
+        addLog('🚀 Start Quick Seed: Bol.com producten importeren...');
+        
+        try {
+            const response = await fetch('/api/admin/seed-products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productsPerCategory: 8
+                })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                addLog(`✅ ${result.summary.totalProductsImported} producten geïmporteerd uit ${result.summary.categoriesProcessed} categorieën`);
+                showToast(`✅ ${result.summary.totalProductsImported} producten succesvol geïmporteerd!`, 'success');
+                
+                // Update seed status
+                setSeedStatus(prev => prev ? {
+                    ...prev,
+                    hasProducts: true,
+                    productCount: (prev.productCount || 0) + result.summary.totalProductsImported
+                } : null);
+                
+                // Log individual category results
+                for (const cat of result.results) {
+                    addLog(`  - ${cat.categoryName}: ${cat.itemsCreated} nieuw, ${cat.itemsUpdated} geüpdatet`);
+                }
+            } else {
+                addLog(`❌ Seeding mislukt: ${result.message || result.error}`);
+                showToast(`❌ Seeding mislukt: ${result.message || result.error}`, 'error');
+            }
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            addLog(`❌ Error: ${errorMsg}`);
+            showToast(`❌ Error: ${errorMsg}`, 'error');
+        } finally {
+            setIsSeeding(false);
+        }
+    };
 
     const addLog = (msg: string) => { 
         setPilotLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]); 
@@ -1364,6 +1433,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddProduct, onDeletePr
                                         <div className="text-slate-400 text-sm">Systeem Status</div>
                                     </div>
                                 </div>
+
+                                {/* Quick Setup Section - Show when database is empty */}
+                                {customProducts.length === 0 && seedStatus?.bolApiConfigured && (
+                                    <div className="bg-gradient-to-r from-yellow-900/20 to-orange-900/20 border border-yellow-500/30 rounded-2xl p-6">
+                                        <div className="flex items-start gap-4">
+                                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-yellow-600/30 to-orange-600/30 flex items-center justify-center flex-shrink-0">
+                                                <i className="fas fa-rocket text-yellow-400 text-2xl"></i>
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                                                    🚀 Start je Webshop in 1 Minuut
+                                                </h3>
+                                                <p className="text-slate-300 mb-4 leading-relaxed">
+                                                    Je database is nog leeg. Klik hieronder om automatisch populaire 
+                                                    Bol.com producten te importeren uit 6 categorieën. De producten worden 
+                                                    direct getoond in je webshop met affiliate links.
+                                                </p>
+                                                <div className="flex flex-wrap gap-3">
+                                                    <button
+                                                        onClick={handleQuickSeed}
+                                                        disabled={isSeeding}
+                                                        className="bg-gradient-to-r from-yellow-600 to-orange-500 hover:from-yellow-500 hover:to-orange-400 
+                                                            disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl 
+                                                            transition-all shadow-lg shadow-orange-600/30 flex items-center gap-2"
+                                                    >
+                                                        {isSeeding ? (
+                                                            <>
+                                                                <i className="fas fa-circle-notch fa-spin"></i>
+                                                                Producten aan het importeren...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <i className="fas fa-magic"></i>
+                                                                Importeer ~50 Populaire Producten
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setActiveTab('automation'); }}
+                                                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 px-6 rounded-xl 
+                                                            transition-all border border-slate-700 flex items-center gap-2"
+                                                    >
+                                                        <i className="fas fa-cog"></i>
+                                                        Geavanceerde Opties
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Show info banner when API is not configured */}
+                                {customProducts.length === 0 && seedStatus && !seedStatus.bolApiConfigured && (
+                                    <div className="bg-blue-900/20 border border-blue-500/30 rounded-2xl p-6">
+                                        <div className="flex items-start gap-4">
+                                            <div className="w-12 h-12 rounded-xl bg-blue-600/30 flex items-center justify-center flex-shrink-0">
+                                                <i className="fas fa-info-circle text-blue-400 text-xl"></i>
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-bold text-white mb-2">
+                                                    Bol.com API Configuratie Vereist
+                                                </h3>
+                                                <p className="text-slate-300 mb-3">
+                                                    Om automatisch Bol.com producten te importeren, configureer de volgende environment variabelen:
+                                                </p>
+                                                <ul className="text-slate-400 text-sm space-y-1 mb-4">
+                                                    <li><code className="bg-slate-800 px-2 py-0.5 rounded">BOL_CLIENT_ID</code> - Je Bol.com Partner Program client ID</li>
+                                                    <li><code className="bg-slate-800 px-2 py-0.5 rounded">BOL_CLIENT_SECRET</code> - Je Bol.com Partner Program secret</li>
+                                                </ul>
+                                                <p className="text-slate-400 text-sm">
+                                                    Je kunt ook producten handmatig toevoegen via de import functies hieronder.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Quick Actions */}
                                 <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6">
