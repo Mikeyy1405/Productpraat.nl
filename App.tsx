@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { ProductCard } from './components/ProductCard';
 import { AdminPanel } from './components/AdminPanel';
+import { SimpleDashboard } from './components/SimpleDashboard';
 import { Login } from './components/Login';
 import { HomeView } from './components/views/HomeView';
 import { ProductView } from './components/views/ProductView';
