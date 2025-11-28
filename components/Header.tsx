@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { CATEGORIES } from '../types';
 
 interface HeaderProps {
-    onNavigate: (view: 'home' | 'admin' | 'about' | 'contact' | 'artikelen') => void;
+    onNavigate: (view: 'home' | 'admin' | 'about' | 'contact' | 'artikelen' | 'bolshop') => void;
     onSelectCategory: (categoryId: string) => void;
     activeView: string;
 }
@@ -150,6 +150,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                         <button onClick={() => onNavigate('artikelen')} className={`py-2 px-4 rounded-lg transition flex items-center gap-2 ${activeView === 'artikelen' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>
                             <i className="fas fa-newspaper text-xs"></i> Artikelen
                         </button>
+                        <button onClick={() => onNavigate('bolshop')} className={`py-2 px-4 rounded-lg transition flex items-center gap-2 ${activeView === 'bolshop' || activeView === 'bolproduct' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>
+                            <i className="fas fa-shopping-bag text-xs"></i> Shop
+                        </button>
                         <button onClick={() => onNavigate('about')} className={`py-2 px-4 rounded-lg transition ${activeView === 'about' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>Over ons</button>
                         <button onClick={() => onNavigate('contact')} className={`py-2 px-4 rounded-lg transition ${activeView === 'contact' ? 'text-white bg-slate-800' : 'hover:text-white hover:bg-slate-800/50'}`}>Contact</button>
                     </div>
@@ -166,6 +169,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, onSelectCategory, ac
                                 <button onClick={() => { onNavigate('home'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Home</button>
                                 <button onClick={() => { onNavigate('artikelen'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left flex items-center gap-2">
                                     <i className="fas fa-newspaper text-[#1877F2]"></i> Artikelen
+                                </button>
+                                <button onClick={() => { onNavigate('bolshop'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left flex items-center gap-2">
+                                    <i className="fas fa-shopping-bag text-[#1877F2]"></i> Shop
                                 </button>
                                 <button onClick={() => { onNavigate('about'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Over ons</button>
                                 <button onClick={() => { onNavigate('contact'); setIsMobileMenuOpen(false); }} className="text-lg font-bold text-white py-2 text-left">Contact</button>

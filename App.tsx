@@ -10,8 +10,10 @@ import { db } from './services/storage';
 import { seoService } from './services/seoService';
 import { authService } from './services/authService';
 import { urlRouter, generateSlug, getCanonicalUrl, getArticleUrl, generateArticleSlug, ARTICLE_TYPE_LABELS, ARTICLE_TYPE_COLORS, removeFirstH1FromHtml, isProductUrl, parseProductUrl, isArticleUrl, isArticlesOverviewUrl, parseArticleUrl, getProductUrl } from './services/urlService';
+import { ShopPage } from './src/pages/ShopPage';
+import { ProductDetailPage } from './src/pages/ProductDetailPage';
 
-type ViewType = 'home' | 'category' | 'admin' | 'product' | 'article' | 'about' | 'contact' | 'login' | 'artikelen' | '404' | 'search';
+type ViewType = 'home' | 'category' | 'admin' | 'product' | 'article' | 'about' | 'contact' | 'login' | 'artikelen' | '404' | 'search' | 'bolshop' | 'bolproduct';
 
 const theme = {
     pageBackground: 'bg-slate-950',
@@ -31,10 +33,28 @@ export const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [articles, setArticles] = useState<Article[]>([]);
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+    const [selectedBolProductEan, setSelectedBolProductEan] = useState<string>('');
+    const [shopCategory, setShopCategory] = useState<string>('');
 
     // URL Routing handler
     const handleUrlRouting = (prods: Product[], arts: Article[]) => {
         const path = window.location.pathname;
+        
+        // Check for Bol.com shop routes first
+        if (path === '/bolshop' || path.startsWith('/bolshop/')) {
+            const productMatch = path.match(/^\/bolshop\/product\/([^\/]+)\/?$/);
+            if (productMatch) {
+                setSelectedBolProductEan(productMatch[1]);
+                setView('bolproduct');
+                return;
+            }
+            const categoryMatch = path.match(/^\/bolshop\/([^\/]+)\/?$/);
+            if (categoryMatch && categoryMatch[1] !== 'product') {
+                setShopCategory(categoryMatch[1]);
+            }
+            setView('bolshop');
+            return;
+        }
         
         if (isProductUrl(path)) {
             const parsed = parseProductUrl(path);
@@ -104,15 +124,19 @@ export const App: React.FC = () => {
             seoService.updateMeta(selectedProduct.metaDescription || `${selectedProduct.brand} ${selectedProduct.model} Review`, selectedProduct.description || '', selectedProduct.image, getCanonicalUrl(selectedProduct));
             seoService.setProductSchema(selectedProduct);
         }
+        else if (view === 'bolshop') {
+            seoService.updateMeta("Bol.com Shop - ProductPraat", "Vind de beste deals en producten via Bol.com.", undefined, window.location.origin + '/bolshop');
+        }
     }, [view, selectedProduct]);
 
     const visibleProducts = useMemo(() => products.filter(p => p.category === activeCategory).sort((a, b) => b.score - a.score), [products, activeCategory]);
 
     // Navigation handlers
-    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact' | 'artikelen') => {
+    const handleNavigate = (target: 'home' | 'admin' | 'about' | 'contact' | 'artikelen' | 'bolshop') => {
         if (target === 'admin' && !isAuthenticated) { setView('login'); urlRouter.push('/dashboard'); }
         else if (target === 'admin') { setView('admin'); urlRouter.push('/dashboard'); }
         else if (target === 'artikelen') { setView('artikelen'); urlRouter.push('/artikelen'); }
+        else if (target === 'bolshop') { setView('bolshop'); urlRouter.push('/bolshop'); }
         else { setView(target); urlRouter.push(target === 'home' ? '/' : `/${target}`); }
         window.scrollTo(0, 0);
     };
@@ -229,6 +253,19 @@ export const App: React.FC = () => {
                         <h1 className="text-2xl font-bold text-white mb-6">Zoekresultaten voor "{searchTerm}"</h1>
                         <div className="grid gap-6">{products.filter(p => p.brand.toLowerCase().includes(searchTerm.toLowerCase()) || p.model.toLowerCase().includes(searchTerm.toLowerCase())).map(p => <ProductCard key={p.id} product={p} isCompareSelected={false} onToggleCompare={() => {}} onClick={handleOpenProduct} />)}</div>
                     </div>
+                )}
+                {view === 'bolshop' && (
+                    <ShopPage
+                        initialCategory={shopCategory}
+                        onNavigateHome={() => handleNavigate('home')}
+                    />
+                )}
+                {view === 'bolproduct' && selectedBolProductEan && (
+                    <ProductDetailPage
+                        ean={selectedBolProductEan}
+                        onNavigateBack={() => { setView('bolshop'); urlRouter.push('/bolshop'); }}
+                        onNavigateCategory={(categoryId) => { setShopCategory(categoryId); setView('bolshop'); urlRouter.push(`/bolshop/${categoryId}`); }}
+                    />
                 )}
             </main>
             {renderFooter()}
