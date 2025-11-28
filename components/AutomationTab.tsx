@@ -39,7 +39,33 @@ interface AutomationStatus {
     config: Record<string, string>;
 }
 
-type SubTab = 'overview' | 'products' | 'content' | 'monitoring' | 'notifications';
+interface BolSyncStatus {
+    configured: boolean;
+    apiKeySet: boolean;
+    affiliateIdSet: boolean;
+    supabaseConfigured: boolean;
+    availableCategories?: Record<string, string>;
+}
+
+interface BolSyncStats {
+    totalProducts: number;
+    dealsCount: number;
+    inStockCount: number;
+    lastSyncedAt: string | null;
+}
+
+interface SyncJob {
+    id: string;
+    type: string;
+    status: string;
+    itemsProcessed: number;
+    itemsCreated: number;
+    itemsUpdated: number;
+    itemsFailed: number;
+    errorMessage?: string;
+}
+
+type SubTab = 'overview' | 'bolshop' | 'products' | 'content' | 'monitoring' | 'notifications';
 
 // ============================================================================
 // COMPONENT
@@ -56,6 +82,34 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
     const [automationConfig, setAutomationConfig] = useState<AutomationConfig>(DEFAULT_CONFIG);
     const [automationConfigErrors, setAutomationConfigErrors] = useState<ValidationError[]>([]);
     const [automationSubTab, setAutomationSubTab] = useState<SubTab>('overview');
+
+    // Bol.com Sync State
+    const [bolSyncStatus, setBolSyncStatus] = useState<BolSyncStatus | null>(null);
+    const [bolSyncStats, setBolSyncStats] = useState<BolSyncStats | null>(null);
+    const [bolSyncLoading, setBolSyncLoading] = useState(false);
+    const [lastSyncJob, setLastSyncJob] = useState<SyncJob | null>(null);
+
+    // Load Bol.com sync data
+    const fetchBolSyncData = useCallback(async () => {
+        try {
+            const [statusRes, statsRes] = await Promise.all([
+                fetch('/api/sync/status'),
+                fetch('/api/sync/stats')
+            ]);
+            
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                setBolSyncStatus(statusData);
+            }
+            
+            if (statsRes.ok) {
+                const statsData = await statsRes.json();
+                setBolSyncStats(statsData);
+            }
+        } catch (error) {
+            console.error('Failed to fetch Bol.com sync data:', error);
+        }
+    }, []);
 
     // Load automation data on mount
     useEffect(() => {
@@ -76,11 +130,15 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             }
         };
         fetchAutomationData();
+        fetchBolSyncData();
         
         // Refresh every 30 seconds
-        const interval = setInterval(fetchAutomationData, 30000);
+        const interval = setInterval(() => {
+            fetchAutomationData();
+            fetchBolSyncData();
+        }, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [fetchBolSyncData]);
 
     // Handle master toggle
     const handleMasterToggle = useCallback(async () => {
@@ -134,6 +192,36 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             setAutomationLoading(false);
         }
     }, [showToast]);
+
+    // Handle Bol.com sync trigger
+    const handleBolSync = useCallback(async (type: 'search' | 'popular_products', params: { searchTerm?: string; categoryIds?: string[]; limit?: number }) => {
+        try {
+            setBolSyncLoading(true);
+            setLastSyncJob(null);
+            
+            const response = await fetch('/api/sync/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, ...params }),
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                setLastSyncJob(data.job);
+                showToast(`Sync voltooid: ${data.job.itemsCreated} nieuw, ${data.job.itemsUpdated} bijgewerkt`, 'success');
+                // Refresh stats
+                fetchBolSyncData();
+            } else {
+                showToast(data.message || data.error || 'Sync mislukt', 'error');
+            }
+        } catch (error) {
+            console.error('Sync error:', error);
+            showToast('Sync mislukt - controleer console voor details', 'error');
+        } finally {
+            setBolSyncLoading(false);
+        }
+    }, [showToast, fetchBolSyncData]);
 
     return (
         <div className="animate-fade-in space-y-6">
@@ -191,6 +279,7 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             <div className="flex flex-wrap gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
                 {[
                     { id: 'overview' as SubTab, icon: 'fa-th-large', label: 'Overzicht' },
+                    { id: 'bolshop' as SubTab, icon: 'fa-shopping-bag', label: 'Bol.com Shop', badge: bolSyncStats?.totalProducts },
                     { id: 'products' as SubTab, icon: 'fa-box-open', label: 'Product Generatie' },
                     { id: 'content' as SubTab, icon: 'fa-file-alt', label: 'Content Generatie' },
                     { id: 'monitoring' as SubTab, icon: 'fa-heartbeat', label: 'Monitoring' },
@@ -237,6 +326,18 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
                     automationStatus={automationStatus}
                     automationLoading={automationLoading}
                     onTriggerJob={handleTriggerJob}
+                />
+            )}
+
+            {/* Bol.com Shop Sync Tab */}
+            {automationSubTab === 'bolshop' && (
+                <BolShopSyncSection
+                    syncStatus={bolSyncStatus}
+                    syncStats={bolSyncStats}
+                    isLoading={bolSyncLoading}
+                    lastJob={lastSyncJob}
+                    onSync={handleBolSync}
+                    showToast={showToast}
                 />
             )}
 
@@ -325,6 +426,311 @@ interface OverviewSectionProps extends SectionProps {
     automationLoading: boolean;
     onTriggerJob: (jobId: string, jobName: string) => void;
 }
+
+interface BolShopSyncSectionProps {
+    syncStatus: BolSyncStatus | null;
+    syncStats: BolSyncStats | null;
+    isLoading: boolean;
+    lastJob: SyncJob | null;
+    onSync: (type: 'search' | 'popular_products', params: { searchTerm?: string; categoryIds?: string[]; limit?: number }) => void;
+    showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+}
+
+const BolShopSyncSection: React.FC<BolShopSyncSectionProps> = ({
+    syncStatus,
+    syncStats,
+    isLoading,
+    lastJob,
+    onSync,
+    showToast
+}) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [limit, setLimit] = useState(50);
+    
+    // Available Bol.com categories
+    const bolCategories = syncStatus?.availableCategories || {
+        '11652': 'Elektronica',
+        '13512': 'Computer & Gaming',
+        '21328': 'Telefonie & Navigatie',
+        '15452': 'TV & Audio',
+        '15457': 'Huishouden',
+        '13640': 'Wonen & Slapen',
+    };
+    
+    const handleSearchSync = () => {
+        if (!searchTerm.trim()) {
+            showToast('Vul een zoekterm in', 'warning');
+            return;
+        }
+        onSync('search', { searchTerm: searchTerm.trim(), limit });
+    };
+    
+    const handleCategorySync = () => {
+        if (selectedCategories.length === 0) {
+            showToast('Selecteer minstens één categorie', 'warning');
+            return;
+        }
+        onSync('popular_products', { categoryIds: selectedCategories, limit });
+    };
+    
+    return (
+        <div className="space-y-6">
+            {/* Status Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            syncStatus?.configured ? 'bg-green-600/30' : 'bg-red-600/30'
+                        }`}>
+                            <i className={`fas ${syncStatus?.configured ? 'fa-check' : 'fa-times'} ${
+                                syncStatus?.configured ? 'text-green-400' : 'text-red-400'
+                            }`}></i>
+                        </div>
+                        <div>
+                            <div className="text-lg font-bold text-white">
+                                {syncStatus?.configured ? 'Geconfigureerd' : 'Niet geconfigureerd'}
+                            </div>
+                            <div className="text-xs text-slate-400">Bol.com API Status</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-600/30 flex items-center justify-center">
+                            <i className="fas fa-shopping-bag text-blue-400"></i>
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-white">{syncStats?.totalProducts || 0}</div>
+                            <div className="text-xs text-slate-400">Producten in DB</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-yellow-600/30 flex items-center justify-center">
+                            <i className="fas fa-tag text-yellow-400"></i>
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-white">{syncStats?.dealsCount || 0}</div>
+                            <div className="text-xs text-slate-400">Deals</div>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-green-600/30 flex items-center justify-center">
+                            <i className="fas fa-check-circle text-green-400"></i>
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-white">{syncStats?.inStockCount || 0}</div>
+                            <div className="text-xs text-slate-400">Op voorraad</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* API Status Warning */}
+            {!syncStatus?.configured && (
+                <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <i className="fas fa-exclamation-triangle text-yellow-400 mt-0.5"></i>
+                        <div>
+                            <h4 className="font-medium text-yellow-300 mb-1">Bol.com API niet geconfigureerd</h4>
+                            <p className="text-sm text-yellow-200/70">
+                                Om producten te synchroniseren van Bol.com, moet je de <code className="bg-yellow-900/50 px-1 rounded">BOL_API_KEY</code> environment variable configureren.
+                                Vraag je API key aan via het Bol.com Partner Programma dashboard.
+                            </p>
+                            <div className="mt-2 flex gap-2">
+                                <span className={`text-xs px-2 py-1 rounded ${syncStatus?.apiKeySet ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
+                                    API Key: {syncStatus?.apiKeySet ? '✓' : '✗'}
+                                </span>
+                                <span className={`text-xs px-2 py-1 rounded ${syncStatus?.affiliateIdSet ? 'bg-green-600/20 text-green-400' : 'bg-yellow-600/20 text-yellow-400'}`}>
+                                    Affiliate ID: {syncStatus?.affiliateIdSet ? '✓' : 'Optioneel'}
+                                </span>
+                                <span className={`text-xs px-2 py-1 rounded ${syncStatus?.supabaseConfigured ? 'bg-green-600/20 text-green-400' : 'bg-red-600/20 text-red-400'}`}>
+                                    Database: {syncStatus?.supabaseConfigured ? '✓' : '✗'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Search Sync */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-900/30 to-slate-900 p-4 border-b border-slate-800">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <i className="fas fa-search text-blue-400"></i> Zoek & Sync Producten
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">Zoek producten op Bol.com en importeer ze naar je database</p>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="flex gap-4">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Bijv: Samsung TV, iPhone 15, Dyson stofzuiger..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition"
+                                disabled={isLoading || !syncStatus?.configured}
+                            />
+                        </div>
+                        <div className="w-32">
+                            <select
+                                value={limit}
+                                onChange={(e) => setLimit(parseInt(e.target.value))}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 cursor-pointer"
+                                disabled={isLoading || !syncStatus?.configured}
+                            >
+                                <option value="10">10 producten</option>
+                                <option value="25">25 producten</option>
+                                <option value="50">50 producten</option>
+                                <option value="100">100 producten</option>
+                            </select>
+                        </div>
+                        <button
+                            onClick={handleSearchSync}
+                            disabled={isLoading || !syncStatus?.configured || !searchTerm.trim()}
+                            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition"
+                        >
+                            {isLoading ? (
+                                <><i className="fas fa-spinner fa-spin"></i> Syncing...</>
+                            ) : (
+                                <><i className="fas fa-sync-alt"></i> Sync</>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Category Sync */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-900/30 to-slate-900 p-4 border-b border-slate-800">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <i className="fas fa-tags text-purple-400"></i> Sync Populaire Producten per Categorie
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">Haal de populairste producten op uit Bol.com categorieën</p>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {Object.entries(bolCategories).map(([id, name]) => (
+                            <label
+                                key={id}
+                                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                                    selectedCategories.includes(id)
+                                        ? 'bg-purple-600/20 border-purple-500/50 text-purple-300'
+                                        : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-600'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selectedCategories.includes(id)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setSelectedCategories([...selectedCategories, id]);
+                                        } else {
+                                            setSelectedCategories(selectedCategories.filter(c => c !== id));
+                                        }
+                                    }}
+                                    disabled={isLoading || !syncStatus?.configured}
+                                    className="rounded border-slate-600 bg-slate-800 text-purple-600 focus:ring-purple-500"
+                                />
+                                <span className="text-sm">{name}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setSelectedCategories(Object.keys(bolCategories))}
+                                className="text-sm text-slate-400 hover:text-white transition"
+                                disabled={isLoading || !syncStatus?.configured}
+                            >
+                                Alles selecteren
+                            </button>
+                            <span className="text-slate-600">|</span>
+                            <button
+                                onClick={() => setSelectedCategories([])}
+                                className="text-sm text-slate-400 hover:text-white transition"
+                                disabled={isLoading || !syncStatus?.configured}
+                            >
+                                Alles deselecteren
+                            </button>
+                        </div>
+                        <button
+                            onClick={handleCategorySync}
+                            disabled={isLoading || !syncStatus?.configured || selectedCategories.length === 0}
+                            className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition"
+                        >
+                            {isLoading ? (
+                                <><i className="fas fa-spinner fa-spin"></i> Syncing...</>
+                            ) : (
+                                <><i className="fas fa-download"></i> Sync {selectedCategories.length} categorieën</>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Last Sync Job Result */}
+            {lastJob && (
+                <div className={`border rounded-xl p-4 ${
+                    lastJob.status === 'completed' 
+                        ? 'bg-green-900/20 border-green-500/30' 
+                        : 'bg-red-900/20 border-red-500/30'
+                }`}>
+                    <div className="flex items-start gap-3">
+                        <i className={`fas ${lastJob.status === 'completed' ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} mt-0.5`}></i>
+                        <div>
+                            <h4 className={`font-medium ${lastJob.status === 'completed' ? 'text-green-300' : 'text-red-300'} mb-2`}>
+                                Laatste sync: {lastJob.status === 'completed' ? 'Voltooid' : 'Mislukt'}
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                    <span className="text-slate-400">Verwerkt:</span>
+                                    <span className="ml-2 text-white font-medium">{lastJob.itemsProcessed}</span>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400">Nieuw:</span>
+                                    <span className="ml-2 text-green-400 font-medium">{lastJob.itemsCreated}</span>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400">Bijgewerkt:</span>
+                                    <span className="ml-2 text-blue-400 font-medium">{lastJob.itemsUpdated}</span>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400">Mislukt:</span>
+                                    <span className="ml-2 text-red-400 font-medium">{lastJob.itemsFailed}</span>
+                                </div>
+                            </div>
+                            {lastJob.errorMessage && (
+                                <p className="mt-2 text-sm text-red-200/70">{lastJob.errorMessage}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Info Box */}
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                    <i className="fas fa-info-circle text-blue-400 mt-0.5"></i>
+                    <div>
+                        <h4 className="font-medium text-blue-300 mb-1">Hoe werkt de Bol.com Shop Sync?</h4>
+                        <ul className="text-sm text-blue-200/70 space-y-1">
+                            <li>• <strong>Zoek & Sync:</strong> Zoek naar specifieke producten en importeer ze naar je database</li>
+                            <li>• <strong>Categorie Sync:</strong> Haal automatisch populaire producten uit Bol.com categorieën</li>
+                            <li>• <strong>Automatische updates:</strong> Prijzen en beschikbaarheid worden bijgewerkt bij elke sync</li>
+                            <li>• <strong>Deals detectie:</strong> Producten met 15%+ korting worden automatisch als deal gemarkeerd</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const OverviewSection: React.FC<OverviewSectionProps> = ({
     automationConfig,
