@@ -29,6 +29,7 @@ if (VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY) {
 
 // Bol.com API Configuration
 const BOL_API_KEY = process.env.BOL_API_KEY || '';
+// BOL_AFFILIATE_ID is used for affiliate link generation when displaying products
 const BOL_AFFILIATE_ID = process.env.BOL_AFFILIATE_ID || '';
 
 console.log('[CONFIG] Server starting with configuration:');

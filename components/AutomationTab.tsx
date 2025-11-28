@@ -89,7 +89,7 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
     const [bolSyncLoading, setBolSyncLoading] = useState(false);
     const [lastSyncJob, setLastSyncJob] = useState<SyncJob | null>(null);
 
-    // Load Bol.com sync data
+    // Fetch Bol.com sync data
     const fetchBolSyncData = useCallback(async () => {
         try {
             const [statusRes, statsRes] = await Promise.all([
@@ -111,25 +111,26 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
         }
     }, []);
 
-    // Load automation data on mount
-    useEffect(() => {
-        const fetchAutomationData = async () => {
-            try {
-                // Fetch server automation status
-                const response = await fetch('/api/automation/status');
-                if (response.ok) {
-                    const data = await response.json();
-                    setAutomationStatus(data);
-                }
-                
-                // Load automation config from service
-                const config = await loadAutomationConfig();
-                setAutomationConfig(config);
-            } catch (error) {
-                console.error('Failed to fetch automation data:', error);
+    // Fetch automation data
+    const fetchAutomationData = useCallback(async () => {
+        try {
+            // Fetch server automation status
+            const response = await fetch('/api/automation/status');
+            if (response.ok) {
+                const data = await response.json();
+                setAutomationStatus(data);
             }
-        };
-        
+            
+            // Load automation config from service
+            const config = await loadAutomationConfig();
+            setAutomationConfig(config);
+        } catch (error) {
+            console.error('Failed to fetch automation data:', error);
+        }
+    }, []);
+
+    // Load all data on mount and set up refresh interval
+    useEffect(() => {
         // Initial fetch
         fetchAutomationData();
         fetchBolSyncData();
@@ -139,9 +140,9 @@ export const AutomationTab: React.FC<AutomationTabProps> = ({ showToast }) => {
             fetchAutomationData();
             fetchBolSyncData();
         }, 30000);
+        
         return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchAutomationData, fetchBolSyncData]);
 
     // Handle master toggle
     const handleMasterToggle = useCallback(async () => {
