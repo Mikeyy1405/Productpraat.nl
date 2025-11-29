@@ -20,6 +20,7 @@ import {
     loadAnalyticsData,
     AnalyticsDashboard
 } from '../components/features';
+import { BlockEditor, Block, blocksToHtml, htmlToBlocks } from '../components/pagebuilder';
 
 // Import types
 import type { BlogPost } from '../components/features/blog';
@@ -254,17 +255,31 @@ const BlogPostEditor: React.FC<BlogPostEditorProps> = ({ post, onSave, onCancel 
         status: 'draft',
         publishedAt: new Date().toISOString()
     });
+    
+    // Track blocks for the content
+    const [contentBlocks, setContentBlocks] = useState<Block[]>(() => 
+        post?.content ? htmlToBlocks(post.content) : []
+    );
+    
+    // Toggle between block editor and HTML view
+    const [editorMode, setEditorMode] = useState<'blocks' | 'html'>('blocks');
+
+    const handleContentChange = (html: string, blocks: Block[]) => {
+        setFormData(prev => ({ ...prev, content: html }));
+        setContentBlocks(blocks);
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
         const slug = formData.slug || generateSlug(formData.title || '');
+        const content = editorMode === 'blocks' ? blocksToHtml(contentBlocks) : formData.content || '';
         
         onSave({
             id: post?.id || '',
             title: formData.title || '',
             slug,
-            content: formData.content || '',
+            content,
             excerpt: formData.excerpt,
             featuredImage: formData.featuredImage,
             category: formData.category,
@@ -272,15 +287,44 @@ const BlogPostEditor: React.FC<BlogPostEditorProps> = ({ post, onSave, onCancel 
             author: formData.author || { name: 'Admin' },
             status: formData.status || 'draft',
             publishedAt: formData.publishedAt || new Date().toISOString(),
-            readingTime: Math.ceil((formData.content || '').split(/\s+/).length / 200)
+            readingTime: Math.ceil((content).split(/\s+/).length / 200)
         });
     };
 
     return (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-white mb-6">
-                {post ? 'Artikel bewerken' : 'Nieuw artikel'}
-            </h3>
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-white">
+                    {post ? 'Artikel bewerken' : 'Nieuw artikel'}
+                </h3>
+                <div className="flex items-center gap-2 text-sm">
+                    <span className="text-slate-500">Editor:</span>
+                    <div className="flex bg-slate-800 rounded-lg p-1">
+                        <button
+                            type="button"
+                            onClick={() => setEditorMode('blocks')}
+                            className={`px-3 py-1 rounded text-sm font-medium transition ${editorMode === 'blocks' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <i className="fas fa-cubes mr-2"></i>
+                            Blokken
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // Sync content when switching modes
+                                if (editorMode === 'blocks') {
+                                    setFormData(prev => ({ ...prev, content: blocksToHtml(contentBlocks) }));
+                                }
+                                setEditorMode('html');
+                            }}
+                            className={`px-3 py-1 rounded text-sm font-medium transition ${editorMode === 'html' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <i className="fas fa-code mr-2"></i>
+                            HTML
+                        </button>
+                    </div>
+                </div>
+            </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -339,14 +383,32 @@ const BlogPostEditor: React.FC<BlogPostEditorProps> = ({ post, onSave, onCancel 
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-2">Inhoud (HTML) *</label>
-                    <textarea
-                        value={formData.content || ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                        rows={10}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 resize-none font-mono text-sm"
-                        required
-                    />
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Inhoud * 
+                        {editorMode === 'blocks' && (
+                            <span className="text-blue-400 text-xs ml-2">
+                                (WordPress-stijl blokken editor)
+                            </span>
+                        )}
+                    </label>
+                    
+                    {editorMode === 'blocks' ? (
+                        <div className="bg-slate-950 border border-slate-700 rounded-lg p-4">
+                            <BlockEditor
+                                initialBlocks={contentBlocks}
+                                onChange={handleContentChange}
+                                showPreview={false}
+                            />
+                        </div>
+                    ) : (
+                        <textarea
+                            value={formData.content || ''}
+                            onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                            rows={10}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-500 resize-none font-mono text-sm"
+                            required
+                        />
+                    )}
                 </div>
 
                 <div className="flex gap-2 pt-4">
