@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Product, CATEGORIES } from '../types';
+import { ContentManagementPanel } from '../src/cms/ContentManagementPanel';
 
 interface CategoryResult {
     category: string;
@@ -49,6 +50,8 @@ interface ScrapeResult {
     error?: string;
 }
 
+type DashboardTab = 'products' | 'content';
+
 interface SimpleDashboardProps {
     products: Product[];
     onLogout: () => void;
@@ -58,6 +61,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
     products, 
     onLogout 
 }) => {
+    const [activeTab, setActiveTab] = useState<DashboardTab>('products');
     const [isImporting, setIsImporting] = useState(false);
     const [importStatus, setImportStatus] = useState<string>('');
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -285,6 +289,51 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 </div>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="max-w-6xl mx-auto mb-6">
+                <div className="flex gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                    <button
+                        onClick={() => setActiveTab('products')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition ${
+                            activeTab === 'products'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        }`}
+                    >
+                        <i className="fas fa-box"></i>
+                        Producten
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('content')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition ${
+                            activeTab === 'content'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        }`}
+                    >
+                        <i className="fas fa-edit"></i>
+                        Content Beheer (Blokken Editor)
+                    </button>
+                </div>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'content' ? (
+                <div className="max-w-6xl mx-auto">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                <i className="fas fa-cubes text-white"></i>
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-white">WordPress-stijl Blokken Editor</h2>
+                                <p className="text-slate-400 text-sm">Bewerk je pagina's met visuele blokken</p>
+                            </div>
+                        </div>
+                        <ContentManagementPanel />
+                    </div>
+                </div>
+            ) : (
             <div className="max-w-6xl mx-auto space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -662,6 +711,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                     </div>
                 )}
             </div>
+            )}
         </div>
     );
 };

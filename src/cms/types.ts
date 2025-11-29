@@ -232,7 +232,7 @@ export const TEMPLATES: Record<TemplateType, TemplateConfig> = {
         name: 'Shop',
         description: 'E-commerce platform voor online winkels. Inclusief productcatalogus, winkelwagen en betalingsintegratie. Gebaseerd op de huidige Productpraat functionaliteit.',
         icon: 'fa-shopping-cart',
-        defaultFeatures: ['search', 'seo_tools', 'analytics', 'media_library', 'wysiwyg_editor', 'menu_management', 'product_reviews', 'cart_wishlist', 'payment_systems'],
+        defaultFeatures: ['search', 'seo_tools', 'analytics', 'media_library', 'wysiwyg_editor', 'menu_management', 'product_reviews', 'cart_wishlist', 'payment_systems', 'blog_posts', 'page_builder'],
         availableFeatures: ['comments', 'contact_form', 'newsletter', 'search', 'social_media', 'payment_systems', 'product_reviews', 'multi_language', 'seo_tools', 'analytics', 'media_library', 'wysiwyg_editor', 'menu_management', 'page_builder', 'cart_wishlist', 'inventory_management', 'blog_posts'],
         settings: {
             primaryColor: '#1877F2',
