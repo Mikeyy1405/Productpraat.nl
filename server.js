@@ -686,6 +686,25 @@ const CATEGORY_SEARCH_FALLBACK = {
 };
 
 /**
+ * Complete category mapping with display names, IDs, and search terms
+ * Used by the admin categories endpoint
+ */
+const CATEGORY_MAPPING = {
+    'televisies': { categoryId: '10651', searchTerm: 'televisie smart tv', displayName: 'Televisies' },
+    'audio': { categoryId: '14490', searchTerm: 'bluetooth speaker koptelefoon', displayName: 'Audio & HiFi' },
+    'laptops': { categoryId: '4770', searchTerm: 'laptop notebook', displayName: 'Laptops' },
+    'smartphones': { categoryId: '10852', searchTerm: 'smartphone mobiele telefoon', displayName: 'Smartphones' },
+    'wasmachines': { categoryId: '11462', searchTerm: 'wasmachine', displayName: 'Wasmachines' },
+    'stofzuigers': { categoryId: '20104', searchTerm: 'stofzuiger robotstofzuiger', displayName: 'Stofzuigers' },
+    'smarthome': { categoryId: '20637', searchTerm: 'smart home domotica', displayName: 'Smart Home' },
+    'matrassen': { categoryId: '10689', searchTerm: 'matras', displayName: 'Matrassen' },
+    'airfryers': { categoryId: '43756', searchTerm: 'airfryer heteluchtfriteuse', displayName: 'Airfryers' },
+    'koffie': { categoryId: '10550', searchTerm: 'koffiezetapparaat espressomachine', displayName: 'Koffie' },
+    'keuken': { categoryId: '10540', searchTerm: 'keukenmachine blender', displayName: 'Keukenmachines' },
+    'verzorging': { categoryId: '12442', searchTerm: 'scheerapparaat elektrische tandenborstel', displayName: 'Verzorging' },
+};
+
+/**
  * User-friendly error messages for API response codes
  */
 const API_ERROR_MESSAGES = {
@@ -1754,6 +1773,308 @@ app.post('/api/admin/quick-import', async (req, res) => {
         });
     }
 });
+
+// ============================================================================
+// CATEGORY URL SCRAPER ENDPOINT
+// Scrapes products from external category URLs (e.g., bol.com category pages)
+// ============================================================================
+
+/**
+ * Parse Bol.com category URL to extract category ID
+ * Examples:
+ * - https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/
+ * - https://www.bol.com/nl/nl/l/televisies/10651/
+ */
+function extractBolCategoryIdFromUrl(url) {
+    try {
+        const parsedUrl = new URL(url);
+        const pathname = parsedUrl.pathname;
+        
+        // Match pattern: /nl/nl/l/{category-name}/{category-id}/
+        const match = pathname.match(/\/l\/[^/]+\/(\d+)\/?$/);
+        if (match) {
+            return match[1];
+        }
+        
+        // Also try query parameters
+        const categoryId = parsedUrl.searchParams.get('categoryId');
+        return categoryId || null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Scrape products from an external category URL
+ * 
+ * Supports:
+ * - Bol.com category URLs: Uses the official API with extracted category ID
+ * - Other URLs: Returns error (API-only approach for reliability)
+ */
+app.post('/api/admin/scrape-category', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [SCRAPER] POST /api/admin/scrape-category`);
+    
+    try {
+        const { url, limit = 20, includeDetails = false } = req.body;
+        
+        if (!url || typeof url !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'URL is verplicht',
+                message: 'Voer een geldige categorie-URL in'
+            });
+        }
+        
+        // Validate URL
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(url);
+            if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Ongeldige URL protocol',
+                    message: 'Gebruik een http:// of https:// URL'
+                });
+            }
+        } catch {
+            return res.status(400).json({
+                success: false,
+                error: 'Ongeldige URL',
+                message: 'De ingevoerde URL is niet geldig'
+            });
+        }
+        
+        // Check if it's a Bol.com URL
+        const hostname = parsedUrl.hostname.toLowerCase();
+        const isBolUrl = hostname.endsWith('bol.com') || hostname === 'bol.com';
+        
+        if (!isBolUrl) {
+            return res.status(400).json({
+                success: false,
+                error: 'Niet ondersteund',
+                message: 'Momenteel worden alleen Bol.com categorie-URLs ondersteund. Voorbeeld: https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/'
+            });
+        }
+        
+        // Extract category ID from Bol.com URL
+        const categoryId = extractBolCategoryIdFromUrl(url);
+        
+        if (!categoryId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Geen categorie-ID gevonden',
+                message: 'Kon geen categorie-ID extraheren uit de URL. Zorg dat het een categorie-pagina is zoals: https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/'
+            });
+        }
+        
+        console.log(`[SCRAPER] Extracted category ID: ${categoryId} from URL: ${url}`);
+        
+        // Check if Bol.com API is configured
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Bol.com API niet geconfigureerd',
+                message: 'Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in als environment variabelen om producten te importeren'
+            });
+        }
+        
+        // Fetch products using the Bol.com API
+        const productLimit = Math.min(Math.max(1, limit), 100);
+        
+        const result = await bolSyncService.getProductsByCategoryWithFallback(
+            categoryId,
+            `categorie ${categoryId}`, // Fallback search term
+            productLimit
+        );
+        
+        if (result.error) {
+            return res.status(500).json({
+                success: false,
+                error: 'Ophalen mislukt',
+                message: result.error,
+                categoryId
+            });
+        }
+        
+        const products = result.products || [];
+        
+        if (products.length === 0) {
+            return res.json({
+                success: true,
+                message: 'Geen producten gevonden in deze categorie',
+                url,
+                categoryId,
+                productCount: 0,
+                products: [],
+                usedFallback: result.usedFallback,
+                scrapedAt: timestamp
+            });
+        }
+        
+        // Map products to a consistent format with all required fields
+        const mappedProducts = products.map(bolProduct => {
+            const offer = bolProduct.bestOffer || {};
+            const rating = bolProduct.rating || {};
+            
+            return {
+                ean: bolProduct.ean,
+                productId: bolProduct.bolProductId,
+                title: bolProduct.title,
+                brand: extractBrandFromTitle(bolProduct.title),
+                price: offer.price?.value || null,
+                priceLabel: offer.price?.value ? `€${offer.price.value.toFixed(2).replace('.', ',')}` : null,
+                originalPrice: offer.strikethroughPrice?.value || null,
+                discountPercentage: offer.discountPercentage || null,
+                url: bolProduct.url || `https://www.bol.com/nl/p/-/${bolProduct.ean}/`,
+                imageUrl: bolProduct.mainImageUrl || (bolProduct.images && bolProduct.images[0]?.url) || null,
+                description: bolProduct.description || bolProduct.shortDescription || null,
+                rating: rating.averageRating || null,
+                reviewCount: rating.totalRatings || 0,
+                inStock: offer.availability === 'IN_STOCK' || offer.availability === 'LIMITED_STOCK',
+                source: 'bol.com',
+                // Extended fields (will be populated if includeDetails is true)
+                pros: null,
+                cons: null,
+                specifications: null,
+                longDescription: null,
+            };
+        });
+        
+        // If includeDetails is requested, we would fetch each product's details
+        // For now, we return the basic info since detailed scraping requires additional API calls
+        if (includeDetails) {
+            console.log(`[SCRAPER] includeDetails requested - detailed info would require additional API calls`);
+            // Note: The Bol.com API already returns most details we need
+            // Pros/cons are typically not available from the API and would require page scraping
+        }
+        
+        // Optionally save to database
+        let savedCount = 0;
+        let updatedCount = 0;
+        
+        if (supabase && mappedProducts.length > 0) {
+            const now = new Date().toISOString();
+            
+            // Prepare products for database
+            const dbProducts = mappedProducts.map(p => ({
+                ean: p.ean,
+                bol_product_id: p.productId,
+                title: p.title,
+                description: p.description || '',
+                url: p.url,
+                price: p.price,
+                strikethrough_price: p.originalPrice,
+                discount_percentage: p.discountPercentage,
+                in_stock: p.inStock,
+                is_deal: (p.discountPercentage || 0) >= 15,
+                average_rating: p.rating,
+                total_ratings: p.reviewCount,
+                main_image_url: p.imageUrl,
+                last_synced_at: now,
+                updated_at: now,
+                created_at: now,
+            }));
+            
+            // Check which products already exist
+            const eans = dbProducts.map(p => p.ean).filter(Boolean);
+            const { data: existingProducts } = await supabase
+                .from('bol_products')
+                .select('ean')
+                .in('ean', eans);
+            
+            const existingEans = new Set((existingProducts || []).map(p => p.ean));
+            
+            // Split into new and existing
+            const newProducts = dbProducts.filter(p => p.ean && !existingEans.has(p.ean));
+            const updateProducts = dbProducts.filter(p => p.ean && existingEans.has(p.ean));
+            
+            // Insert new products
+            if (newProducts.length > 0) {
+                const { error: insertError } = await supabase
+                    .from('bol_products')
+                    .insert(newProducts);
+                
+                if (!insertError) {
+                    savedCount = newProducts.length;
+                } else {
+                    console.error('[SCRAPER] Insert error:', insertError);
+                }
+            }
+            
+            // Update existing products
+            if (updateProducts.length > 0) {
+                const updateData = updateProducts.map(({ created_at, ...rest }) => rest);
+                const { error: upsertError } = await supabase
+                    .from('bol_products')
+                    .upsert(updateData, { onConflict: 'ean' });
+                
+                if (!upsertError) {
+                    updatedCount = updateProducts.length;
+                } else {
+                    console.error('[SCRAPER] Upsert error:', upsertError);
+                }
+            }
+        }
+        
+        console.log(`[SCRAPER] Category ${categoryId}: ${products.length} products found, ${savedCount} saved, ${updatedCount} updated`);
+        
+        res.json({
+            success: true,
+            message: `${products.length} producten gevonden${savedCount > 0 ? `, ${savedCount} opgeslagen` : ''}${updatedCount > 0 ? `, ${updatedCount} bijgewerkt` : ''}`,
+            url,
+            categoryId,
+            productCount: products.length,
+            savedCount,
+            updatedCount,
+            products: mappedProducts,
+            usedFallback: result.usedFallback,
+            scrapedAt: timestamp
+        });
+        
+    } catch (error) {
+        console.error('[SCRAPER] Error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Scrapen mislukt',
+            message: error.message || 'Onbekende fout bij het ophalen van producten'
+        });
+    }
+});
+
+/**
+ * Extract brand name from product title (simple heuristic)
+ */
+function extractBrandFromTitle(title) {
+    if (!title) return null;
+    
+    // Common brand extraction patterns
+    // Usually the first word or first few words before a number or specific model identifier
+    const words = title.split(/\s+/);
+    if (words.length > 0) {
+        // Common brands to check
+        const commonBrands = [
+            'Philips', 'Samsung', 'Sony', 'LG', 'Apple', 'Braun', 'Oral-B', 
+            'Dyson', 'Bosch', 'Miele', 'AEG', 'Siemens', 'Panasonic', 'JBL',
+            'Bose', 'DeLonghi', 'Nespresso', 'KitchenAid', 'Tefal', 'Rowenta',
+            'Babyliss', 'Remington', 'HP', 'Dell', 'Lenovo', 'Asus', 'Acer',
+            'Microsoft', 'Google', 'OnePlus', 'Xiaomi', 'Huawei', 'Nintendo'
+        ];
+        
+        for (const brand of commonBrands) {
+            if (title.toLowerCase().startsWith(brand.toLowerCase())) {
+                return brand;
+            }
+        }
+        
+        // Default: return first word if it looks like a brand (starts with uppercase)
+        if (words[0] && /^[A-Z]/.test(words[0]) && words[0].length > 1) {
+            return words[0];
+        }
+    }
+    
+    return null;
+}
 
 // ============================================================================
 // PRODUCT DISCOVERY AUTOMATION ENDPOINTS
