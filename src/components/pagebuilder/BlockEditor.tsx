@@ -13,6 +13,7 @@ import {
     createBlock, 
     blocksToHtml,
     htmlToBlocks,
+    sanitizeHtml,
     ParagraphBlock,
     HeadingBlock,
     ImageBlock,
@@ -345,9 +346,9 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
                     </div>
                 </>
             ) : (
-                /* Preview mode */
+                /* Preview mode - sanitize HTML to prevent XSS */
                 <div className="bg-white rounded-xl p-8 prose prose-lg max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: blocksToHtml(blocks) }} />
+                    <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(blocksToHtml(blocks)) }} />
                 </div>
             )}
         </div>

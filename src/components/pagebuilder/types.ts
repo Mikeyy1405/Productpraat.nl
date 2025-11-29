@@ -2,7 +2,61 @@
  * Block Editor Types
  * 
  * Type definitions for the WordPress-like block editor system.
+ * 
+ * Security Note: HTML content is only editable by authenticated admin users.
+ * The block editor is intended for backend CMS use only.
  */
+
+/**
+ * HTML sanitization to prevent XSS in block editor preview.
+ * Uses DOM parsing to safely remove dangerous elements and attributes.
+ * 
+ * Security Note: This sanitizer is used for admin-only CMS previews.
+ * The content being sanitized is created by authenticated admin users.
+ */
+export const sanitizeHtml = (html: string): string => {
+    // Use DOM parsing for more robust sanitization
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // Dangerous elements to remove completely
+    const dangerousElements = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'select', 'textarea'];
+    
+    dangerousElements.forEach(tag => {
+        const elements = doc.querySelectorAll(tag);
+        elements.forEach(el => el.remove());
+    });
+    
+    // Remove dangerous attributes from all elements
+    const allElements = doc.querySelectorAll('*');
+    allElements.forEach(el => {
+        // Remove event handlers (on*)
+        Array.from(el.attributes).forEach(attr => {
+            const name = attr.name.toLowerCase();
+            if (name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+            }
+        });
+        
+        // Remove dangerous URL schemes from href and src
+        ['href', 'src', 'action', 'formaction', 'xlink:href'].forEach(attr => {
+            const value = el.getAttribute(attr);
+            if (value) {
+                const lowerValue = value.toLowerCase().trim();
+                // Check for dangerous URL schemes
+                const isDangerous = 
+                    lowerValue.startsWith('javascript:') || 
+                    lowerValue.startsWith('vbscript:') ||
+                    lowerValue.startsWith('data:');
+                if (isDangerous) {
+                    el.removeAttribute(attr);
+                }
+            }
+        });
+    });
+    
+    return doc.body.innerHTML;
+};
 
 // Available block types
 export type BlockType = 
@@ -179,7 +233,7 @@ export const BLOCK_DEFINITIONS: Record<BlockType, BlockConfig> = {
 
 // Helper to create new blocks
 export const createBlock = (type: BlockType): Block => {
-    const id = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `block-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     
     switch (type) {
         case 'paragraph':
@@ -266,7 +320,7 @@ export const htmlToBlocks = (html: string): Block[] => {
         
         const element = node as Element;
         const tagName = element.tagName.toLowerCase();
-        const id = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const id = `block-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
         
         switch (tagName) {
             case 'p':

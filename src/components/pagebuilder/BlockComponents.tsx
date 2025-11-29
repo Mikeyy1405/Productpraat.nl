@@ -14,7 +14,8 @@ import {
     QuoteBlock,
     ButtonBlock,
     DividerBlock,
-    HTMLBlock
+    HTMLBlock,
+    sanitizeHtml
 } from './types';
 
 interface BlockEditorProps<T extends Block> {
@@ -584,7 +585,7 @@ export const HTMLBlockEditor: React.FC<BlockEditorProps<HTMLBlock>> = ({
             {showPreview ? (
                 <div 
                     className="bg-slate-950 border border-slate-700 rounded-lg p-4 min-h-[100px] prose prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: block.content }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
                 />
             ) : (
                 <textarea
