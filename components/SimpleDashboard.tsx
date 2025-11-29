@@ -195,10 +195,13 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
             console.log('[SimpleDashboard] Import result:', result);
             
             // Build detailed status message
-            if (result.success && (result.imported > 0 || (result.updated ?? 0) > 0)) {
-                let statusMsg = `✅ ${result.imported} producten geïmporteerd`;
-                if ((result.updated ?? 0) > 0) {
-                    statusMsg += `, ${result.updated} bijgewerkt`;
+            const importedCount = result.imported ?? 0;
+            const updatedCount = result.updated ?? 0;
+            
+            if (result.success && (importedCount > 0 || updatedCount > 0)) {
+                let statusMsg = `✅ ${importedCount} producten geïmporteerd`;
+                if (updatedCount > 0) {
+                    statusMsg += `, ${updatedCount} bijgewerkt`;
                 }
                 
                 // Check for per-category failures
@@ -212,7 +215,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else if (result.success && result.imported === 0 && result.updated === 0) {
+            } else if (result.success && importedCount === 0 && updatedCount === 0) {
                 // No products found or imported
                 if (result.errors && result.errors.length > 0) {
                     // Show specific error messages

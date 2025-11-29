@@ -1845,9 +1845,10 @@ app.post('/api/admin/scrape-category', async (req, res) => {
             });
         }
         
-        // Check if it's a Bol.com URL
+        // Check if it's a Bol.com URL - use strict domain validation
         const hostname = parsedUrl.hostname.toLowerCase();
-        const isBolUrl = hostname.endsWith('bol.com') || hostname === 'bol.com';
+        // Match exact 'bol.com' or subdomains like 'www.bol.com', 'partner.bol.com'
+        const isBolUrl = hostname === 'bol.com' || hostname.endsWith('.bol.com');
         
         if (!isBolUrl) {
             return res.status(400).json({

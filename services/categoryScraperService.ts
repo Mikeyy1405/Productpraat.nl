@@ -4,6 +4,11 @@
  * Scrapes products from external category URLs (e.g., bol.com category pages)
  * and extracts product information including price, pros, cons, description, and specifications.
  * 
+ * **NOTE: This is a CLIENT-SIDE ONLY service.**
+ * It uses DOMParser which is only available in browser environments.
+ * For server-side category scraping, use the /api/admin/scrape-category endpoint
+ * which uses the Bol.com API instead of HTML scraping.
+ * 
  * @module services/categoryScraperService
  */
 
@@ -547,7 +552,10 @@ export async function scrapeCategoryUrl(
         includeDetails?: boolean;
     } = {}
 ): Promise<CategoryScrapeResult> {
-    const { limit = 50, includeDetails = false } = options;
+    // Enforce maximum limit
+    const requestedLimit = options.limit ?? 50;
+    const limit = Math.min(Math.max(1, requestedLimit), MAX_PRODUCTS_PER_PAGE);
+    const includeDetails = options.includeDetails ?? false;
     const warnings: string[] = [];
     
     try {
@@ -574,7 +582,11 @@ export async function scrapeCategoryUrl(
         // Parse products based on detected shop
         let products: ScrapedProduct[];
         
-        if (shop.toLowerCase() === 'bol.com' || parsedUrl.hostname.includes('bol.com')) {
+        // Use strict domain validation for Bol.com
+        const hostname = parsedUrl.hostname.toLowerCase();
+        const isBolDomain = hostname === 'bol.com' || hostname.endsWith('.bol.com');
+        
+        if (shop.toLowerCase() === 'bol.com' || isBolDomain) {
             products = parseBolCategoryPage(content.html, categoryUrl);
         } else {
             products = parseGenericCategoryPage(content.html, categoryUrl, shop);

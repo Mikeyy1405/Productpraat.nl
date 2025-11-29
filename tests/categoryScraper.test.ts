@@ -134,7 +134,9 @@ describe('Category Scraper', () => {
             bolUrls.forEach(url => {
                 const parsed = new URL(url);
                 const hostname = parsed.hostname.toLowerCase();
-                expect(hostname.endsWith('bol.com') || hostname === 'bol.com').toBe(true);
+                // Use strict validation: exact match or subdomain (preceded by dot)
+                const isBolDomain = hostname === 'bol.com' || hostname.endsWith('.bol.com');
+                expect(isBolDomain).toBe(true);
             });
         });
 
@@ -148,11 +150,10 @@ describe('Category Scraper', () => {
             fakeUrls.forEach(url => {
                 const parsed = new URL(url);
                 const hostname = parsed.hostname.toLowerCase();
-                // Only exact match or subdomain should be accepted
+                // Only exact match or subdomain (with preceding dot) should be accepted
                 const isBolDomain = hostname === 'bol.com' || hostname.endsWith('.bol.com');
-                // malicious-bol.com should fail
-                expect(hostname).not.toBe('bol.com');
-                expect(hostname.endsWith('.bol.com')).toBe(false);
+                // malicious-bol.com should fail because it doesn't end with '.bol.com'
+                expect(isBolDomain).toBe(false);
             });
         });
     });
