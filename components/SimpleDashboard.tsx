@@ -19,6 +19,34 @@ interface ImportResult {
     message: string;
     details?: CategoryResult[];
     categoryErrors?: Array<{ category: string; error: string }>;
+    errors?: Array<{ category: string; error: string }>;
+}
+
+interface ScrapedProduct {
+    ean?: string;
+    productId?: string;
+    title: string;
+    brand?: string;
+    price?: number;
+    priceLabel?: string;
+    url: string;
+    imageUrl?: string;
+    rating?: number;
+    reviewCount?: number;
+    inStock?: boolean;
+    source?: string;
+}
+
+interface ScrapeResult {
+    success: boolean;
+    message: string;
+    url: string;
+    categoryId?: string;
+    productCount: number;
+    savedCount?: number;
+    updatedCount?: number;
+    products: ScrapedProduct[];
+    error?: string;
 }
 
 interface SimpleDashboardProps {
@@ -38,6 +66,86 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
     ]);
     const [productsPerCategory, setProductsPerCategory] = useState(5);
     const [categoryProgress, setCategoryProgress] = useState<CategoryResult[]>([]);
+
+    // Category URL Scraper state
+    const [categoryUrl, setCategoryUrl] = useState<string>('');
+    const [isScraping, setIsScraping] = useState(false);
+    const [scrapeStatus, setScrapeStatus] = useState<string>('');
+    const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null);
+    const [scrapeLimit, setScrapeLimit] = useState(20);
+
+    const handleScrapeCategory = async () => {
+        if (!categoryUrl.trim()) {
+            setScrapeStatus('❌ Voer een categorie-URL in');
+            return;
+        }
+
+        // Validate URL format
+        try {
+            new URL(categoryUrl);
+        } catch {
+            setScrapeStatus('❌ Ongeldige URL. Gebruik een volledige URL zoals https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/');
+            return;
+        }
+
+        setIsScraping(true);
+        setScrapeStatus('🔄 Producten ophalen van externe categorie...');
+        setScrapeResult(null);
+
+        try {
+            const response = await fetch('/api/admin/scrape-category', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: categoryUrl.trim(),
+                    limit: scrapeLimit,
+                    includeDetails: false
+                })
+            });
+
+            if (!response.ok) {
+                let errorMessage = `Server error: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorData.error || errorMessage;
+                } catch {
+                    // Failed to parse JSON
+                }
+                throw new Error(errorMessage);
+            }
+
+            const result: ScrapeResult = await response.json();
+            setScrapeResult(result);
+
+            if (result.success && result.productCount > 0) {
+                let statusMsg = `✅ ${result.productCount} producten gevonden`;
+                if (result.savedCount && result.savedCount > 0) {
+                    statusMsg += `, ${result.savedCount} opgeslagen`;
+                }
+                if (result.updatedCount && result.updatedCount > 0) {
+                    statusMsg += `, ${result.updatedCount} bijgewerkt`;
+                }
+                setScrapeStatus(statusMsg);
+                
+                // Reload page after 3 seconds to show new products
+                if (result.savedCount && result.savedCount > 0) {
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                }
+            } else if (result.success) {
+                setScrapeStatus('⚠️ Geen producten gevonden op deze pagina');
+            } else {
+                setScrapeStatus(`❌ ${result.error || 'Scrapen mislukt'}`);
+            }
+        } catch (err) {
+            console.error('Scrape error:', err);
+            const errorMessage = err instanceof Error ? err.message : 'Onbekende fout';
+            setScrapeStatus(`❌ ${errorMessage}`);
+        } finally {
+            setIsScraping(false);
+        }
+    };
 
     const handleImport = async () => {
         console.log('[SimpleDashboard] Starting import:', {
@@ -87,10 +195,13 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
             console.log('[SimpleDashboard] Import result:', result);
             
             // Build detailed status message
-            if (result.success && (result.imported > 0 || result.updated > 0)) {
-                let statusMsg = `✅ ${result.imported} producten geïmporteerd`;
-                if (result.updated > 0) {
-                    statusMsg += `, ${result.updated} bijgewerkt`;
+            const importedCount = result.imported ?? 0;
+            const updatedCount = result.updated ?? 0;
+            
+            if (result.success && (importedCount > 0 || updatedCount > 0)) {
+                let statusMsg = `✅ ${importedCount} producten geïmporteerd`;
+                if (updatedCount > 0) {
+                    statusMsg += `, ${updatedCount} bijgewerkt`;
                 }
                 
                 // Check for per-category failures
@@ -104,7 +215,7 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            } else if (result.success && result.imported === 0 && result.updated === 0) {
+            } else if (result.success && importedCount === 0 && updatedCount === 0) {
                 // No products found or imported
                 if (result.errors && result.errors.length > 0) {
                     // Show specific error messages
@@ -377,6 +488,133 @@ export const SimpleDashboard: React.FC<SimpleDashboardProps> = ({
                                     </li>
                                 ))}
                             </ul>
+                        </div>
+                    )}
+                </div>
+
+                {/* Category URL Scraper Section */}
+                <div className="bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 rounded-2xl p-8">
+                    <div className="text-center mb-6">
+                        <div className="text-5xl mb-4">🔗</div>
+                        <h2 className="text-3xl font-bold text-white mb-2">
+                            Importeer via Categorie-URL
+                        </h2>
+                        <p className="text-slate-300">Plak een Bol.com categorie-URL om alle producten te importeren</p>
+                    </div>
+
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-slate-300 mb-3">
+                            🌐 Categorie-URL:
+                        </label>
+                        <input
+                            type="url"
+                            value={categoryUrl}
+                            onChange={(e) => setCategoryUrl(e.target.value)}
+                            disabled={isScraping}
+                            placeholder="https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/"
+                            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white \
+                                placeholder-slate-500 focus:outline-none focus:border-green-500 transition disabled:opacity-50"
+                        />
+                        <p className="mt-2 text-xs text-slate-400">
+                            Voorbeeld: https://www.bol.com/nl/nl/l/verzorgingsproducten/12442/
+                        </p>
+                    </div>
+
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-slate-300 mb-3">
+                            🔢 Maximum aantal producten: <span className="text-green-400 font-bold text-lg">{scrapeLimit}</span>
+                        </label>
+                        <input
+                            type="range"
+                            min="5"
+                            max="50"
+                            step="5"
+                            value={scrapeLimit}
+                            onChange={(e) => setScrapeLimit(parseInt(e.target.value))}
+                            disabled={isScraping}
+                            className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+                        />
+                    </div>
+
+                    <button
+                        onClick={handleScrapeCategory}
+                        disabled={isScraping || !categoryUrl.trim()}
+                        className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-500 hover:to-teal-500 \
+                            disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-all shadow-lg \
+                            flex items-center justify-center gap-3 text-lg"
+                    >
+                        {isScraping ? (
+                            <>
+                                <i className="fas fa-circle-notch fa-spin"></i>
+                                Bezig met importeren...
+                            </>
+                        ) : (
+                            <>
+                                <i className="fas fa-download"></i>
+                                Importeer Producten van URL
+                            </>
+                        )}
+                    </button>
+
+                    {/* Scrape Status Message */}
+                    {scrapeStatus && (
+                        <div className={`mt-4 p-4 rounded-lg border text-center font-medium ${
+                            scrapeStatus.startsWith('✅') 
+                                ? 'bg-green-900/30 border-green-500/30 text-green-400'
+                                : scrapeStatus.startsWith('❌')
+                                ? 'bg-red-900/30 border-red-500/30 text-red-400'
+                                : scrapeStatus.startsWith('⚠️')
+                                ? 'bg-yellow-900/30 border-yellow-500/30 text-yellow-400'
+                                : 'bg-blue-900/30 border-blue-500/30 text-blue-400'
+                        }`}>
+                            {scrapeStatus}
+                        </div>
+                    )}
+
+                    {/* Scraped Products Preview */}
+                    {scrapeResult?.products && scrapeResult.products.length > 0 && (
+                        <div className="mt-6">
+                            <h4 className="text-lg font-semibold text-white mb-4">
+                                <i className="fas fa-list text-green-400 mr-2"></i>
+                                Gevonden Producten ({scrapeResult.products.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-2">
+                                {scrapeResult.products.slice(0, 10).map((product, idx) => (
+                                    <div 
+                                        key={idx}
+                                        className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700"
+                                    >
+                                        {product.imageUrl && (
+                                            <img 
+                                                src={product.imageUrl}
+                                                alt={product.title}
+                                                className="w-12 h-12 object-contain bg-white rounded"
+                                            />
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm text-white font-medium truncate">
+                                                {product.title}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                                                {product.priceLabel && (
+                                                    <span className="text-green-400">{product.priceLabel}</span>
+                                                )}
+                                                {product.rating && (
+                                                    <span>
+                                                        <i className="fas fa-star text-yellow-400 mr-1"></i>
+                                                        {product.rating}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {scrapeResult.products.length > 10 && (
+                                <p className="text-center text-sm text-slate-400 mt-3">
+                                    En nog {scrapeResult.products.length - 10} producten meer...
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
