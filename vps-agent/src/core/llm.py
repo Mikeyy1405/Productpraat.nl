@@ -1,12 +1,11 @@
 """
 LLM Provider & Model Router
-Supports Claude (Anthropic) and OpenAI with multi-model routing (Abacus pattern)
+Supports Abacus.AI (Claude via OpenAI-compatible API) with multi-model routing
 """
 
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
-from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -27,11 +26,11 @@ class LLMProvider(ABC):
         pass
 
 
-class ClaudeProvider(LLMProvider):
-    """Anthropic Claude provider."""
+class AbacusProvider(LLMProvider):
+    """Abacus.AI LLM provider (OpenAI-compatible API for Claude models)."""
 
-    def __init__(self, api_key: str, default_model: str = "claude-opus-4-20250514"):
-        self.client = AsyncAnthropic(api_key=api_key)
+    def __init__(self, api_key: str, base_url: str = "https://api.abacus.ai/v1", default_model: str = "claude-3-5-sonnet"):
+        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self.default_model = default_model
 
     async def complete(
@@ -41,53 +40,49 @@ class ClaudeProvider(LLMProvider):
         model: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
-        """Generate completion using Claude."""
+        """Generate completion using Abacus.AI."""
         model = model or self.default_model
 
-        # Separate system message if present
-        system_msg = None
-        user_messages = messages
-
-        if messages and messages[0]["role"] == "system":
-            system_msg = messages[0]["content"]
-            user_messages = messages[1:]
-
         try:
-            response = await self.client.messages.create(
-                model=model,
-                messages=user_messages,
-                system=system_msg,
-                tools=tools if tools else [],
-                max_tokens=kwargs.get("max_tokens", 4096),
-                temperature=kwargs.get("temperature", 0.7)
-            )
+            completion_kwargs = {
+                "model": model,
+                "messages": messages,
+                "temperature": kwargs.get("temperature", 0.7),
+                "max_tokens": kwargs.get("max_tokens", 4096)
+            }
 
-            # Parse response
+            if tools:
+                completion_kwargs["tools"] = tools
+                completion_kwargs["tool_choice"] = "auto"
+
+            response = await self.client.chat.completions.create(**completion_kwargs)
+
+            message = response.choices[0].message
+
             result = {
-                "content": "",
+                "content": message.content or "",
                 "tool_calls": []
             }
 
-            for content_block in response.content:
-                if content_block.type == "text":
-                    result["content"] += content_block.text
-                elif content_block.type == "tool_use":
+            if message.tool_calls:
+                import json
+                for tool_call in message.tool_calls:
                     result["tool_calls"].append({
-                        "id": content_block.id,
+                        "id": tool_call.id,
                         "function": {
-                            "name": content_block.name,
-                            "arguments": content_block.input
+                            "name": tool_call.function.name,
+                            "arguments": json.loads(tool_call.function.arguments)
                         }
                     })
 
-            logger.info(f"Claude response: {result['content'][:100]}...")
+            logger.info(f"Abacus response: {result['content'][:100]}...")
             if result["tool_calls"]:
                 logger.info(f"Tool calls: {[tc['function']['name'] for tc in result['tool_calls']]}")
 
             return result
 
         except Exception as e:
-            logger.error(f"Claude API error: {e}")
+            logger.error(f"Abacus API error: {e}")
             raise
 
 
@@ -164,12 +159,12 @@ class ModelRouter:
         self.providers = providers
         self.config = config or {}
 
-        # Model configurations
+        # Model configurations (Abacus.AI model names)
         self.models = {
-            "complex": self.config.get("MODEL_COMPLEX", "claude-opus-4-20250514"),
-            "fast": self.config.get("MODEL_FAST", "claude-haiku-3-20250307"),
-            "coding": self.config.get("MODEL_CODING", "claude-sonnet-4-20250514"),
-            "default": self.config.get("DEFAULT_MODEL", "claude-opus-4-20250514")
+            "complex": self.config.get("MODEL_COMPLEX", "claude-3-5-sonnet"),
+            "fast": self.config.get("MODEL_FAST", "claude-3-haiku"),
+            "coding": self.config.get("MODEL_CODING", "claude-3-5-sonnet"),
+            "default": self.config.get("DEFAULT_MODEL", "claude-3-5-sonnet")
         }
 
     def select_model(self, task_type: str, complexity: float) -> str:
@@ -213,10 +208,10 @@ class ModelRouter:
         if "gpt" in model.lower():
             return self.providers.get("openai")
         elif "claude" in model.lower():
-            return self.providers.get("claude")
+            return self.providers.get("abacus")
         else:
-            # Default to Claude
-            return self.providers.get("claude")
+            # Default to Abacus (Claude)
+            return self.providers.get("abacus")
 
 
 def create_llm_setup(config: Dict) -> tuple[LLMProvider, ModelRouter]:
@@ -231,15 +226,16 @@ def create_llm_setup(config: Dict) -> tuple[LLMProvider, ModelRouter]:
     """
     providers = {}
 
-    # Initialize Claude if API key present
-    if config.get("ANTHROPIC_API_KEY"):
-        providers["claude"] = ClaudeProvider(
-            api_key=config["ANTHROPIC_API_KEY"],
-            default_model=config.get("DEFAULT_MODEL", "claude-opus-4-20250514")
+    # Initialize Abacus.AI if API key present (primary provider)
+    if config.get("ABACUS_API_KEY"):
+        providers["abacus"] = AbacusProvider(
+            api_key=config["ABACUS_API_KEY"],
+            base_url=config.get("ABACUS_BASE_URL", "https://api.abacus.ai/v1"),
+            default_model=config.get("DEFAULT_MODEL", "claude-3-5-sonnet")
         )
-        logger.info("Claude provider initialized")
+        logger.info("Abacus.AI provider initialized")
 
-    # Initialize OpenAI if API key present
+    # Initialize OpenAI if API key present (optional fallback)
     if config.get("OPENAI_API_KEY"):
         providers["openai"] = OpenAIProvider(
             api_key=config["OPENAI_API_KEY"],
@@ -248,12 +244,12 @@ def create_llm_setup(config: Dict) -> tuple[LLMProvider, ModelRouter]:
         logger.info("OpenAI provider initialized")
 
     if not providers:
-        raise ValueError("No LLM providers configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+        raise ValueError("No LLM providers configured. Set ABACUS_API_KEY")
 
     # Create router
     router = ModelRouter(providers, config)
 
-    # Default provider (Claude preferred)
-    default_provider = providers.get("claude") or providers.get("openai")
+    # Default provider (Abacus preferred)
+    default_provider = providers.get("abacus") or providers.get("openai")
 
     return default_provider, router

@@ -1,6 +1,6 @@
 """
-FastAPI Server - WritGo.nl Agent VPS Integration
-Receives tasks from WritGo.nl and sends results back via webhook
+FastAPI Server - ProductPraat.nl Agent VPS Integration
+Receives tasks from ProductPraat.nl and sends results back via webhook
 """
 
 import asyncio
@@ -25,20 +25,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="WritGo.nl AI Agent VPS")
+app = FastAPI(title="ProductPraat.nl AI Agent VPS")
 
 # Configuration from environment
 CONFIG = {
-    "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+    "ABACUS_API_KEY": os.getenv("ABACUS_API_KEY"),
+    "ABACUS_BASE_URL": os.getenv("ABACUS_BASE_URL", "https://api.abacus.ai/v1"),
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-    "WRITGO_API_URL": os.getenv("WRITGO_API_URL", "https://writgo.nl"),
-    "WRITGO_WEBHOOK_SECRET": os.getenv("WRITGO_WEBHOOK_SECRET"),
+    "PRODUCTPRAAT_API_URL": os.getenv("PRODUCTPRAAT_API_URL", "https://productpraat.nl"),
+    "PRODUCTPRAAT_WEBHOOK_SECRET": os.getenv("PRODUCTPRAAT_WEBHOOK_SECRET"),
     "MAX_ITERATIONS": int(os.getenv("MAX_ITERATIONS", "50")),
     "SANDBOX_TIMEOUT": int(os.getenv("SANDBOX_TIMEOUT", "300")),
-    "DEFAULT_MODEL": os.getenv("DEFAULT_MODEL", "claude-opus-4-20250514"),
-    "MODEL_COMPLEX": os.getenv("MODEL_COMPLEX", "claude-opus-4-20250514"),
-    "MODEL_FAST": os.getenv("MODEL_FAST", "claude-haiku-3-20250307"),
-    "MODEL_CODING": os.getenv("MODEL_CODING", "claude-sonnet-4-20250514"),
+    "DEFAULT_MODEL": os.getenv("DEFAULT_MODEL", "claude-3-5-sonnet"),
+    "MODEL_COMPLEX": os.getenv("MODEL_COMPLEX", "claude-3-5-sonnet"),
+    "MODEL_FAST": os.getenv("MODEL_FAST", "claude-3-haiku"),
+    "MODEL_CODING": os.getenv("MODEL_CODING", "claude-3-5-sonnet"),
 }
 
 # Initialize LLM
@@ -102,11 +103,11 @@ async def execute_task(
     authorization: Optional[str] = Header(None)
 ):
     """
-    Execute a task from WritGo.nl.
+    Execute a task from ProductPraat.nl.
     Runs in background and sends results via webhook.
     """
     # Verify authorization
-    expected_auth = f"Bearer {CONFIG['WRITGO_WEBHOOK_SECRET']}"
+    expected_auth = f"Bearer {CONFIG['PRODUCTPRAAT_WEBHOOK_SECRET']}"
     if authorization != expected_auth:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -147,7 +148,7 @@ async def get_task_status(task_id: str):
 
 async def run_agent_task(task_request: TaskRequest):
     """
-    Execute agent task and send results back to WritGo.nl.
+    Execute agent task and send results back to ProductPraat.nl.
     This is the main integration point!
     """
     task_id = task_request.task_id
@@ -214,8 +215,8 @@ async def run_agent_task(task_request: TaskRequest):
 
 
 async def send_status_update(task_id: str, status: str):
-    """Send status update to WritGo.nl webhook."""
-    webhook_url = f"{CONFIG['WRITGO_API_URL']}/api/agent/webhook"
+    """Send status update to ProductPraat.nl webhook."""
+    webhook_url = f"{CONFIG['PRODUCTPRAAT_API_URL']}/api/agent/webhook"
 
     payload = {
         "task_id": task_id,
@@ -223,7 +224,7 @@ async def send_status_update(task_id: str, status: str):
     }
 
     headers = {
-        "Authorization": f"Bearer {CONFIG['WRITGO_WEBHOOK_SECRET']}",
+        "Authorization": f"Bearer {CONFIG['PRODUCTPRAAT_WEBHOOK_SECRET']}",
         "Content-Type": "application/json"
     }
 
@@ -236,14 +237,14 @@ async def send_status_update(task_id: str, status: str):
                 timeout=30.0
             )
             response.raise_for_status()
-            logger.info(f"Status update sent to WritGo.nl: {status}")
+            logger.info(f"Status update sent to ProductPraat.nl: {status}")
     except Exception as e:
         logger.error(f"Failed to send status update: {e}")
 
 
 async def send_task_results(task_id: str, result: Dict[str, Any]):
-    """Send task results to WritGo.nl webhook."""
-    webhook_url = f"{CONFIG['WRITGO_API_URL']}/api/agent/webhook"
+    """Send task results to ProductPraat.nl webhook."""
+    webhook_url = f"{CONFIG['PRODUCTPRAAT_API_URL']}/api/agent/webhook"
 
     payload = {
         "task_id": task_id,
@@ -258,7 +259,7 @@ async def send_task_results(task_id: str, result: Dict[str, Any]):
     }
 
     headers = {
-        "Authorization": f"Bearer {CONFIG['WRITGO_WEBHOOK_SECRET']}",
+        "Authorization": f"Bearer {CONFIG['PRODUCTPRAAT_WEBHOOK_SECRET']}",
         "Content-Type": "application/json"
     }
 
@@ -271,14 +272,14 @@ async def send_task_results(task_id: str, result: Dict[str, Any]):
                 timeout=30.0
             )
             response.raise_for_status()
-            logger.info(f"Results sent to WritGo.nl for task {task_id}")
+            logger.info(f"Results sent to ProductPraat.nl for task {task_id}")
     except Exception as e:
         logger.error(f"Failed to send results: {e}")
 
 
 async def send_task_error(task_id: str, error_message: str):
-    """Send task error to WritGo.nl webhook."""
-    webhook_url = f"{CONFIG['WRITGO_API_URL']}/api/agent/webhook"
+    """Send task error to ProductPraat.nl webhook."""
+    webhook_url = f"{CONFIG['PRODUCTPRAAT_API_URL']}/api/agent/webhook"
 
     payload = {
         "task_id": task_id,
@@ -287,7 +288,7 @@ async def send_task_error(task_id: str, error_message: str):
     }
 
     headers = {
-        "Authorization": f"Bearer {CONFIG['WRITGO_WEBHOOK_SECRET']}",
+        "Authorization": f"Bearer {CONFIG['PRODUCTPRAAT_WEBHOOK_SECRET']}",
         "Content-Type": "application/json"
     }
 
@@ -300,7 +301,7 @@ async def send_task_error(task_id: str, error_message: str):
                 timeout=30.0
             )
             response.raise_for_status()
-            logger.info(f"Error sent to WritGo.nl for task {task_id}")
+            logger.info(f"Error sent to ProductPraat.nl for task {task_id}")
     except Exception as e:
         logger.error(f"Failed to send error: {e}")
 

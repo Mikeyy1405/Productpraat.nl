@@ -1,5 +1,5 @@
 """
-Main entry point for WritGo.nl AI Agent VPS Runtime
+Main entry point for ProductPraat.nl AI Agent VPS Runtime
 """
 
 import os
@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 def main():
     """Start the agent server."""
     logger.info("=" * 60)
-    logger.info("WritGo.nl AI Agent VPS Runtime")
-    logger.info("Manus.im CodeAct + Abacus Multi-Model Architecture")
+    logger.info("ProductPraat.nl AI Agent VPS Runtime")
+    logger.info("Abacus.AI Multi-Model Architecture")
     logger.info("=" * 60)
 
     # Check required environment variables
-    required_vars = ["ANTHROPIC_API_KEY", "WRITGO_WEBHOOK_SECRET"]
+    required_vars = ["ABACUS_API_KEY", "PRODUCTPRAAT_WEBHOOK_SECRET"]
     missing = [var for var in required_vars if not os.getenv(var)]
 
     if missing:
@@ -45,10 +45,10 @@ def main():
         sys.exit(1)
 
     # Log configuration
-    logger.info(f"WritGo.nl API: {os.getenv('WRITGO_API_URL', 'https://writgo.nl')}")
+    logger.info(f"ProductPraat.nl API: {os.getenv('PRODUCTPRAAT_API_URL', 'https://productpraat.nl')}")
     logger.info(f"Max iterations: {os.getenv('MAX_ITERATIONS', '50')}")
     logger.info(f"Sandbox timeout: {os.getenv('SANDBOX_TIMEOUT', '300')}s")
-    logger.info(f"Default model: {os.getenv('DEFAULT_MODEL', 'claude-opus-4-20250514')}")
+    logger.info(f"Default model: {os.getenv('DEFAULT_MODEL', 'claude-3-5-sonnet')}")
 
     # Start server
     import uvicorn

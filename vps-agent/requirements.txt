@@ -5,8 +5,7 @@ python-dotenv>=1.0.0
 pydantic>=2.6.0
 pydantic-settings>=2.1.0
 
-# LLM Providers
-anthropic>=0.18.0
+# LLM Providers (Abacus.AI uses OpenAI-compatible API)
 openai>=1.12.0
 
 # HTTP Requests
