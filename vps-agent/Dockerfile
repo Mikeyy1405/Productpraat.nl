@@ -1,4 +1,4 @@
-# WritGo.nl AI Agent Runtime - Main Container
+# ProductPraat.nl AI Agent Runtime - Main Container
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -20,10 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ /app/src/
-COPY config/ /app/config/
 
 # Create directories
-RUN mkdir -p /app/logs /app/workspace
+RUN mkdir -p /app/logs /app/workspace /app/config
 
 # Expose port
 EXPOSE 8000
