@@ -648,41 +648,136 @@ const BOL_DEFAULT_CATEGORIES = {
  * - GET /marketing/catalog/v1/products/search?search-term={searchTerm}
  */
 const CATEGORY_ID_MAPPING = {
-    // Electronics & Media
+    // === ELEKTRONICA ===
     'televisies': '10651',
     'audio': '14490',
     'laptops': '4770',
     'smartphones': '10852',
-    
-    // Home & Living
+    'tablets': '6340',
+    'gaming': '17588',
+    'computers': '4769',
+    'monitoren': '6345',
+    'camera': '5566',
+    'wearables': '21407',
+
+    // === HUISHOUDEN ===
     'wasmachines': '11462',
+    'drogers': '11464',
     'stofzuigers': '20104',
+    'koelkasten': '11458',
+    'vaatwassers': '11466',
+    'magnetrons': '11450',
+    'ovens': '11448',
+
+    // === SMART HOME ===
     'smarthome': '20637',
+    'verlichting': '13660',
+    'beveiliging': '20638',
+
+    // === SLAAPKAMER ===
     'matrassen': '10689',
-    
-    // Kitchen & Care
+    'bedden': '10687',
+    'dekbedden': '15248',
+
+    // === KEUKEN ===
     'airfryers': '43756',
     'koffie': '10550',
     'keuken': '10540',
-    'verzorging': '12442', // Confirmed from problem statement
+    'blenders': '10546',
+    'waterkokers': '10558',
+    'broodroosters': '10548',
+
+    // === VERZORGING ===
+    'verzorging': '12442',
+    'scheerapparaten': '12424',
+    'haarverzorging': '12430',
+    'mondverzorging': '12420',
+
+    // === TUIN & KLUSSEN ===
+    'tuin': '14932',
+    'gereedschap': '14890',
+    'grasmaaiers': '14938',
+
+    // === SPORT & VRIJE TIJD ===
+    'sport': '15172',
+    'fietsen': '15174',
+    'fitness': '15202',
+
+    // === BABY & KIND ===
+    'baby': '10314',
+    'speelgoed': '10312',
+
+    // === BEAUTY & GEZONDHEID ===
+    'beauty': '12418',
+    'gezondheid': '12400',
 };
 
 /**
  * Fallback search terms when category ID lookup fails or returns empty.
  */
 const CATEGORY_SEARCH_FALLBACK = {
+    // Elektronica
     'televisies': 'televisie smart tv',
     'audio': 'bluetooth speaker koptelefoon',
     'laptops': 'laptop notebook',
     'smartphones': 'smartphone mobiele telefoon',
+    'tablets': 'tablet ipad android',
+    'gaming': 'playstation xbox nintendo gaming',
+    'computers': 'desktop computer pc',
+    'monitoren': 'monitor beeldscherm',
+    'camera': 'camera fotocamera digitaal',
+    'wearables': 'smartwatch fitness tracker',
+
+    // Huishouden
     'wasmachines': 'wasmachine',
+    'drogers': 'wasdroger droger',
     'stofzuigers': 'stofzuiger robotstofzuiger',
+    'koelkasten': 'koelkast koelvriescombinatie',
+    'vaatwassers': 'vaatwasser afwasmachine',
+    'magnetrons': 'magnetron combimagnetron',
+    'ovens': 'oven inbouwoven',
+
+    // Smart Home
     'smarthome': 'smart home domotica',
+    'verlichting': 'slimme verlichting led lamp',
+    'beveiliging': 'beveiligingscamera slimme deurbel',
+
+    // Slaapkamer
     'matrassen': 'matras',
+    'bedden': 'bed boxspring',
+    'dekbedden': 'dekbed dekbedovertrek',
+
+    // Keuken
     'airfryers': 'airfryer heteluchtfriteuse',
     'koffie': 'koffiezetapparaat espressomachine',
-    'keuken': 'keukenmachine blender',
+    'keuken': 'keukenmachine foodprocessor',
+    'blenders': 'blender smoothie maker',
+    'waterkokers': 'waterkoker',
+    'broodroosters': 'broodrooster tosti ijzer',
+
+    // Verzorging
     'verzorging': 'scheerapparaat elektrische tandenborstel',
+    'scheerapparaten': 'scheerapparaat trimmer',
+    'haarverzorging': 'föhn stijltang krultang',
+    'mondverzorging': 'elektrische tandenborstel waterflosser',
+
+    // Tuin & Klussen
+    'tuin': 'tuingereedschap tuinmeubelen',
+    'gereedschap': 'boormachine accuboormachine',
+    'grasmaaiers': 'grasmaaier robotmaaier',
+
+    // Sport & Vrije tijd
+    'sport': 'sportartikelen fitness',
+    'fietsen': 'fiets elektrische fiets',
+    'fitness': 'fitnessapparaat hometrainer',
+
+    // Baby & Kind
+    'baby': 'kinderwagen autostoel baby',
+    'speelgoed': 'speelgoed lego',
+
+    // Beauty & Gezondheid
+    'beauty': 'make-up huidverzorging',
+    'gezondheid': 'bloeddrukmeter weegschaal',
 };
 
 /**
@@ -690,18 +785,68 @@ const CATEGORY_SEARCH_FALLBACK = {
  * Used by the admin categories endpoint
  */
 const CATEGORY_MAPPING = {
-    'televisies': { categoryId: '10651', searchTerm: 'televisie smart tv', displayName: 'Televisies' },
-    'audio': { categoryId: '14490', searchTerm: 'bluetooth speaker koptelefoon', displayName: 'Audio & HiFi' },
-    'laptops': { categoryId: '4770', searchTerm: 'laptop notebook', displayName: 'Laptops' },
-    'smartphones': { categoryId: '10852', searchTerm: 'smartphone mobiele telefoon', displayName: 'Smartphones' },
-    'wasmachines': { categoryId: '11462', searchTerm: 'wasmachine', displayName: 'Wasmachines' },
-    'stofzuigers': { categoryId: '20104', searchTerm: 'stofzuiger robotstofzuiger', displayName: 'Stofzuigers' },
-    'smarthome': { categoryId: '20637', searchTerm: 'smart home domotica', displayName: 'Smart Home' },
-    'matrassen': { categoryId: '10689', searchTerm: 'matras', displayName: 'Matrassen' },
-    'airfryers': { categoryId: '43756', searchTerm: 'airfryer heteluchtfriteuse', displayName: 'Airfryers' },
-    'koffie': { categoryId: '10550', searchTerm: 'koffiezetapparaat espressomachine', displayName: 'Koffie' },
-    'keuken': { categoryId: '10540', searchTerm: 'keukenmachine blender', displayName: 'Keukenmachines' },
-    'verzorging': { categoryId: '12442', searchTerm: 'scheerapparaat elektrische tandenborstel', displayName: 'Verzorging' },
+    // Elektronica
+    'televisies': { categoryId: '10651', searchTerm: 'televisie smart tv', displayName: 'Televisies', group: 'Elektronica' },
+    'audio': { categoryId: '14490', searchTerm: 'bluetooth speaker koptelefoon', displayName: 'Audio & HiFi', group: 'Elektronica' },
+    'laptops': { categoryId: '4770', searchTerm: 'laptop notebook', displayName: 'Laptops', group: 'Elektronica' },
+    'smartphones': { categoryId: '10852', searchTerm: 'smartphone mobiele telefoon', displayName: 'Smartphones', group: 'Elektronica' },
+    'tablets': { categoryId: '6340', searchTerm: 'tablet ipad android', displayName: 'Tablets', group: 'Elektronica' },
+    'gaming': { categoryId: '17588', searchTerm: 'playstation xbox nintendo gaming', displayName: 'Gaming', group: 'Elektronica' },
+    'computers': { categoryId: '4769', searchTerm: 'desktop computer pc', displayName: 'Computers', group: 'Elektronica' },
+    'monitoren': { categoryId: '6345', searchTerm: 'monitor beeldscherm', displayName: 'Monitoren', group: 'Elektronica' },
+    'camera': { categoryId: '5566', searchTerm: 'camera fotocamera digitaal', displayName: "Camera's", group: 'Elektronica' },
+    'wearables': { categoryId: '21407', searchTerm: 'smartwatch fitness tracker', displayName: 'Wearables', group: 'Elektronica' },
+
+    // Huishouden
+    'wasmachines': { categoryId: '11462', searchTerm: 'wasmachine', displayName: 'Wasmachines', group: 'Huishouden' },
+    'drogers': { categoryId: '11464', searchTerm: 'wasdroger droger', displayName: 'Drogers', group: 'Huishouden' },
+    'stofzuigers': { categoryId: '20104', searchTerm: 'stofzuiger robotstofzuiger', displayName: 'Stofzuigers', group: 'Huishouden' },
+    'koelkasten': { categoryId: '11458', searchTerm: 'koelkast koelvriescombinatie', displayName: 'Koelkasten', group: 'Huishouden' },
+    'vaatwassers': { categoryId: '11466', searchTerm: 'vaatwasser afwasmachine', displayName: 'Vaatwassers', group: 'Huishouden' },
+    'magnetrons': { categoryId: '11450', searchTerm: 'magnetron combimagnetron', displayName: 'Magnetrons', group: 'Huishouden' },
+    'ovens': { categoryId: '11448', searchTerm: 'oven inbouwoven', displayName: 'Ovens', group: 'Huishouden' },
+
+    // Smart Home
+    'smarthome': { categoryId: '20637', searchTerm: 'smart home domotica', displayName: 'Smart Home', group: 'Smart Home' },
+    'verlichting': { categoryId: '13660', searchTerm: 'slimme verlichting led lamp', displayName: 'Slimme Verlichting', group: 'Smart Home' },
+    'beveiliging': { categoryId: '20638', searchTerm: 'beveiligingscamera slimme deurbel', displayName: 'Beveiliging', group: 'Smart Home' },
+
+    // Slaapkamer
+    'matrassen': { categoryId: '10689', searchTerm: 'matras', displayName: 'Matrassen', group: 'Slaapkamer' },
+    'bedden': { categoryId: '10687', searchTerm: 'bed boxspring', displayName: 'Bedden', group: 'Slaapkamer' },
+    'dekbedden': { categoryId: '15248', searchTerm: 'dekbed dekbedovertrek', displayName: 'Dekbedden', group: 'Slaapkamer' },
+
+    // Keuken
+    'airfryers': { categoryId: '43756', searchTerm: 'airfryer heteluchtfriteuse', displayName: 'Airfryers', group: 'Keuken' },
+    'koffie': { categoryId: '10550', searchTerm: 'koffiezetapparaat espressomachine', displayName: 'Koffiemachines', group: 'Keuken' },
+    'keuken': { categoryId: '10540', searchTerm: 'keukenmachine foodprocessor', displayName: 'Keukenmachines', group: 'Keuken' },
+    'blenders': { categoryId: '10546', searchTerm: 'blender smoothie maker', displayName: 'Blenders', group: 'Keuken' },
+    'waterkokers': { categoryId: '10558', searchTerm: 'waterkoker', displayName: 'Waterkokers', group: 'Keuken' },
+    'broodroosters': { categoryId: '10548', searchTerm: 'broodrooster tosti ijzer', displayName: 'Broodroosters', group: 'Keuken' },
+
+    // Verzorging
+    'verzorging': { categoryId: '12442', searchTerm: 'scheerapparaat elektrische tandenborstel', displayName: 'Verzorging', group: 'Verzorging' },
+    'scheerapparaten': { categoryId: '12424', searchTerm: 'scheerapparaat trimmer', displayName: 'Scheerapparaten', group: 'Verzorging' },
+    'haarverzorging': { categoryId: '12430', searchTerm: 'föhn stijltang krultang', displayName: 'Haarverzorging', group: 'Verzorging' },
+    'mondverzorging': { categoryId: '12420', searchTerm: 'elektrische tandenborstel waterflosser', displayName: 'Mondverzorging', group: 'Verzorging' },
+
+    // Tuin & Klussen
+    'tuin': { categoryId: '14932', searchTerm: 'tuingereedschap tuinmeubelen', displayName: 'Tuin', group: 'Tuin & Klussen' },
+    'gereedschap': { categoryId: '14890', searchTerm: 'boormachine accuboormachine', displayName: 'Gereedschap', group: 'Tuin & Klussen' },
+    'grasmaaiers': { categoryId: '14938', searchTerm: 'grasmaaier robotmaaier', displayName: 'Grasmaaiers', group: 'Tuin & Klussen' },
+
+    // Sport & Vrije tijd
+    'sport': { categoryId: '15172', searchTerm: 'sportartikelen fitness', displayName: 'Sport', group: 'Sport & Vrije Tijd' },
+    'fietsen': { categoryId: '15174', searchTerm: 'fiets elektrische fiets', displayName: 'Fietsen', group: 'Sport & Vrije Tijd' },
+    'fitness': { categoryId: '15202', searchTerm: 'fitnessapparaat hometrainer', displayName: 'Fitness', group: 'Sport & Vrije Tijd' },
+
+    // Baby & Kind
+    'baby': { categoryId: '10314', searchTerm: 'kinderwagen autostoel baby', displayName: 'Baby', group: 'Baby & Kind' },
+    'speelgoed': { categoryId: '10312', searchTerm: 'speelgoed lego', displayName: 'Speelgoed', group: 'Baby & Kind' },
+
+    // Beauty & Gezondheid
+    'beauty': { categoryId: '12418', searchTerm: 'make-up huidverzorging', displayName: 'Beauty', group: 'Beauty & Gezondheid' },
+    'gezondheid': { categoryId: '12400', searchTerm: 'bloeddrukmeter weegschaal', displayName: 'Gezondheid', group: 'Beauty & Gezondheid' },
 };
 
 /**
@@ -2862,6 +3007,289 @@ async function logProductImportToDb(runId, ean, bolProductId, title, status, ski
         console.error('[AUTOMATION] Failed to log import:', error);
     }
 }
+
+// ============================================================================
+// CATALOG IMPORT ENDPOINTS
+// ============================================================================
+
+/**
+ * Get all available categories with their mappings
+ */
+app.get('/api/catalog/categories', (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [CATALOG] GET /api/catalog/categories`);
+
+    // Group categories by their group
+    const categoryGroups = {};
+    const categories = [];
+
+    for (const [key, config] of Object.entries(CATEGORY_MAPPING)) {
+        const group = config.group || 'Overig';
+        if (!categoryGroups[group]) {
+            categoryGroups[group] = [];
+        }
+        categoryGroups[group].push(key);
+
+        categories.push({
+            key,
+            displayName: config.displayName,
+            categoryId: config.categoryId,
+            searchTerm: config.searchTerm,
+            group: config.group,
+        });
+    }
+
+    res.json({
+        categories,
+        groups: categoryGroups,
+        totalCategories: categories.length,
+        timestamp,
+    });
+});
+
+/**
+ * Import products for a single category
+ */
+app.post('/api/catalog/import-category', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [CATALOG] POST /api/catalog/import-category`);
+
+    try {
+        const { categoryKey, limit = 20 } = req.body;
+
+        if (!categoryKey) {
+            return res.status(400).json({
+                success: false,
+                error: 'categoryKey is required',
+            });
+        }
+
+        const categoryConfig = CATEGORY_MAPPING[categoryKey.toLowerCase()];
+        if (!categoryConfig) {
+            return res.status(400).json({
+                success: false,
+                error: `Unknown category: ${categoryKey}`,
+                availableCategories: Object.keys(CATEGORY_MAPPING),
+            });
+        }
+
+        // Check if Bol.com API is configured
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Bol.com API niet geconfigureerd',
+                message: 'Stel BOL_CLIENT_ID en BOL_CLIENT_SECRET in',
+            });
+        }
+
+        console.log(`[CATALOG] Importing ${limit} products for category: ${categoryConfig.displayName}`);
+
+        // Fetch products from Bol.com
+        const result = await bolSyncService.getProductsByCategoryWithFallback(
+            categoryConfig.categoryId,
+            categoryConfig.searchTerm,
+            Math.min(limit, 100)
+        );
+
+        if (result.error) {
+            return res.status(500).json({
+                success: false,
+                error: result.error,
+                products: [],
+                failed: limit,
+            });
+        }
+
+        // Map products to our format
+        const products = (result.products || []).map(bolProduct => ({
+            ean: bolProduct.ean,
+            title: bolProduct.title,
+            description: bolProduct.description || bolProduct.shortDescription,
+            price: bolProduct.bestOffer?.price?.value,
+            originalPrice: bolProduct.bestOffer?.strikethroughPrice?.value,
+            discount: bolProduct.bestOffer?.discountPercentage,
+            image: bolProduct.mainImageUrl || bolProduct.images?.[0]?.url,
+            rating: bolProduct.rating?.averageRating,
+            reviewCount: bolProduct.rating?.totalRatings,
+            inStock: bolProduct.bestOffer?.availability === 'IN_STOCK',
+            url: bolProduct.url || `https://www.bol.com/nl/p/-/${bolProduct.ean}/`,
+            category: categoryKey,
+            source: 'bol.com',
+        }));
+
+        console.log(`[CATALOG] Found ${products.length} products for ${categoryConfig.displayName}`);
+
+        res.json({
+            success: true,
+            category: categoryKey,
+            categoryName: categoryConfig.displayName,
+            products,
+            count: products.length,
+            usedFallback: result.usedFallback,
+        });
+
+    } catch (error) {
+        console.error('[CATALOG] Import error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Import failed',
+            products: [],
+        });
+    }
+});
+
+/**
+ * Bulk import products from multiple categories
+ */
+app.post('/api/catalog/bulk-import', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [CATALOG] POST /api/catalog/bulk-import`);
+
+    try {
+        const { categories, productsPerCategory = 10 } = req.body;
+
+        // Use all categories if none specified
+        const targetCategories = categories && Array.isArray(categories) && categories.length > 0
+            ? categories
+            : Object.keys(CATEGORY_MAPPING);
+
+        // Check if Bol.com API is configured
+        if (!bolSyncService.isConfigured()) {
+            return res.status(503).json({
+                success: false,
+                error: 'Bol.com API niet geconfigureerd',
+            });
+        }
+
+        console.log(`[CATALOG] Bulk import: ${targetCategories.length} categories, ${productsPerCategory} per category`);
+
+        const results = [];
+        let totalProducts = 0;
+        let totalFailed = 0;
+
+        for (const categoryKey of targetCategories) {
+            const categoryConfig = CATEGORY_MAPPING[categoryKey.toLowerCase()];
+            if (!categoryConfig) {
+                results.push({
+                    category: categoryKey,
+                    status: 'failed',
+                    error: 'Unknown category',
+                    count: 0,
+                });
+                continue;
+            }
+
+            try {
+                const result = await bolSyncService.getProductsByCategoryWithFallback(
+                    categoryConfig.categoryId,
+                    categoryConfig.searchTerm,
+                    Math.min(productsPerCategory, 50)
+                );
+
+                const count = result.products?.length || 0;
+                totalProducts += count;
+
+                // Save to database if configured
+                if (supabase && result.products && result.products.length > 0) {
+                    const dbProducts = result.products.map(p => bolSyncService.mapProductToDb(p));
+
+                    const { error: insertError } = await supabase
+                        .from('bol_products')
+                        .upsert(dbProducts, { onConflict: 'ean' });
+
+                    if (insertError) {
+                        console.error(`[CATALOG] Database insert error for ${categoryKey}:`, insertError);
+                    }
+                }
+
+                results.push({
+                    category: categoryKey,
+                    categoryName: categoryConfig.displayName,
+                    status: 'success',
+                    count,
+                    usedFallback: result.usedFallback,
+                });
+
+                // Rate limiting
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+            } catch (categoryError) {
+                console.error(`[CATALOG] Category ${categoryKey} error:`, categoryError);
+                totalFailed++;
+                results.push({
+                    category: categoryKey,
+                    categoryName: categoryConfig?.displayName || categoryKey,
+                    status: 'failed',
+                    error: categoryError.message,
+                    count: 0,
+                });
+            }
+        }
+
+        res.json({
+            success: totalProducts > 0,
+            totalCategories: targetCategories.length,
+            totalProducts,
+            totalFailed,
+            results,
+            timestamp,
+        });
+
+    } catch (error) {
+        console.error('[CATALOG] Bulk import error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Bulk import failed',
+        });
+    }
+});
+
+/**
+ * Get catalog statistics
+ */
+app.get('/api/catalog/stats', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [CATALOG] GET /api/catalog/stats`);
+
+    try {
+        const stats = {
+            totalCategories: Object.keys(CATEGORY_MAPPING).length,
+            bolApiConfigured: bolSyncService.isConfigured(),
+            databaseConfigured: !!supabase,
+            timestamp,
+        };
+
+        if (supabase) {
+            // Get product counts per category
+            const { data: products, error } = await supabase
+                .from('products')
+                .select('category');
+
+            if (!error && products) {
+                const categoryCounts = {};
+                products.forEach(p => {
+                    const cat = p.category || 'overig';
+                    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+                });
+                stats.productsByCategory = categoryCounts;
+                stats.totalProducts = products.length;
+            }
+
+            // Get bol_products count
+            const { count: bolCount } = await supabase
+                .from('bol_products')
+                .select('*', { count: 'exact', head: true });
+
+            stats.bolProducts = bolCount || 0;
+        }
+
+        res.json(stats);
+
+    } catch (error) {
+        console.error('[CATALOG] Stats error:', error);
+        res.status(500).json({ error: 'Failed to get stats' });
+    }
+});
 
 // --- DEPRECATED ENDPOINTS ---
 const deprecatedHandler = (req, res) => {

@@ -27,12 +27,45 @@ import {
 const ENV_KEYS = {
     BOL_PARTNER_ID: 'BOL_PARTNER_ID',
     TRADETRACKER_SITE_ID: 'TRADETRACKER_SITE_ID',
+    TRADETRACKER_CAMPAIGN_ID: 'TRADETRACKER_CAMPAIGN_ID',
     DAISYCON_PUBLISHER_ID: 'DAISYCON_PUBLISHER_ID',
+    DAISYCON_MEDIA_ID: 'DAISYCON_MEDIA_ID',
     AWIN_PUBLISHER_ID: 'AWIN_PUBLISHER_ID',
     PAYPRO_AFFILIATE_ID: 'PAYPRO_AFFILIATE_ID',
     PAYPRO_API_KEY: 'PAYPRO_API_KEY',
     PLUGPAY_AFFILIATE_ID: 'PLUGPAY_AFFILIATE_ID',
 } as const;
+
+/**
+ * Advertiser IDs for affiliate networks
+ * These map shop domains to their advertiser/merchant IDs in each network
+ */
+const TRADETRACKER_ADVERTISERS: Record<string, string> = {
+    'coolblue.nl': '24589',
+    'coolblue.be': '24589',
+    'fonq.nl': '22067',
+    'bol.com': '24827',
+    'wehkamp.nl': '10980',
+    'otto.nl': '29044',
+};
+
+const DAISYCON_ADVERTISERS: Record<string, string> = {
+    'mediamarkt.nl': '14695',
+    'mediamarkt.be': '14695',
+    'bol.com': '12820',
+    'expert.nl': '12345',
+    'bcc.nl': '11234',
+    'alternate.nl': '10567',
+};
+
+const AWIN_ADVERTISERS: Record<string, string> = {
+    'zalando.nl': '10783',
+    'zalando.be': '10783',
+    'amazon.nl': '71364',
+    'bol.com': '28770',
+    'conrad.nl': '16421',
+    'alternate.nl': '15995',
+};
 
 /**
  * Network URL patterns for detection
@@ -66,14 +99,39 @@ const NETWORK_PATTERNS: Record<AffiliateNetworkId, RegExp[]> = {
 
 /**
  * Common shop domain patterns for physical product networks
+ * Maps shop domains to their preferred affiliate network
  */
 const SHOP_PATTERNS: Record<string, AffiliateNetworkId> = {
+    // Bol.com - Direct partner program
     'bol.com': 'bol',
-    'coolblue.nl': 'tradetracker', // Coolblue is often via TradeTracker
+
+    // TradeTracker shops
+    'coolblue.nl': 'tradetracker',
     'coolblue.be': 'tradetracker',
-    'mediamarkt.nl': 'daisycon', // MediaMarkt is often via Daisycon
-    'zalando.nl': 'awin', // Zalando is via Awin
+    'fonq.nl': 'tradetracker',
+    'wehkamp.nl': 'tradetracker',
+    'otto.nl': 'tradetracker',
+    'ikea.nl': 'tradetracker',
+    'blokker.nl': 'tradetracker',
+
+    // Daisycon shops
+    'mediamarkt.nl': 'daisycon',
+    'mediamarkt.be': 'daisycon',
+    'expert.nl': 'daisycon',
+    'bcc.nl': 'daisycon',
+    'gamma.nl': 'daisycon',
+    'praxis.nl': 'daisycon',
+    'action.nl': 'daisycon',
+
+    // Awin shops
+    'zalando.nl': 'awin',
     'zalando.be': 'awin',
+    'amazon.nl': 'awin',
+    'amazon.de': 'awin',
+    'conrad.nl': 'awin',
+    'alternate.nl': 'awin',
+    'hema.nl': 'awin',
+    'bijenkorf.nl': 'awin',
 };
 
 // ============================================================================
@@ -294,6 +352,9 @@ export const generateAffiliateLink = (
     try {
         const parsedUrl = new URL(productUrl);
         
+        // Get hostname for advertiser lookup
+        const hostname = parsedUrl.hostname.toLowerCase().replace('www.', '');
+
         // Apply network-specific affiliate parameters
         switch (networkId) {
             case 'bol': {
@@ -304,36 +365,66 @@ export const generateAffiliateLink = (
                 }
                 break;
             }
-            
+
             case 'tradetracker': {
                 const siteId = getEnvVar(ENV_KEYS.TRADETRACKER_SITE_ID);
-                if (siteId) {
-                    // TradeTracker uses a redirect URL pattern
-                    // For now, add a reference parameter
+                const campaignId = getEnvVar(ENV_KEYS.TRADETRACKER_CAMPAIGN_ID) ||
+                                   TRADETRACKER_ADVERTISERS[hostname];
+
+                if (siteId && campaignId) {
+                    // TradeTracker uses a redirect URL pattern:
+                    // https://tc.tradetracker.net/?c={campaignId}&m={materialId}&a={affiliateId}&r={encodedUrl}
+                    const encodedUrl = encodeURIComponent(productUrl);
+                    url = `https://tc.tradetracker.net/?c=${campaignId}&m=12&a=${siteId}&r=${encodedUrl}&u=`;
+                    hasAffiliateParams = true;
+                } else if (siteId) {
+                    // Fallback: add tracking parameter to original URL
                     parsedUrl.searchParams.set('tt', siteId);
+                    url = parsedUrl.toString();
                     hasAffiliateParams = true;
                 }
                 break;
             }
-            
+
             case 'daisycon': {
                 const publisherId = getEnvVar(ENV_KEYS.DAISYCON_PUBLISHER_ID);
-                if (publisherId) {
+                const mediaId = getEnvVar(ENV_KEYS.DAISYCON_MEDIA_ID) || 'productpraat';
+                const advertiserId = DAISYCON_ADVERTISERS[hostname];
+
+                if (publisherId && advertiserId) {
+                    // Daisycon uses a redirect URL pattern:
+                    // https://ds1.nl/c/?si={publisherId}&li={advertiserId}&wi={mediaId}&dl={encodedUrl}
+                    const encodedUrl = encodeURIComponent(productUrl);
+                    url = `https://ds1.nl/c/?si=${publisherId}&li=${advertiserId}&wi=${mediaId}&dl=${encodedUrl}`;
+                    hasAffiliateParams = true;
+                } else if (publisherId) {
+                    // Fallback: add tracking parameter
                     parsedUrl.searchParams.set('dc', publisherId);
+                    url = parsedUrl.toString();
                     hasAffiliateParams = true;
                 }
                 break;
             }
-            
+
             case 'awin': {
                 const publisherId = getEnvVar(ENV_KEYS.AWIN_PUBLISHER_ID);
-                if (publisherId) {
+                const advertiserId = AWIN_ADVERTISERS[hostname];
+
+                if (publisherId && advertiserId) {
+                    // Awin uses a redirect URL pattern:
+                    // https://www.awin1.com/cread.php?awinmid={advertiserId}&awinaffid={publisherId}&clickref=productpraat&p={encodedUrl}
+                    const encodedUrl = encodeURIComponent(productUrl);
+                    url = `https://www.awin1.com/cread.php?awinmid=${advertiserId}&awinaffid=${publisherId}&clickref=productpraat&ued=${encodedUrl}`;
+                    hasAffiliateParams = true;
+                } else if (publisherId) {
+                    // Fallback: add tracking parameter
                     parsedUrl.searchParams.set('awc', publisherId);
+                    url = parsedUrl.toString();
                     hasAffiliateParams = true;
                 }
                 break;
             }
-            
+
             case 'paypro': {
                 const affiliateId = getEnvVar(ENV_KEYS.PAYPRO_AFFILIATE_ID);
                 if (affiliateId) {
@@ -342,7 +433,7 @@ export const generateAffiliateLink = (
                 }
                 break;
             }
-            
+
             case 'plugpay': {
                 const affiliateId = getEnvVar(ENV_KEYS.PLUGPAY_AFFILIATE_ID);
                 if (affiliateId) {
