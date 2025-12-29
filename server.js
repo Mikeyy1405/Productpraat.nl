@@ -19,7 +19,9 @@ const port = process.env.PORT || 3000;
 // --- CONFIG ---
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
-const VITE_ANTHROPIC_API_KEY = process.env.VITE_ANTHROPIC_API_KEY || '';
+
+// AIML API Key - supports both new and legacy variable names
+const VITE_AIML_API_KEY = process.env.VITE_AIML_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '';
 
 // Initialize Supabase client
 let supabase = null;
@@ -35,7 +37,7 @@ const BOL_SITE_ID = process.env.BOL_SITE_ID || '';
 console.log('[CONFIG] Server starting with configuration:');
 console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
-console.log(`[CONFIG] AIML API Key: ${VITE_ANTHROPIC_API_KEY ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] AIML API Key: ${VITE_AIML_API_KEY ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Client ID: ${BOL_CLIENT_ID ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Client Secret: ${BOL_CLIENT_SECRET ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Site ID: ${BOL_SITE_ID ? 'Configured' : 'Not set'}`);
@@ -969,7 +971,7 @@ app.get('/api/health', (req, res) => {
         version: packageJson.version,
         services: {
             supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY),
-            aiml: !!VITE_ANTHROPIC_API_KEY
+            aiml: !!VITE_AIML_API_KEY
         },
         notes: ['Simplified version - use URL-based product import'],
         timestamp: new Date().toISOString()
@@ -981,7 +983,7 @@ app.get('/api/config', (req, res) => {
     res.json({
         VITE_SUPABASE_URL: VITE_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY,
-        VITE_ANTHROPIC_API_KEY: VITE_ANTHROPIC_API_KEY
+        VITE_AIML_API_KEY: VITE_AIML_API_KEY
     });
 });
 
@@ -3315,7 +3317,7 @@ async function runDailyContentGeneration() {
         durationMs: 0
     };
 
-    if (!VITE_ANTHROPIC_API_KEY) {
+    if (!VITE_AIML_API_KEY) {
         console.error('[DAILY_AGENT] AIML API key not configured');
         return { error: 'AIML API key not configured', ...result };
     }
@@ -3353,7 +3355,7 @@ async function runDailyContentGeneration() {
             const response = await fetch('https://api.aimlapi.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${VITE_ANTHROPIC_API_KEY}`,
+                    'Authorization': `Bearer ${VITE_AIML_API_KEY}`,
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -3730,12 +3732,14 @@ app.get('*', (req, res) => {
         }
 
         // Inject env vars (escaped to prevent XSS)
+        // Note: VITE_ANTHROPIC_API_KEY is kept for backward compatibility with frontend
         const envScript = `
             <script>
                 window.__ENV__ = {
                     VITE_SUPABASE_URL: "${escapeForJs(VITE_SUPABASE_URL)}",
                     VITE_SUPABASE_ANON_KEY: "${escapeForJs(VITE_SUPABASE_ANON_KEY)}",
-                    VITE_ANTHROPIC_API_KEY: "${escapeForJs(VITE_ANTHROPIC_API_KEY)}"
+                    VITE_AIML_API_KEY: "${escapeForJs(VITE_AIML_API_KEY)}",
+                    VITE_ANTHROPIC_API_KEY: "${escapeForJs(VITE_AIML_API_KEY)}"
                 };
             </script>
         `;
