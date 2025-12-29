@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: productpraat
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20
+      # Supabase Configuration
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # AI API Key
+      - key: VITE_ANTHROPIC_API_KEY
+        sync: false
+      # Bol.com API Credentials
+      - key: BOL_CLIENT_ID
+        sync: false
+      - key: BOL_CLIENT_SECRET
+        sync: false
+      - key: BOL_SITE_ID
+        sync: false
+      - key: BOL_PARTNER_ID
+        sync: false
+      # Affiliate Networks
+      - key: TRADETRACKER_SITE_ID
+        sync: false
+      - key: TRADETRACKER_CAMPAIGN_ID
+        sync: false
+      - key: DAISYCON_PUBLISHER_ID
+        sync: false
+      - key: DAISYCON_MEDIA_ID
+        sync: false
+      - key: AWIN_PUBLISHER_ID
+        sync: false
+    healthCheckPath: /api/health
+    autoDeploy: true
