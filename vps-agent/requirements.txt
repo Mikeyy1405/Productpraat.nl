@@ -1,38 +1,36 @@
 # Core Dependencies
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
-python-dotenv==1.0.1
-pydantic==2.6.1
-pydantic-settings==2.1.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
 
 # LLM Providers
-anthropic==0.18.1
-openai==1.12.0
+anthropic>=0.18.0
+openai>=1.12.0
 
-# Abacus RouteLLM (intelligent model routing)
-# Docs: https://apps.abacus.ai/chatllm/
+# HTTP Requests
 requests>=2.31.0
 
 # Docker & Sandbox
-docker==7.0.0
+docker>=7.0.0
 
 # Browser Automation
-playwright==1.41.2
+playwright>=1.41.0
 
 # Web Search
-aiohttp==3.9.3
-beautifulsoup4==4.12.3
-lxml==5.1.0
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
 
 # Memory & Storage
-redis==5.0.1
-qdrant-client==1.7.3  # Optional: voor vector DB
+redis>=5.0.0
 
 # Utilities
-httpx==0.26.0
-python-multipart==0.0.9
-tenacity==8.2.3  # Retry logic
+httpx>=0.26.0
+python-multipart>=0.0.9
+tenacity>=8.2.0
 
-# Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
+# Testing (optional - install separately if needed)
+# pytest>=8.0.0
+# pytest-asyncio>=0.23.0
