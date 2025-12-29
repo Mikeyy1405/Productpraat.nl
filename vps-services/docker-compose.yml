@@ -1,0 +1,135 @@
+# VPS Services - Docker Compose Configuration
+#
+# Central services for all projects:
+# - Playwright API: Browser automation service
+# - Redis: Task queue and caching (optional)
+# - Nginx: Reverse proxy with SSL
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose logs -f playwright-api
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Playwright API Service
+  # ==========================================================================
+  playwright-api:
+    build:
+      context: ./playwright-api
+      dockerfile: Dockerfile
+    container_name: playwright-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PLAYWRIGHT_API_PORT=3100
+      - PLAYWRIGHT_DATA_DIR=/var/lib/playwright-api
+      - ADMIN_API_KEY=${PLAYWRIGHT_ADMIN_API_KEY}
+      - MAX_CONCURRENT_TASKS=5
+      - DEFAULT_RATE_LIMIT=60
+      - SESSION_TTL_HOURS=24
+    volumes:
+      - playwright-data:/var/lib/playwright-api
+      - playwright-cache:/home/playwright/.cache
+    networks:
+      - vps-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ==========================================================================
+  # Redis (Optional - for advanced task queue)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: vps-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - vps-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: redis-server --appendonly yes
+
+  # ==========================================================================
+  # Nginx Reverse Proxy
+  # ==========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: vps-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - certbot-data:/var/www/certbot:ro
+      - certbot-conf:/etc/letsencrypt:ro
+    networks:
+      - vps-network
+    depends_on:
+      - playwright-api
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Certbot (SSL Certificate Management)
+  # ==========================================================================
+  certbot:
+    image: certbot/certbot
+    container_name: vps-certbot
+    volumes:
+      - certbot-data:/var/www/certbot
+      - certbot-conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - vps-network
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  vps-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  playwright-data:
+    driver: local
+  playwright-cache:
+    driver: local
+  redis-data:
+    driver: local
+  certbot-data:
+    driver: local
+  certbot-conf:
+    driver: local
