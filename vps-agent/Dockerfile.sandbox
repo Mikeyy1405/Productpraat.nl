@@ -1,0 +1,74 @@
+# ProductPraat.nl AI Agent Sandbox
+# Gebaseerd op Manus.im's Ubuntu VM concept
+
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Build tools
+    build-essential \
+    git \
+    curl \
+    wget \
+    # Node.js (for Playwright)
+    nodejs \
+    npm \
+    # Browser dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    # Utils
+    vim \
+    nano \
+    bc \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip install --no-cache-dir \
+    requests \
+    beautifulsoup4 \
+    lxml \
+    pandas \
+    numpy \
+    matplotlib \
+    playwright \
+    aiohttp \
+    python-dotenv \
+    pydantic
+
+# Install Playwright browsers
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Create tool library directory
+RUN mkdir -p /opt/tools
+
+# Copy tool library (will be added later)
+# COPY src/tools/tool_library.py /opt/tools/
+
+# Set Python path to include tools
+ENV PYTHONPATH=/opt/tools:/workspace
+
+# Create non-root user for safety
+RUN useradd -m -s /bin/bash agent && \
+    chown -R agent:agent /workspace && \
+    chown -R agent:agent /opt/tools
+
+USER agent
+
+# Default command
+CMD ["/bin/bash"]
