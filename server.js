@@ -19,7 +19,9 @@ const port = process.env.PORT || 3000;
 // --- CONFIG ---
 const VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
 const VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
-const VITE_ANTHROPIC_API_KEY = process.env.VITE_ANTHROPIC_API_KEY || '';
+
+// AIML API Key - supports both new and legacy variable names
+const VITE_AIML_API_KEY = process.env.VITE_AIML_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '';
 
 // Initialize Supabase client
 let supabase = null;
@@ -35,7 +37,7 @@ const BOL_SITE_ID = process.env.BOL_SITE_ID || '';
 console.log('[CONFIG] Server starting with configuration:');
 console.log(`[CONFIG] Supabase URL: ${VITE_SUPABASE_URL ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Supabase Key: ${VITE_SUPABASE_ANON_KEY ? 'Configured' : 'Not set'}`);
-console.log(`[CONFIG] AIML API Key: ${VITE_ANTHROPIC_API_KEY ? 'Configured' : 'Not set'}`);
+console.log(`[CONFIG] AIML API Key: ${VITE_AIML_API_KEY ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Client ID: ${BOL_CLIENT_ID ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Client Secret: ${BOL_CLIENT_SECRET ? 'Configured' : 'Not set'}`);
 console.log(`[CONFIG] Bol.com Site ID: ${BOL_SITE_ID ? 'Configured' : 'Not set'}`);
@@ -969,7 +971,7 @@ app.get('/api/health', (req, res) => {
         version: packageJson.version,
         services: {
             supabase: !!(VITE_SUPABASE_URL && VITE_SUPABASE_ANON_KEY),
-            aiml: !!VITE_ANTHROPIC_API_KEY
+            aiml: !!VITE_AIML_API_KEY
         },
         notes: ['Simplified version - use URL-based product import'],
         timestamp: new Date().toISOString()
@@ -981,7 +983,7 @@ app.get('/api/config', (req, res) => {
     res.json({
         VITE_SUPABASE_URL: VITE_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY: VITE_SUPABASE_ANON_KEY,
-        VITE_ANTHROPIC_API_KEY: VITE_ANTHROPIC_API_KEY
+        VITE_AIML_API_KEY: VITE_AIML_API_KEY
     });
 });
 
@@ -3291,6 +3293,413 @@ app.get('/api/catalog/stats', async (req, res) => {
     }
 });
 
+// ============================================================================
+// DAILY CONTENT AGENT - Automated content generation
+// ============================================================================
+
+// Simple cron-like scheduler for daily content
+let dailyContentInterval = null;
+const DAILY_CONTENT_HOUR = 9; // Run at 9 AM
+
+/**
+ * Run the Daily Content Agent
+ * Generates 3 content pieces: 1 review, 1 toplist, 1 informational
+ */
+async function runDailyContentGeneration() {
+    console.log('[DAILY_AGENT] Starting daily content generation...');
+
+    const startTime = Date.now();
+    const result = {
+        date: new Date().toISOString().split('T')[0],
+        pieces: [],
+        totalGenerated: 0,
+        totalFailed: 0,
+        durationMs: 0
+    };
+
+    if (!VITE_AIML_API_KEY) {
+        console.error('[DAILY_AGENT] AIML API key not configured');
+        return { error: 'AIML API key not configured', ...result };
+    }
+
+    try {
+        // Dynamically import playwright
+        const { chromium } = await import('playwright');
+
+        // Launch browser
+        const browser = await chromium.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+
+        const page = await browser.newPage();
+        await page.setExtraHTTPHeaders({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'nl-NL,nl;q=0.9'
+        });
+
+        // Categories to use today (rotate through)
+        const allCategories = Object.keys(CATEGORY_MAPPING);
+        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        const startIdx = (dayOfYear * 3) % allCategories.length;
+        const todayCategories = [
+            allCategories[startIdx % allCategories.length],
+            allCategories[(startIdx + 1) % allCategories.length],
+            allCategories[(startIdx + 2) % allCategories.length]
+        ];
+
+        console.log(`[DAILY_AGENT] Categories for today: ${todayCategories.join(', ')}`);
+
+        // Helper to call AIML API
+        const callAIML = async (systemPrompt, userPrompt) => {
+            const response = await fetch('https://api.aimlapi.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${VITE_AIML_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'anthropic/claude-sonnet-4.5',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    max_tokens: 6000,
+                    temperature: 0.7
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`AIML API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content || '';
+        };
+
+        // Helper to scrape products
+        const scrapeProducts = async (categoryKey, limit = 10) => {
+            const config = CATEGORY_MAPPING[categoryKey];
+            if (!config) return [];
+
+            const searchUrl = `https://www.bol.com/nl/nl/s/?searchtext=${encodeURIComponent(config.searchTerm)}&sort=popularity`;
+
+            try {
+                await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await page.waitForSelector('[data-test="product-title"]', { timeout: 10000 }).catch(() => {});
+
+                const products = await page.evaluate((lim) => {
+                    const items = document.querySelectorAll('[data-test="product-item"]');
+                    const results = [];
+
+                    for (let i = 0; i < Math.min(items.length, lim); i++) {
+                        const item = items[i];
+                        const titleEl = item.querySelector('[data-test="product-title"]');
+                        const linkEl = item.querySelector('a[data-test="product-title"]');
+                        const priceEl = item.querySelector('[data-test="price"]');
+
+                        if (titleEl && linkEl) {
+                            results.push({
+                                title: titleEl.textContent?.trim() || '',
+                                url: linkEl.href,
+                                price: priceEl?.textContent?.trim() || 'Prijs onbekend'
+                            });
+                        }
+                    }
+                    return results;
+                }, limit);
+
+                return products;
+            } catch (err) {
+                console.error(`[DAILY_AGENT] Scrape error for ${categoryKey}:`, err.message);
+                return [];
+            }
+        };
+
+        // Helper to save article
+        const saveArticle = async (articleData) => {
+            if (!supabase) return null;
+
+            const id = `auto-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            const slug = articleData.title
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/(^-|-$)+/g, '');
+
+            const article = {
+                id,
+                title: articleData.title,
+                type: articleData.type,
+                category: articleData.category,
+                summary: articleData.summary || '',
+                htmlContent: articleData.htmlContent || '',
+                author: 'ProductPraat AI',
+                date: new Date().toLocaleDateString('nl-NL'),
+                created_at: new Date().toISOString(),
+                slug: `${slug}-${id.substring(5, 12)}`,
+                metaDescription: articleData.metaDescription,
+                tags: articleData.tags || []
+            };
+
+            const { error } = await supabase.from('articles').insert(article);
+            if (error) {
+                console.error('[DAILY_AGENT] Save error:', error);
+                return null;
+            }
+
+            return article;
+        };
+
+        // 1. Generate Product Review
+        try {
+            console.log('[DAILY_AGENT] Generating review...');
+            const products = await scrapeProducts(todayCategories[0], 5);
+
+            if (products.length > 0) {
+                const product = products[Math.floor(Math.random() * products.length)];
+                const categoryName = CATEGORY_MAPPING[todayCategories[0]]?.displayName || todayCategories[0];
+
+                const content = await callAIML(
+                    'Je bent een expert productreviewer. Schrijf een uitgebreide review in het Nederlands. Retourneer JSON: {"title": "...", "summary": "...", "htmlContent": "<h2>...</h2><p>...</p>", "metaDescription": "...", "tags": ["..."]}',
+                    `Schrijf een review voor: ${product.title}\nCategorie: ${categoryName}\nPrijs: ${product.price}`
+                );
+
+                let articleData;
+                try {
+                    let jsonStr = content.trim();
+                    const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                    if (jsonMatch) jsonStr = jsonMatch[1].trim();
+                    articleData = JSON.parse(jsonStr);
+                } catch {
+                    articleData = {
+                        title: `${product.title} Review`,
+                        htmlContent: content,
+                        summary: `Review van ${product.title}`
+                    };
+                }
+
+                const saved = await saveArticle({
+                    ...articleData,
+                    type: 'review',
+                    category: todayCategories[0]
+                });
+
+                result.pieces.push({
+                    type: 'review',
+                    title: saved?.title || product.title,
+                    category: todayCategories[0],
+                    status: saved ? 'completed' : 'failed'
+                });
+
+                if (saved) result.totalGenerated++;
+                else result.totalFailed++;
+            }
+        } catch (err) {
+            console.error('[DAILY_AGENT] Review error:', err);
+            result.pieces.push({ type: 'review', status: 'failed', error: err.message });
+            result.totalFailed++;
+        }
+
+        // 2. Generate Top List
+        try {
+            console.log('[DAILY_AGENT] Generating toplist...');
+            const products = await scrapeProducts(todayCategories[1], 15);
+            const categoryName = CATEGORY_MAPPING[todayCategories[1]]?.displayName || todayCategories[1];
+            const year = new Date().getFullYear();
+
+            if (products.length >= 5) {
+                const productList = products.slice(0, 10).map((p, i) => `${i+1}. ${p.title} - ${p.price}`).join('\n');
+
+                const content = await callAIML(
+                    'Je bent een productjournalist. Schrijf een Top 10 lijst in het Nederlands. Retourneer JSON: {"title": "...", "summary": "...", "htmlContent": "<h2>...</h2><ol>...</ol>", "metaDescription": "...", "tags": ["..."]}',
+                    `Schrijf een "Top 10 Beste ${categoryName} van ${year}" artikel.\n\nProducten:\n${productList}`
+                );
+
+                let articleData;
+                try {
+                    let jsonStr = content.trim();
+                    const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                    if (jsonMatch) jsonStr = jsonMatch[1].trim();
+                    articleData = JSON.parse(jsonStr);
+                } catch {
+                    articleData = {
+                        title: `Top 10 Beste ${categoryName} van ${year}`,
+                        htmlContent: content,
+                        summary: `De beste ${categoryName} op een rij`
+                    };
+                }
+
+                const saved = await saveArticle({
+                    ...articleData,
+                    type: 'list',
+                    category: todayCategories[1]
+                });
+
+                result.pieces.push({
+                    type: 'toplist',
+                    title: saved?.title || `Top 10 ${categoryName}`,
+                    category: todayCategories[1],
+                    status: saved ? 'completed' : 'failed'
+                });
+
+                if (saved) result.totalGenerated++;
+                else result.totalFailed++;
+            }
+        } catch (err) {
+            console.error('[DAILY_AGENT] Toplist error:', err);
+            result.pieces.push({ type: 'toplist', status: 'failed', error: err.message });
+            result.totalFailed++;
+        }
+
+        // 3. Generate Informational Article
+        try {
+            console.log('[DAILY_AGENT] Generating informational...');
+            const categoryName = CATEGORY_MAPPING[todayCategories[2]]?.displayName || todayCategories[2];
+            const templates = [
+                `${categoryName} kopen: Waar moet je op letten?`,
+                `Hoe kies je de beste ${categoryName}?`,
+                `${categoryName} onderhouden: Tips van experts`,
+                `De belangrijkste specs van ${categoryName} uitgelegd`
+            ];
+            const title = templates[Math.floor(Math.random() * templates.length)];
+
+            const content = await callAIML(
+                'Je bent een productadviseur. Schrijf een informatief artikel in het Nederlands (800+ woorden). Retourneer JSON: {"title": "...", "summary": "...", "htmlContent": "<h2>...</h2><p>...</p>", "metaDescription": "...", "tags": ["..."]}',
+                `Schrijf een artikel: "${title}"\nCategorie: ${categoryName}`
+            );
+
+            let articleData;
+            try {
+                let jsonStr = content.trim();
+                const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (jsonMatch) jsonStr = jsonMatch[1].trim();
+                articleData = JSON.parse(jsonStr);
+            } catch {
+                articleData = { title, htmlContent: content, summary: `Alles over ${categoryName}` };
+            }
+
+            const saved = await saveArticle({
+                ...articleData,
+                type: 'informational',
+                category: todayCategories[2]
+            });
+
+            result.pieces.push({
+                type: 'informational',
+                title: saved?.title || title,
+                category: todayCategories[2],
+                status: saved ? 'completed' : 'failed'
+            });
+
+            if (saved) result.totalGenerated++;
+            else result.totalFailed++;
+
+        } catch (err) {
+            console.error('[DAILY_AGENT] Informational error:', err);
+            result.pieces.push({ type: 'informational', status: 'failed', error: err.message });
+            result.totalFailed++;
+        }
+
+        await browser.close();
+
+    } catch (error) {
+        console.error('[DAILY_AGENT] Fatal error:', error);
+        result.pieces.push({ type: 'system', status: 'failed', error: error.message });
+        result.totalFailed = 3;
+    }
+
+    result.durationMs = Date.now() - startTime;
+    console.log(`[DAILY_AGENT] Completed in ${result.durationMs}ms. Generated: ${result.totalGenerated}, Failed: ${result.totalFailed}`);
+
+    // Log to database
+    if (supabase) {
+        await supabase.from('automation_logs').insert({
+            id: `agent-${Date.now()}`,
+            type: 'daily_content_agent',
+            status: result.totalFailed === 0 ? 'success' : (result.totalGenerated === 0 ? 'failed' : 'partial'),
+            data: result,
+            created_at: new Date().toISOString()
+        }).catch(err => console.error('[DAILY_AGENT] Log error:', err));
+    }
+
+    return result;
+}
+
+// Start daily content scheduler
+function startDailyContentScheduler() {
+    console.log(`[DAILY_AGENT] Scheduler started. Will run daily at ${DAILY_CONTENT_HOUR}:00`);
+
+    // Check every hour if it's time to run
+    dailyContentInterval = setInterval(async () => {
+        const now = new Date();
+        if (now.getHours() === DAILY_CONTENT_HOUR && now.getMinutes() < 5) {
+            // Check if already ran today
+            if (supabase) {
+                const today = now.toISOString().split('T')[0];
+                const { data } = await supabase
+                    .from('automation_logs')
+                    .select('id')
+                    .eq('type', 'daily_content_agent')
+                    .gte('created_at', `${today}T00:00:00Z`)
+                    .limit(1);
+
+                if (data && data.length > 0) {
+                    console.log('[DAILY_AGENT] Already ran today, skipping');
+                    return;
+                }
+            }
+
+            console.log('[DAILY_AGENT] Scheduled run triggered');
+            await runDailyContentGeneration();
+        }
+    }, 60 * 60 * 1000); // Check every hour
+}
+
+// API endpoint to manually trigger content generation
+app.post('/api/automation/daily-content', async (req, res) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] POST /api/automation/daily-content`);
+
+    try {
+        const result = await runDailyContentGeneration();
+        res.json({ success: true, result });
+    } catch (error) {
+        console.error('[DAILY_AGENT] API error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// API endpoint to get today's content status
+app.get('/api/automation/daily-content/status', async (req, res) => {
+    if (!supabase) {
+        return res.json({ configured: false, message: 'Database not configured' });
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+        .from('automation_logs')
+        .select('*')
+        .eq('type', 'daily_content_agent')
+        .gte('created_at', `${today}T00:00:00Z`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.json({
+        configured: true,
+        ranToday: data && data.length > 0,
+        lastRun: data?.[0] || null,
+        nextScheduled: `${today}T0${DAILY_CONTENT_HOUR}:00:00Z`
+    });
+});
+
+// Start the scheduler when server starts
+startDailyContentScheduler();
+
 // --- DEPRECATED ENDPOINTS ---
 const deprecatedHandler = (req, res) => {
     res.status(410).json({
@@ -3323,12 +3732,14 @@ app.get('*', (req, res) => {
         }
 
         // Inject env vars (escaped to prevent XSS)
+        // Note: VITE_ANTHROPIC_API_KEY is kept for backward compatibility with frontend
         const envScript = `
             <script>
                 window.__ENV__ = {
                     VITE_SUPABASE_URL: "${escapeForJs(VITE_SUPABASE_URL)}",
                     VITE_SUPABASE_ANON_KEY: "${escapeForJs(VITE_SUPABASE_ANON_KEY)}",
-                    VITE_ANTHROPIC_API_KEY: "${escapeForJs(VITE_ANTHROPIC_API_KEY)}"
+                    VITE_AIML_API_KEY: "${escapeForJs(VITE_AIML_API_KEY)}",
+                    VITE_ANTHROPIC_API_KEY: "${escapeForJs(VITE_AIML_API_KEY)}"
                 };
             </script>
         `;

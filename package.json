@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@playwright/test": "^1.57.0",
     "@supabase/supabase-js": "^2.39.0",
     "@types/node": "^20.10.0",
     "@types/react": "^18.3.0",
@@ -21,6 +22,7 @@
     "axios": "^1.6.0",
     "dotenv": "^16.3.0",
     "express": "^4.18.2",
+    "playwright": "^1.57.0",
     "postcss": "^8.4.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
