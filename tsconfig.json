@@ -10,14 +10,12 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "react",
-    "typeRoots": ["./node_modules/@types", "./types"],
-    "types": ["react", "react-dom", "node"]
+    "jsxImportSource": "react"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "types/**/*.ts", "vite-env.d.ts"],
   "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
