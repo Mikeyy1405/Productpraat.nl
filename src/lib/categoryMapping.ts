@@ -18,23 +18,68 @@
  * or via the scripts/find-bol-categories.ts discovery script.
  */
 export const CATEGORY_ID_MAPPING: Record<string, string> = {
-    // Electronics & Media
+    // === ELEKTRONICA ===
     'televisies': '10651',
     'audio': '14490',
     'laptops': '4770',
     'smartphones': '10852',
-    
-    // Home & Living
+    'tablets': '6340',
+    'gaming': '17588',
+    'computers': '4769',
+    'monitoren': '6345',
+    'camera': '5566',
+    'wearables': '21407',
+
+    // === HUISHOUDEN ===
     'wasmachines': '11462',
+    'drogers': '11464',
     'stofzuigers': '20104',
+    'koelkasten': '11458',
+    'vaatwassers': '11466',
+    'magnetrons': '11450',
+    'ovens': '11448',
+
+    // === SMART HOME ===
     'smarthome': '20637',
+    'verlichting': '13660',
+    'beveiliging': '20638',
+
+    // === SLAAPKAMER ===
     'matrassen': '10689',
-    
-    // Kitchen & Care
+    'bedden': '10687',
+    'dekbedden': '15248',
+
+    // === KEUKEN ===
     'airfryers': '43756',
     'koffie': '10550',
     'keuken': '10540',
-    'verzorging': '12442', // Confirmed from problem statement
+    'blenders': '10546',
+    'waterkokers': '10558',
+    'broodroosters': '10548',
+
+    // === VERZORGING ===
+    'verzorging': '12442',
+    'scheerapparaten': '12424',
+    'haarverzorging': '12430',
+    'mondverzorging': '12420',
+
+    // === TUIN & KLUSSEN ===
+    'tuin': '14932',
+    'gereedschap': '14890',
+    'grasmaaiers': '14938',
+
+    // === SPORT & VRIJE TIJD ===
+    'sport': '15172',
+    'fietsen': '15174',
+    'fitness': '15202',
+
+    // === BABY & KIND ===
+    'baby': '10314',
+    'speelgoed': '10312',
+
+    // === BEAUTY & GEZONDHEID ===
+    'beauty': '12418',
+    'gezondheid': '12400',
 };
 
 /**
@@ -42,36 +87,136 @@ export const CATEGORY_ID_MAPPING: Record<string, string> = {
  * These terms are used with the search endpoint as a fallback.
  */
 export const CATEGORY_SEARCH_FALLBACK: Record<string, string> = {
+    // Elektronica
     'televisies': 'televisie smart tv',
     'audio': 'bluetooth speaker koptelefoon',
     'laptops': 'laptop notebook',
     'smartphones': 'smartphone mobiele telefoon',
+    'tablets': 'tablet ipad android',
+    'gaming': 'playstation xbox nintendo gaming',
+    'computers': 'desktop computer pc',
+    'monitoren': 'monitor beeldscherm',
+    'camera': 'camera fotocamera digitaal',
+    'wearables': 'smartwatch fitness tracker',
+
+    // Huishouden
     'wasmachines': 'wasmachine',
+    'drogers': 'wasdroger droger',
     'stofzuigers': 'stofzuiger robotstofzuiger',
+    'koelkasten': 'koelkast koelvriescombinatie',
+    'vaatwassers': 'vaatwasser afwasmachine',
+    'magnetrons': 'magnetron combimagnetron',
+    'ovens': 'oven inbouwoven',
+
+    // Smart Home
     'smarthome': 'smart home domotica',
+    'verlichting': 'slimme verlichting led lamp',
+    'beveiliging': 'beveiligingscamera slimme deurbel',
+
+    // Slaapkamer
     'matrassen': 'matras',
+    'bedden': 'bed boxspring',
+    'dekbedden': 'dekbed dekbedovertrek',
+
+    // Keuken
     'airfryers': 'airfryer heteluchtfriteuse',
     'koffie': 'koffiezetapparaat espressomachine',
-    'keuken': 'keukenmachine blender',
+    'keuken': 'keukenmachine foodprocessor',
+    'blenders': 'blender smoothie maker',
+    'waterkokers': 'waterkoker',
+    'broodroosters': 'broodrooster tosti ijzer',
+
+    // Verzorging
     'verzorging': 'scheerapparaat elektrische tandenborstel',
+    'scheerapparaten': 'scheerapparaat trimmer',
+    'haarverzorging': 'föhn stijltang krultang',
+    'mondverzorging': 'elektrische tandenborstel waterflosser',
+
+    // Tuin & Klussen
+    'tuin': 'tuingereedschap tuinmeubelen',
+    'gereedschap': 'boormachine accuboormachine',
+    'grasmaaiers': 'grasmaaier robotmaaier',
+
+    // Sport & Vrije tijd
+    'sport': 'sportartikelen fitness',
+    'fietsen': 'fiets elektrische fiets',
+    'fitness': 'fitnessapparaat hometrainer',
+
+    // Baby & Kind
+    'baby': 'kinderwagen autostoel baby',
+    'speelgoed': 'speelgoed lego',
+
+    // Beauty & Gezondheid
+    'beauty': 'make-up huidverzorging',
+    'gezondheid': 'bloeddrukmeter weegschaal',
 };
 
 /**
  * Human-readable category names for display in the UI.
  */
 export const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+    // Elektronica
     'televisies': 'Televisies',
     'audio': 'Audio & HiFi',
     'laptops': 'Laptops',
     'smartphones': 'Smartphones',
+    'tablets': 'Tablets',
+    'gaming': 'Gaming',
+    'computers': 'Computers',
+    'monitoren': 'Monitoren',
+    'camera': "Camera's",
+    'wearables': 'Wearables',
+
+    // Huishouden
     'wasmachines': 'Wasmachines',
+    'drogers': 'Drogers',
     'stofzuigers': 'Stofzuigers',
+    'koelkasten': 'Koelkasten',
+    'vaatwassers': 'Vaatwassers',
+    'magnetrons': 'Magnetrons',
+    'ovens': 'Ovens',
+
+    // Smart Home
     'smarthome': 'Smart Home',
+    'verlichting': 'Slimme Verlichting',
+    'beveiliging': 'Beveiliging',
+
+    // Slaapkamer
     'matrassen': 'Matrassen',
+    'bedden': 'Bedden',
+    'dekbedden': 'Dekbedden',
+
+    // Keuken
     'airfryers': 'Airfryers',
-    'koffie': 'Koffie',
+    'koffie': 'Koffiemachines',
     'keuken': 'Keukenmachines',
+    'blenders': 'Blenders',
+    'waterkokers': 'Waterkokers',
+    'broodroosters': 'Broodroosters',
+
+    // Verzorging
     'verzorging': 'Verzorging',
+    'scheerapparaten': 'Scheerapparaten',
+    'haarverzorging': 'Haarverzorging',
+    'mondverzorging': 'Mondverzorging',
+
+    // Tuin & Klussen
+    'tuin': 'Tuin',
+    'gereedschap': 'Gereedschap',
+    'grasmaaiers': 'Grasmaaiers',
+
+    // Sport & Vrije tijd
+    'sport': 'Sport',
+    'fietsen': 'Fietsen',
+    'fitness': 'Fitness',
+
+    // Baby & Kind
+    'baby': 'Baby',
+    'speelgoed': 'Speelgoed',
+
+    // Beauty & Gezondheid
+    'beauty': 'Beauty',
+    'gezondheid': 'Gezondheid',
 };
 
 /**

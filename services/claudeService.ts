@@ -98,20 +98,70 @@ const parseJsonResponse = <T>(text: string): T => {
 // Helper to map category string to our predefined categories
 const mapCategory = (cat: string): string => {
   const normalized = cat.toLowerCase();
-  
+
+  // === ELEKTRONICA ===
   if (normalized.includes('tv') || normalized.includes('televisie')) return 'televisies';
-  if (normalized.includes('audio') || normalized.includes('speaker') || normalized.includes('koptelefoon') || normalized.includes('headphone')) return 'audio';
-  if (normalized.includes('laptop') || normalized.includes('notebook')) return 'laptops';
-  if (normalized.includes('phone') || normalized.includes('smartphone') || normalized.includes('mobiel')) return 'smartphones';
+  if (normalized.includes('audio') || normalized.includes('speaker') || normalized.includes('koptelefoon') || normalized.includes('headphone') || normalized.includes('soundbar')) return 'audio';
+  if (normalized.includes('laptop') || normalized.includes('notebook') || normalized.includes('chromebook')) return 'laptops';
+  if (normalized.includes('phone') || normalized.includes('smartphone') || normalized.includes('mobiel') || normalized.includes('iphone') || normalized.includes('samsung galaxy')) return 'smartphones';
+  if (normalized.includes('tablet') || normalized.includes('ipad')) return 'tablets';
+  if (normalized.includes('gaming') || normalized.includes('playstation') || normalized.includes('xbox') || normalized.includes('nintendo') || normalized.includes('console')) return 'gaming';
+  if (normalized.includes('computer') || normalized.includes('desktop') || normalized.includes('pc')) return 'computers';
+  if (normalized.includes('monitor') || normalized.includes('beeldscherm')) return 'monitoren';
+  if (normalized.includes('camera') || normalized.includes('foto')) return 'camera';
+  if (normalized.includes('smartwatch') || normalized.includes('wearable') || normalized.includes('fitness tracker')) return 'wearables';
+
+  // === HUISHOUDEN ===
   if (normalized.includes('wasmachine') || normalized.includes('washer')) return 'wasmachines';
-  if (normalized.includes('stofzuiger') || normalized.includes('vacuum')) return 'stofzuigers';
-  if (normalized.includes('smart home') || normalized.includes('domotica')) return 'smarthome';
-  if (normalized.includes('matras') || normalized.includes('bed')) return 'matrassen';
-  if (normalized.includes('airfryer') || normalized.includes('air fryer')) return 'airfryers';
-  if (normalized.includes('koffie') || normalized.includes('coffee') || normalized.includes('espresso')) return 'koffie';
-  if (normalized.includes('keuken') || normalized.includes('kitchen') || normalized.includes('blender') || normalized.includes('mixer')) return 'keuken';
-  if (normalized.includes('verzorging') || normalized.includes('scheren') || normalized.includes('haar')) return 'verzorging';
-  
+  if (normalized.includes('droger') || normalized.includes('dryer')) return 'drogers';
+  if (normalized.includes('stofzuiger') || normalized.includes('vacuum') || normalized.includes('robotstofzuiger')) return 'stofzuigers';
+  if (normalized.includes('koelkast') || normalized.includes('fridge') || normalized.includes('vrieskast')) return 'koelkasten';
+  if (normalized.includes('vaatwasser') || normalized.includes('dishwasher')) return 'vaatwassers';
+  if (normalized.includes('magnetron') || normalized.includes('microwave')) return 'magnetrons';
+  if (normalized.includes('oven') && !normalized.includes('magnetron')) return 'ovens';
+
+  // === SMART HOME ===
+  if (normalized.includes('smart home') || normalized.includes('domotica') || normalized.includes('google home') || normalized.includes('alexa')) return 'smarthome';
+  if (normalized.includes('lamp') || normalized.includes('verlichting') || normalized.includes('philips hue')) return 'verlichting';
+  if (normalized.includes('beveilig') || normalized.includes('camera') || normalized.includes('deurbel') || normalized.includes('alarm')) return 'beveiliging';
+
+  // === SLAAPKAMER ===
+  if (normalized.includes('matras')) return 'matrassen';
+  if (normalized.includes('bed') || normalized.includes('boxspring')) return 'bedden';
+  if (normalized.includes('dekbed')) return 'dekbedden';
+
+  // === KEUKEN ===
+  if (normalized.includes('airfryer') || normalized.includes('air fryer') || normalized.includes('hetelucht')) return 'airfryers';
+  if (normalized.includes('koffie') || normalized.includes('coffee') || normalized.includes('espresso') || normalized.includes('nespresso')) return 'koffie';
+  if (normalized.includes('keuken') || normalized.includes('kitchen') || normalized.includes('foodprocessor')) return 'keuken';
+  if (normalized.includes('blender') || normalized.includes('smoothie')) return 'blenders';
+  if (normalized.includes('waterkoker') || normalized.includes('kettle')) return 'waterkokers';
+  if (normalized.includes('broodrooster') || normalized.includes('tosti') || normalized.includes('toaster')) return 'broodroosters';
+
+  // === VERZORGING ===
+  if (normalized.includes('scheer') || normalized.includes('trimmer') || normalized.includes('razor')) return 'scheerapparaten';
+  if (normalized.includes('föhn') || normalized.includes('haar') || normalized.includes('stijltang') || normalized.includes('krultang')) return 'haarverzorging';
+  if (normalized.includes('tandenborstel') || normalized.includes('waterflosser') || normalized.includes('oral')) return 'mondverzorging';
+  if (normalized.includes('verzorging') || normalized.includes('beauty')) return 'verzorging';
+
+  // === TUIN & KLUSSEN ===
+  if (normalized.includes('grasmaaier') || normalized.includes('robotmaaier')) return 'grasmaaiers';
+  if (normalized.includes('tuin') || normalized.includes('garden')) return 'tuin';
+  if (normalized.includes('gereedschap') || normalized.includes('boor') || normalized.includes('schroef')) return 'gereedschap';
+
+  // === SPORT & VRIJE TIJD ===
+  if (normalized.includes('fiets') || normalized.includes('e-bike') || normalized.includes('elektrische fiets')) return 'fietsen';
+  if (normalized.includes('fitness') || normalized.includes('hometrainer') || normalized.includes('loopband')) return 'fitness';
+  if (normalized.includes('sport')) return 'sport';
+
+  // === BABY & KIND ===
+  if (normalized.includes('baby') || normalized.includes('kinderwagen') || normalized.includes('autostoel')) return 'baby';
+  if (normalized.includes('speelgoed') || normalized.includes('lego') || normalized.includes('toy')) return 'speelgoed';
+
+  // === BEAUTY & GEZONDHEID ===
+  if (normalized.includes('make-up') || normalized.includes('makeup') || normalized.includes('cosmetica')) return 'beauty';
+  if (normalized.includes('gezondheid') || normalized.includes('bloeddruk') || normalized.includes('weegschaal')) return 'gezondheid';
+
   return 'overig';
 };
 
