@@ -3291,6 +3291,197 @@ app.get('/api/catalog/stats', async (req, res) => {
     }
 });
 
+// ============================================================================
+// SEO ENDPOINTS - Sitemap & Robots
+// ============================================================================
+
+/**
+ * Dynamic sitemap.xml generation
+ * Includes all products, articles, and categories
+ */
+app.get('/sitemap.xml', async (req, res) => {
+    const baseUrl = process.env.SITE_URL || 'https://productpraat.nl';
+
+    try {
+        let urls = [];
+
+        // Static pages
+        const staticPages = [
+            { loc: '/', priority: '1.0', changefreq: 'daily' },
+            { loc: '/shop', priority: '0.9', changefreq: 'daily' },
+            { loc: '/artikelen', priority: '0.8', changefreq: 'daily' },
+            { loc: '/over-ons', priority: '0.5', changefreq: 'monthly' },
+            { loc: '/contact', priority: '0.5', changefreq: 'monthly' },
+        ];
+
+        urls = urls.concat(staticPages);
+
+        // Add category pages
+        const categories = Object.keys(CATEGORY_MAPPING);
+        categories.forEach(cat => {
+            urls.push({
+                loc: `/shop/${cat}`,
+                priority: '0.8',
+                changefreq: 'daily'
+            });
+        });
+
+        // Fetch products from database
+        if (supabase) {
+            const { data: products } = await supabase
+                .from('products')
+                .select('slug, updated_at')
+                .order('updated_at', { ascending: false })
+                .limit(5000);
+
+            if (products && products.length > 0) {
+                products.forEach(product => {
+                    urls.push({
+                        loc: `/product/${product.slug}`,
+                        lastmod: product.updated_at ? new Date(product.updated_at).toISOString().split('T')[0] : undefined,
+                        priority: '0.7',
+                        changefreq: 'weekly'
+                    });
+                });
+            }
+
+            // Fetch articles
+            const { data: articles } = await supabase
+                .from('articles')
+                .select('slug, updated_at, created_at')
+                .eq('status', 'published')
+                .order('updated_at', { ascending: false })
+                .limit(1000);
+
+            if (articles && articles.length > 0) {
+                articles.forEach(article => {
+                    urls.push({
+                        loc: `/artikel/${article.slug}`,
+                        lastmod: (article.updated_at || article.created_at) ?
+                            new Date(article.updated_at || article.created_at).toISOString().split('T')[0] : undefined,
+                        priority: '0.8',
+                        changefreq: 'weekly'
+                    });
+                });
+            }
+        }
+
+        // Generate XML
+        const urlElements = urls.map(url => {
+            let urlXml = `  <url>\n    <loc>${baseUrl}${url.loc}</loc>\n`;
+            if (url.lastmod) urlXml += `    <lastmod>${url.lastmod}</lastmod>\n`;
+            if (url.changefreq) urlXml += `    <changefreq>${url.changefreq}</changefreq>\n`;
+            if (url.priority) urlXml += `    <priority>${url.priority}</priority>\n`;
+            urlXml += '  </url>';
+            return urlXml;
+        }).join('\n');
+
+        const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlElements}
+</urlset>`;
+
+        res.set('Content-Type', 'application/xml');
+        res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+        res.send(sitemap);
+
+    } catch (error) {
+        console.error('[SEO] Sitemap generation error:', error);
+        res.status(500).send('Error generating sitemap');
+    }
+});
+
+/**
+ * Robots.txt for search engine crawlers
+ */
+app.get('/robots.txt', (req, res) => {
+    const baseUrl = process.env.SITE_URL || 'https://productpraat.nl';
+
+    const robotsTxt = `# ProductPraat.nl Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: ${baseUrl}/sitemap.xml
+
+# Block admin and API routes
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /admin
+
+# Block internal search results
+Disallow: /*?q=
+Disallow: /*?search=
+
+# Allow specific API endpoints for rich snippets
+Allow: /api/products/
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
+`;
+
+    res.set('Content-Type', 'text/plain');
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.send(robotsTxt);
+});
+
+/**
+ * Google News Sitemap for articles
+ */
+app.get('/sitemap-news.xml', async (req, res) => {
+    const baseUrl = process.env.SITE_URL || 'https://productpraat.nl';
+
+    try {
+        if (!supabase) {
+            res.set('Content-Type', 'application/xml');
+            return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+</urlset>`);
+        }
+
+        // Get articles from last 48 hours (Google News requirement)
+        const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+        const { data: articles } = await supabase
+            .from('articles')
+            .select('title, slug, created_at, summary')
+            .eq('status', 'published')
+            .gte('created_at', twoDaysAgo)
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+        const urlElements = (articles || []).map(article => {
+            const pubDate = new Date(article.created_at).toISOString();
+            return `  <url>
+    <loc>${baseUrl}/artikel/${article.slug}</loc>
+    <news:news>
+      <news:publication>
+        <news:name>ProductPraat</news:name>
+        <news:language>nl</news:language>
+      </news:publication>
+      <news:publication_date>${pubDate}</news:publication_date>
+      <news:title>${article.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</news:title>
+    </news:news>
+  </url>`;
+        }).join('\n');
+
+        const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+${urlElements}
+</urlset>`;
+
+        res.set('Content-Type', 'application/xml');
+        res.set('Cache-Control', 'public, max-age=1800'); // Cache for 30 minutes
+        res.send(sitemap);
+
+    } catch (error) {
+        console.error('[SEO] News sitemap generation error:', error);
+        res.status(500).send('Error generating news sitemap');
+    }
+});
+
 // --- DEPRECATED ENDPOINTS ---
 const deprecatedHandler = (req, res) => {
     res.status(410).json({

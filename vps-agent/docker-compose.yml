@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: productpraat-agent-runtime
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PRODUCTPRAAT_API_URL=${PRODUCTPRAAT_API_URL}
+      - PRODUCTPRAAT_API_KEY=${PRODUCTPRAAT_API_KEY}
+      - PRODUCTPRAAT_WEBHOOK_SECRET=${PRODUCTPRAAT_WEBHOOK_SECRET}
+      - BOL_CLIENT_ID=${BOL_CLIENT_ID}
+      - BOL_CLIENT_SECRET=${BOL_CLIENT_SECRET}
+      - BOL_SITE_CODE=${BOL_SITE_CODE}
+      - MAX_ITERATIONS=${MAX_ITERATIONS:-50}
+      - SANDBOX_TIMEOUT=${SANDBOX_TIMEOUT:-300}
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./workspace:/app/workspace
+      - /var/run/docker.sock:/var/run/docker.sock  # For sandbox management
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: productpraat-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+volumes:
+  redis-data:
+
+networks:
+  agent-network:
+    driver: bridge
