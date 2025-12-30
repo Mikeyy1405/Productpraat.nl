@@ -36,7 +36,7 @@ def main():
     logger.info("=" * 60)
 
     # Check required environment variables
-    required_vars = ["ABACUS_API_KEY", "PRODUCTPRAAT_WEBHOOK_SECRET"]
+    required_vars = ["ABACUS_API_KEY"]
     missing = [var for var in required_vars if not os.getenv(var)]
 
     if missing:
